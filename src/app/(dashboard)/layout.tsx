@@ -1,0 +1,138 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/auth.store";
+import api from "@/lib/api";
+import { usePathname } from "next/navigation";
+const navItems = [
+  { label: "Dashboard", href: "/dashboard", icon: "▣" },
+  { label: "Send Money", href: "/send", icon: "↗" },
+  { label: "Transactions", href: "/transactions", icon: "↕" },
+  { label: "Beneficiaries", href: "/beneficiaries", icon: "♟" },
+  { label: "Profile", href: "/profile", icon: "◉" },
+];
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, setUser, setLoading } = useAuthStore();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await api.get("/auth/me");
+        setUser(res.data.data.user);
+      } catch {
+        window.location.href = "/login";
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    await api.post("/auth/logout");
+    window.location.href = "/login";
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Sidebar */}
+      <aside
+        className={`
+        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200
+        transform transition-transform duration-200
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        lg:relative lg:translate-x-0 lg:flex lg:flex-col
+      `}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-6 py-5 border-b border-slate-200">
+          <div className="w-7 h-7 bg-teal-600 rounded-lg" />
+          <span className="font-semibold text-slate-900">Remit2Globe</span>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-4 py-6 space-y-1">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  ${
+                    isActive
+                      ? "bg-teal-50 text-teal-700"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }
+                `}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </a>
+            );
+          })}
+        </nav>
+
+        {/* User + logout */}
+        <div className="px-4 py-4 border-t border-slate-200">
+          <div className="flex items-center gap-3 px-3 py-2 mb-1">
+            <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
+              {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {user?.email || user?.phone || "User"}
+              </p>
+              <p className="text-xs text-slate-500 capitalize">
+                {user?.role?.toLowerCase()}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+          >
+            <span>⇥</span>
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar (mobile) */}
+        <header className="lg:hidden flex items-center gap-4 px-4 py-4 bg-white border-b border-slate-200">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-slate-600"
+          >
+            ☰
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-teal-600 rounded" />
+            <span className="font-semibold text-slate-900 text-sm">
+              Remit2Globe
+            </span>
+          </div>
+        </header>
+
+        <main className="flex-1 p-6">{children}</main>
+      </div>
+    </div>
+  );
+}
