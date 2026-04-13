@@ -9,7 +9,9 @@ import Flag from "react-world-flags";
 type Section = "personal" | "identity" | "address";
 
 interface IndividualForm {
-  fullName: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
   dateOfBirth: string;
   // nationality: string;
   isNational: boolean;
@@ -33,7 +35,9 @@ interface IndividualForm {
 }
 
 const empty: IndividualForm = {
-  fullName: "",
+  firstName: "",
+  middleName: "",
+  lastName: "",
   dateOfBirth: "",
   // nationality: "",
   isNational: false,
@@ -111,9 +115,21 @@ export default function KycProfilePage() {
         setIsLoading(true);
         const res = await api.get("/kyc/profile");
         const profile = res.data.data?.individualProfile;
+        const userData = res.data.data?.user;
+
         if (profile) {
+          // Split fullName into firstName, middleName, lastName
+          const nameParts = (profile.fullName || "").trim().split(/\s+/);
+          const firstName = nameParts[0] || "";
+          const lastName =
+            nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+          const middleName =
+            nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "";
+
           setForm({
-            fullName: profile.fullName || "",
+            firstName,
+            middleName,
+            lastName,
             dateOfBirth: profile.dateOfBirth
               ? new Date(profile.dateOfBirth).toISOString().split("T")[0]
               : "",
@@ -143,12 +159,15 @@ export default function KycProfilePage() {
 
             residentialAddress: profile.residentialAddress || "",
 
-            country: profile.country || "",
+            country: profile.country || userData?.country || "",
             contactEmail: profile.contactEmail || "",
-            contactPhone: profile.contactPhone || "",
+            contactPhone: profile.contactPhone || 123456789,
             occupation: profile.occupation || "",
             employerName: profile.employerName || "",
           });
+        } else if (userData?.country) {
+          // If no profile yet but user has country from registration
+          setForm((prev) => ({ ...prev, country: userData.country }));
         }
       } catch (e) {
         console.error(e);
@@ -168,7 +187,9 @@ export default function KycProfilePage() {
     const newErrors: Partial<Record<keyof IndividualForm, string>> = {};
 
     if (section === "personal") {
-      if (!form.fullName.trim()) newErrors.fullName = "Full name is required";
+      if (!form.firstName.trim())
+        newErrors.firstName = "First name is required";
+      if (!form.lastName.trim()) newErrors.lastName = "Last name is required";
       if (!form.dateOfBirth)
         newErrors.dateOfBirth = "Date of birth is required";
       // if (!form.nationality.trim())
@@ -176,7 +197,11 @@ export default function KycProfilePage() {
       if (!form.occupation.trim())
         newErrors.occupation = "Occupation is required";
       if (!form.country.trim())
-        newErrors.country = "Country of origin is required";
+        newErrors.country = "Country of residence is required";
+      // Check if user selected resident or citizen
+      if (form.isNational === undefined || form.isNational === null) {
+        newErrors.isNational = "Please select Resident or Citizen" as any;
+      }
     }
 
     if (section === "identity") {
@@ -201,9 +226,9 @@ export default function KycProfilePage() {
       if (!form.residentialAddress.trim())
         newErrors.residentialAddress = "Residential Address is required";
 
-      if (!form.country.trim()) newErrors.country = "Country is required";
-      if (!form.contactPhone.trim())
-        newErrors.contactPhone = "Phone is required";
+      // if (!form.country.trim()) newErrors.country = "Country is required";
+      // if (!form.contactPhone.trim())
+      //   newErrors.contactPhone = "Phone is required";
     }
 
     setErrors(newErrors);
@@ -318,14 +343,34 @@ export default function KycProfilePage() {
         {/* PERSONAL */}
         {activeSection === "personal" && (
           <div className="space-y-4">
-            <Field label="Full Name" required error={errors.fullName}>
+            <Field label="First Name" required error={errors.firstName}>
               <input
-                className={inputClass("fullName")}
-                placeholder="As it appears on your ID"
-                value={form.fullName}
-                onChange={(e) => setField("fullName", e.target.value)}
+                className={inputClass("firstName")}
+                placeholder="Enter your first name"
+                value={form.firstName}
+                onChange={(e) => setField("firstName", e.target.value)}
               />
             </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Middle Name" error={errors.middleName}>
+                <input
+                  className={inputClass("middleName")}
+                  placeholder="Middle name (optional)"
+                  value={form.middleName}
+                  onChange={(e) => setField("middleName", e.target.value)}
+                />
+              </Field>
+
+              <Field label="Last Name" required error={errors.lastName}>
+                <input
+                  className={inputClass("lastName")}
+                  placeholder="Enter your last name"
+                  value={form.lastName}
+                  onChange={(e) => setField("lastName", e.target.value)}
+                />
+              </Field>
+            </div>
 
             <Field label="Date of Birth" required error={errors.dateOfBirth}>
               <input
@@ -345,7 +390,7 @@ export default function KycProfilePage() {
               />
             </Field> */}
 
-            <Field label="Country of Origin" required error={errors.country}>
+            <Field label="Country of Residence" required error={errors.country}>
               <div className="relative" data-country-dropdown>
                 {/* Trigger button */}
                 <button
@@ -470,20 +515,38 @@ export default function KycProfilePage() {
               </div>
             </Field>
 
-            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-              <input
-                type="checkbox"
-                id="isNational"
-                checked={form.isNational}
-                onChange={(e) => setField("isNational", e.target.checked)}
-                className="w-4 h-4 accent-teal-600"
-              />
-              <label
-                htmlFor="isNational"
-                className="text-sm text-slate-700 cursor-pointer"
-              >
-                I am a national citizen of the country where I reside
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-2 block">
+                Residency Status <span className="text-red-500">*</span>
               </label>
+              <div className="flex items-center gap-6 p-3 bg-slate-50 rounded-lg">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="residencyStatus"
+                    checked={form.isNational === false}
+                    onChange={() => setField("isNational", false)}
+                    className="w-4 h-4 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm text-slate-700">Resident</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="residencyStatus"
+                    checked={form.isNational === true}
+                    onChange={() => setField("isNational", true)}
+                    className="w-4 h-4 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm text-slate-700">Citizen</span>
+                </label>
+              </div>
+              {errors.isNational && (
+                <p className="mt-1.5 text-xs text-red-500">
+                  {errors.isNational as any}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -601,15 +664,15 @@ export default function KycProfilePage() {
 
             {form.isNational && (
               <div className="space-y-4">
-                <SectionLabel>National ID Details</SectionLabel>
+                <SectionLabel>Passport / National ID Details</SectionLabel>
                 <Field
-                  label="National ID Number"
+                  label="Passport / National ID Number"
                   required
                   error={errors.nationalIdNumber}
                 >
                   <input
                     className={inputClass("nationalIdNumber")}
-                    placeholder="National ID number"
+                    placeholder="Passport / National ID number"
                     value={form.nationalIdNumber}
                     onChange={(e) =>
                       setField("nationalIdNumber", e.target.value)
@@ -673,8 +736,8 @@ export default function KycProfilePage() {
               />
             </Field>
 
-            <SectionLabel>Contact Information</SectionLabel>
-            <div className="grid grid-cols-2 gap-4">
+            {/* <SectionLabel>Contact Information</SectionLabel> */}
+            {/* <div className="grid grid-cols-2 gap-4">
               <Field label="Contact Email" error={errors.contactEmail}>
                 <input
                   type="email"
@@ -693,7 +756,7 @@ export default function KycProfilePage() {
                   onChange={(e) => setField("contactPhone", e.target.value)}
                 />
               </Field>
-            </div>
+            </div> */}
           </div>
         )}
 

@@ -5,9 +5,12 @@ import { useAuthStore } from "@/store/auth.store";
 import api from "@/lib/api";
 
 type DocumentType =
-  | "PASSPORT"
-  | "WORK_PERMIT"
-  | "NATIONAL_ID"
+  | "PASSPORT_FRONT"
+  | "PASSPORT_BACK"
+  | "WORK_PERMIT_FRONT"
+  | "WORK_PERMIT_BACK"
+  | "NATIONAL_ID_FRONT"
+  | "NATIONAL_ID_BACK"
   | "OTHER_GOVT_ID";
 
 interface DocConfig {
@@ -27,32 +30,46 @@ interface UploadedDoc {
 
 const DOC_CONFIG: DocConfig[] = [
   {
-    type: "PASSPORT",
-    label: "Passport",
-    description: "Upload the photo page of your valid passport",
+    type: "PASSPORT_FRONT",
+    label: "Passport (Front)",
+    description: "Upload the front side of your valid passport",
     required: true,
     requiredFor: "foreigner",
   },
   {
-    type: "WORK_PERMIT",
-    label: "Work Permit",
-    description: "Upload your valid work permit or residence permit",
+    type: "PASSPORT_BACK",
+    label: "Passport (Back)",
+    description: "Upload the back side of your valid passport",
     required: true,
     requiredFor: "foreigner",
   },
   {
-    type: "NATIONAL_ID",
-    label: "National ID",
-    description: "Upload front and back of your national identity card",
+    type: "WORK_PERMIT_FRONT",
+    label: "Work Permit (Front)",
+    description: "Upload front side of your valid work permit ",
+    required: true,
+    requiredFor: "foreigner",
+  },
+  {
+    type: "WORK_PERMIT_BACK",
+    label: "Work Permit (Back)",
+    description: "Upload back side of your valid work permit",
+    required: true,
+    requiredFor: "foreigner",
+  },
+  {
+    type: "NATIONAL_ID_FRONT",
+    label: "National ID (Front)",
+    description: "Upload front of your national identity card",
     required: true,
     requiredFor: "national",
   },
   {
-    type: "OTHER_GOVT_ID",
-    label: "Other Government Approved ID",
-    description: "Any other government issued identification document",
-    required: false,
-    requiredFor: "all",
+    type: "NATIONAL_ID_BACK",
+    label: "National ID (Back)",
+    description: "Upload back of your national identity card",
+    required: true,
+    requiredFor: "national",
   },
 ];
 
@@ -62,9 +79,12 @@ export default function DocumentsPage() {
   const [uploads, setUploads] = useState<
     Record<DocumentType, UploadedDoc | null>
   >({
-    PASSPORT: null,
-    WORK_PERMIT: null,
-    NATIONAL_ID: null,
+    PASSPORT_FRONT: null,
+    PASSPORT_BACK: null,
+    WORK_PERMIT_FRONT: null,
+    WORK_PERMIT_BACK: null,
+    NATIONAL_ID_FRONT: null,
+    NATIONAL_ID_BACK: null,
     OTHER_GOVT_ID: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,9 +105,12 @@ export default function DocumentsPage() {
         // Load already uploaded documents
         const docs = res.data.data?.documents || [];
         const uploadedMap: Record<DocumentType, UploadedDoc | null> = {
-          PASSPORT: null,
-          WORK_PERMIT: null,
-          NATIONAL_ID: null,
+          PASSPORT_FRONT: null,
+          PASSPORT_BACK: null,
+          WORK_PERMIT_FRONT: null,
+          WORK_PERMIT_BACK: null,
+          NATIONAL_ID_FRONT: null,
+          NATIONAL_ID_BACK: null,
           OTHER_GOVT_ID: null,
         };
         docs.forEach((doc: any) => {
@@ -124,8 +147,17 @@ export default function DocumentsPage() {
   );
 
   const handleFileSelect = async (docType: DocumentType, file: File) => {
-    // Validate file type
-    const allowed = ["application/pdf", "image/jpeg", "image/jpg"];
+    // Validate file type - allow all common image and PDF formats
+    const allowed = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/bmp",
+      "image/tiff",
+    ];
     if (!allowed.includes(file.type)) {
       setUploads((prev) => ({
         ...prev,
@@ -227,8 +259,8 @@ export default function DocumentsPage() {
           Upload Documents
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Upload clear copies of your identity documents. Accepted formats: PDF
-          or JPEG. Max size: 10MB per file.
+          Upload clear copies of your identity documents. Accepted formats: PDF,
+          JPEG, PNG, GIF, WebP. Max size: 10MB per file.
         </p>
       </div>
 
@@ -324,7 +356,7 @@ export default function DocumentsPage() {
                           `Uploading ${upload.fileName}...`}
                         {upload.status === "done" && upload.fileName}
                         {upload.status === "error" &&
-                          "Invalid file. Use PDF or JPEG under 10MB."}
+                          "Invalid file. Use PDF, JPEG, PNG, GIF, or WebP under 10MB."}
                       </span>
                     </div>
                   )}
@@ -334,7 +366,7 @@ export default function DocumentsPage() {
                 <div className="shrink-0">
                   <input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
                     className="hidden"
                     ref={(el) => {
                       fileInputRefs.current[doc.type] = el;
@@ -392,7 +424,7 @@ export default function DocumentsPage() {
           <button
             onClick={handleSubmitKyc}
             disabled={!allRequiredUploaded || isSubmitting}
-            className="shrink-0 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="cursor-pointer shrink-0 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isSubmitting ? (
               <>

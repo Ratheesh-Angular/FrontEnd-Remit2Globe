@@ -2,6 +2,7 @@
 
 import { useAuthStore } from "@/store/auth.store";
 import { useRouter } from "next/navigation";
+import { ArrowBigRight, ArrowRight, Lock } from "lucide-react";
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuthStore();
@@ -200,9 +201,14 @@ function ActionCard({
           <p className="text-xs text-slate-500 mt-1">{description}</p>
         </div>
         {locked ? (
-          <span className="text-slate-300 text-base">🔒</span>
+          <span className="text-slate-300 text-base">
+            <Lock className="w-5 h-5" />
+          </span>
         ) : (
-          <span className="text-teal-600 text-base">→</span>
+          <></>
+          // <span className="text-teal-600 text-base">
+          //   <ArrowRight className="w-5 h-5" />
+          // </span>
         )}
       </div>
     </div>

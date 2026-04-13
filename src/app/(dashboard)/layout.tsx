@@ -4,14 +4,42 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth.store";
 import api from "@/lib/api";
 import { usePathname } from "next/navigation";
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: "▣" },
-  { label: "Send Money", href: "/send", icon: "↗" },
-  { label: "Transactions", href: "/transactions", icon: "↕" },
-  { label: "Beneficiaries", href: "/beneficiaries", icon: "♟" },
-  { label: "Profile", href: "/profile", icon: "◉" },
-];
+import {
+  LayoutDashboard,
+  Send,
+  ArrowLeftRight,
+  Users,
+  User,
+  LogOut,
+} from "lucide-react";
 
+const navItems = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "Send Money",
+    href: "/send",
+    icon: Send,
+  },
+  {
+    label: "Transactions",
+    href: "/transactions",
+    icon: ArrowLeftRight,
+  },
+  {
+    label: "Beneficiaries",
+    href: "/beneficiaries",
+    icon: Users,
+  },
+  {
+    label: "Profile",
+    href: "/profile",
+    icon: User,
+  },
+];
 export default function DashboardLayout({
   children,
 }: {
@@ -73,7 +101,9 @@ export default function DashboardLayout({
                   }
                 `}
               >
-                <span className="text-base">{item.icon}</span>
+                <span className="text-base">
+                  <item.icon className="w-5 h-5" />
+                </span>
                 {item.label}
               </a>
             );
@@ -99,7 +129,9 @@ export default function DashboardLayout({
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
           >
-            <span>⇥</span>
+            <span>
+              <LogOut className="w-5 h-5" />
+            </span>
             Sign out
           </button>
         </div>
