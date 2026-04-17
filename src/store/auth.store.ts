@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-interface User {
+export interface AuthUser {
   id: string;
   email: string | null;
   phone: string | null;
@@ -10,9 +10,9 @@ interface User {
 }
 
 interface AuthStore {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
-  setUser: (user: User | null) => void;
+  setUser: (user: AuthUser | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => void;
 }

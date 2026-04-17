@@ -1,0 +1,54 @@
+/** ISO2 → pay/receive currency (aligned with backend remittance.constants). */
+export const ALPHA2_TO_CURRENCY: Record<string, string> = {
+  US: "USD",
+  GB: "GBP",
+  IN: "INR",
+  KE: "KES",
+  TZ: "TZS",
+  UG: "UGX",
+  RW: "RWF",
+  GH: "GHS",
+  NG: "NGN",
+  ZA: "ZAR",
+  AE: "AED",
+  SA: "SAR",
+  PK: "PKR",
+  BD: "BDT",
+  PH: "PHP",
+};
+
+/** ISO 4217 → flag (alpha-2) for display in currency selectors. */
+export const CURRENCY_TO_FLAG_ALPHA2: Record<string, string> = {
+  USD: "US",
+  EUR: "DE",
+  GBP: "GB",
+  INR: "IN",
+  KES: "KE",
+  TZS: "TZ",
+  UGX: "UG",
+  RWF: "RW",
+  GHS: "GH",
+  NGN: "NG",
+  ZAR: "ZA",
+  AED: "AE",
+  SAR: "SA",
+  PKR: "PK",
+  BDT: "BD",
+  PHP: "PH",
+};
+
+export const AFRICAN_MOBILE_PAYIN_ISO2 = new Set([
+  "KE",
+  "TZ",
+  "UG",
+  "RW",
+  "GH",
+  "NG",
+  "ZA",
+  "ZM",
+  "ZW",
+  "SN",
+  "CI",
+  "CM",
+  "ET",
+]);

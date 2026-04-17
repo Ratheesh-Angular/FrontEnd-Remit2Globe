@@ -3,182 +3,25 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import Flag from "react-world-flags";
+import { signIn } from "next-auth/react";
+import { ALL_COUNTRIES, type Country } from "@/lib/phone-countries";
 
-interface Country {
-  code: string;
-  name: string;
-  dialCode: string;
-  minDigits: number;
-  maxDigits: number;
+function oauthErrorMessage(code: string) {
+  switch (code) {
+    case "Callback":
+      return "Google sign-in could not be completed. Please try again or register with email.";
+    case "OAuthAccountNotLinked":
+      return "This Google account could not be linked. Try signing in with the method you used to register.";
+    case "OAuthCreateAccount":
+      return "Could not create your account in the database. If this keeps happening, contact support.";
+    case "Configuration":
+      return "Sign-in is misconfigured. Check server environment variables.";
+    case "AccessDenied":
+      return "Google sign-in was cancelled or denied.";
+    default:
+      return `Sign-in failed (${code}). Please try again.`;
+  }
 }
-
-const ALL_COUNTRIES: Country[] = [
-  {
-    code: "AF",
-    name: "Afghanistan",
-    dialCode: "93",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  { code: "AL", name: "Albania", dialCode: "355", minDigits: 9, maxDigits: 9 },
-  { code: "DZ", name: "Algeria", dialCode: "213", minDigits: 9, maxDigits: 9 },
-  {
-    code: "AR",
-    name: "Argentina",
-    dialCode: "54",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "AU", name: "Australia", dialCode: "61", minDigits: 9, maxDigits: 9 },
-  { code: "AT", name: "Austria", dialCode: "43", minDigits: 10, maxDigits: 13 },
-  {
-    code: "BD",
-    name: "Bangladesh",
-    dialCode: "880",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "BE", name: "Belgium", dialCode: "32", minDigits: 9, maxDigits: 9 },
-  { code: "BR", name: "Brazil", dialCode: "55", minDigits: 10, maxDigits: 11 },
-  { code: "CA", name: "Canada", dialCode: "1", minDigits: 10, maxDigits: 10 },
-  { code: "CN", name: "China", dialCode: "86", minDigits: 11, maxDigits: 11 },
-  {
-    code: "CO",
-    name: "Colombia",
-    dialCode: "57",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "EG", name: "Egypt", dialCode: "20", minDigits: 10, maxDigits: 10 },
-  { code: "FR", name: "France", dialCode: "33", minDigits: 9, maxDigits: 9 },
-  { code: "DE", name: "Germany", dialCode: "49", minDigits: 10, maxDigits: 11 },
-  { code: "GH", name: "Ghana", dialCode: "233", minDigits: 9, maxDigits: 9 },
-  { code: "GR", name: "Greece", dialCode: "30", minDigits: 10, maxDigits: 10 },
-  {
-    code: "HK",
-    name: "Hong Kong",
-    dialCode: "852",
-    minDigits: 8,
-    maxDigits: 8,
-  },
-  { code: "IN", name: "India", dialCode: "91", minDigits: 10, maxDigits: 10 },
-  {
-    code: "ID",
-    name: "Indonesia",
-    dialCode: "62",
-    minDigits: 5,
-    maxDigits: 12,
-  },
-  { code: "IE", name: "Ireland", dialCode: "353", minDigits: 9, maxDigits: 9 },
-  { code: "IT", name: "Italy", dialCode: "39", minDigits: 9, maxDigits: 10 },
-  { code: "JP", name: "Japan", dialCode: "81", minDigits: 10, maxDigits: 10 },
-  { code: "KE", name: "Kenya", dialCode: "254", minDigits: 9, maxDigits: 9 },
-  { code: "KW", name: "Kuwait", dialCode: "965", minDigits: 8, maxDigits: 8 },
-  { code: "LB", name: "Lebanon", dialCode: "961", minDigits: 7, maxDigits: 8 },
-  { code: "LY", name: "Libya", dialCode: "218", minDigits: 9, maxDigits: 9 },
-  { code: "MY", name: "Malaysia", dialCode: "60", minDigits: 9, maxDigits: 10 },
-  { code: "MX", name: "Mexico", dialCode: "52", minDigits: 10, maxDigits: 10 },
-  { code: "MA", name: "Morocco", dialCode: "212", minDigits: 9, maxDigits: 9 },
-  {
-    code: "NL",
-    name: "Netherlands",
-    dialCode: "31",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  {
-    code: "NZ",
-    name: "New Zealand",
-    dialCode: "64",
-    minDigits: 8,
-    maxDigits: 10,
-  },
-  {
-    code: "NG",
-    name: "Nigeria",
-    dialCode: "234",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "NO", name: "Norway", dialCode: "47", minDigits: 8, maxDigits: 8 },
-  {
-    code: "PK",
-    name: "Pakistan",
-    dialCode: "92",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  {
-    code: "PH",
-    name: "Philippines",
-    dialCode: "63",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "PL", name: "Poland", dialCode: "48", minDigits: 9, maxDigits: 9 },
-  { code: "PT", name: "Portugal", dialCode: "351", minDigits: 9, maxDigits: 9 },
-  { code: "QA", name: "Qatar", dialCode: "974", minDigits: 8, maxDigits: 8 },
-  { code: "RO", name: "Romania", dialCode: "40", minDigits: 10, maxDigits: 10 },
-  { code: "RU", name: "Russia", dialCode: "7", minDigits: 10, maxDigits: 10 },
-  {
-    code: "SA",
-    name: "Saudi Arabia",
-    dialCode: "966",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  { code: "SG", name: "Singapore", dialCode: "65", minDigits: 8, maxDigits: 8 },
-  {
-    code: "ZA",
-    name: "South Africa",
-    dialCode: "27",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  {
-    code: "KR",
-    name: "South Korea",
-    dialCode: "82",
-    minDigits: 9,
-    maxDigits: 10,
-  },
-  { code: "ES", name: "Spain", dialCode: "34", minDigits: 9, maxDigits: 9 },
-  { code: "LK", name: "Sri Lanka", dialCode: "94", minDigits: 9, maxDigits: 9 },
-  { code: "SE", name: "Sweden", dialCode: "46", minDigits: 9, maxDigits: 9 },
-  {
-    code: "CH",
-    name: "Switzerland",
-    dialCode: "41",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  { code: "TW", name: "Taiwan", dialCode: "886", minDigits: 9, maxDigits: 9 },
-  { code: "TH", name: "Thailand", dialCode: "66", minDigits: 9, maxDigits: 9 },
-  { code: "TR", name: "Turkey", dialCode: "90", minDigits: 10, maxDigits: 10 },
-  {
-    code: "AE",
-    name: "United Arab Emirates",
-    dialCode: "971",
-    minDigits: 9,
-    maxDigits: 9,
-  },
-  {
-    code: "GB",
-    name: "United Kingdom",
-    dialCode: "44",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  {
-    code: "US",
-    name: "United States",
-    dialCode: "1",
-    minDigits: 10,
-    maxDigits: 10,
-  },
-  { code: "VN", name: "Vietnam", dialCode: "84", minDigits: 9, maxDigits: 10 },
-  { code: "ZW", name: "Zimbabwe", dialCode: "263", minDigits: 9, maxDigits: 9 },
-];
 
 type AccountType = "individual" | "corporate";
 
@@ -215,6 +58,20 @@ export default function RegisterPage() {
   const [countrySearch, setCountrySearch] = useState("");
 
   const [localPhone, setLocalPhone] = useState("");
+  const [oauthErrorCode, setOauthErrorCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (!err) return;
+    setOauthErrorCode(err);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("error");
+    url.searchParams.delete("callbackUrl");
+    const qs = url.searchParams.toString();
+    window.history.replaceState({}, "", `${url.pathname}${qs ? `?${qs}` : ""}`);
+  }, []);
 
   // Detect user's country by IP on mount
   useEffect(() => {
@@ -297,7 +154,6 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
-    console.log(errs, "dddd");
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -377,6 +233,15 @@ export default function RegisterPage() {
             Join thousands sending money globally
           </p>
         </div>
+
+        {oauthErrorCode && (
+          <div
+            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+            role="alert"
+          >
+            {oauthErrorMessage(oauthErrorCode)}
+          </div>
+        )}
 
         {/* Account Type Selector */}
         <div className="mb-6">
@@ -631,6 +496,7 @@ export default function RegisterPage() {
             {/* Continue with Google */}
             <button
               type="button"
+              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
               disabled={isLoading}
               className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >

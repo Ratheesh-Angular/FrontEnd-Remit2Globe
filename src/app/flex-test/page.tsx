@@ -24,6 +24,23 @@ export default function FlexTestPage() {
     }
   };
 
+  const getBanks = async (couCode: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/banks/${couCode}`);
+      const data = await res.json();
+      setResponse(data);
+    } catch (err) {
+      console.error(err);
+      setResponse({ error: "Request failed" });
+    }
+  };
+
+  const handleGetBanks = (couCode: string) => {
+    if (couCode) {
+      getBanks(couCode);
+    }
+  };
+
   return (
     <div style={{ padding: "20px", fontFamily: "Arial" }}>
       <h1>Flex API Test Panel</h1>
@@ -59,6 +76,29 @@ export default function FlexTestPage() {
       </div>
 
       {loading && <p>Loading...</p>}
+
+      {response?.data?.data && (
+        <div style={{ marginBottom: "20px" }}>
+          <label>Select Country: </label>
+
+          <select
+            style={{
+              marginLeft: "10px",
+              padding: "5px",
+              borderRadius: "5px",
+            }}
+            onChange={(e) => handleGetBanks(e.target.value)}
+          >
+            <option value="">-- Select Country --</option>
+
+            {response.data.data.map((country: any) => (
+              <option key={country.couCode} value={country.couCode}>
+                {country.couName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <pre
         style={{
