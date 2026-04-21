@@ -3,4 +3,8 @@ export { Input } from "./Input";
 export { Card } from "./Card";
 export { Badge } from "./Badge";
 export { Spinner } from "./Spinner";
+export { Loader } from "./Loader";
+export type { LoaderProps, LoaderVariant } from "./Loader";
+export { AppDialog } from "./AppDialog";
+export type { AppDialogProps, AppDialogVariant } from "./AppDialog";
 export { Select } from "./Select";

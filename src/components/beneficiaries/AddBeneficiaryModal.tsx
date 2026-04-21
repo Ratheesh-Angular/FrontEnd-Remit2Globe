@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import api from "@/lib/api";
+import {
+  normalizeAba,
+  normalizeIfsc,
+  resolveBankIdentifierConfig,
+  validateBankIdentifier,
+} from "@/lib/beneficiary-bank-identifier";
+import { Loader } from "@/components/ui/Loader";
 import Flag from "react-world-flags";
 import countriesIso from "i18n-iso-countries";
-import { getCountryCallingCode, type CountryCode } from "libphonenumber-js";
+import {
+  getCountryCallingCode,
+  parsePhoneNumberFromString,
+  type CountryCode,
+} from "libphonenumber-js";
 
 const API_ROOT =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -77,10 +88,12 @@ type DeliveryChannel = "BANK_TRANSFER" | "MOBILE_MONEY";
 
 export interface CreatedBeneficiaryPayload {
   id: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   deliveryChannel: DeliveryChannel;
   country?: string | null;
   bankName?: string | null;
+  branchName?: string | null;
   accountNumber?: string | null;
   swiftBic?: string | null;
   mobileMoneyProvider?: string | null;
@@ -101,14 +114,20 @@ export type AddBeneficiaryModalProps = {
   ) => void | Promise<void>;
   /** When set, destination country is fixed to this corridor (Flex list match). */
   lockCountry?: LockCountry | null;
+  /** When set, modal loads this beneficiary and PATCHes on save instead of creating. */
+  editBeneficiaryId?: string | null;
+  /** If set, API errors are reported here instead of only inline `saveError`. */
+  onSubmitError?: (message: string) => void;
 };
 
 interface FormData {
   deliveryChannel: DeliveryChannel;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   // Bank Transfer
   country: string;
   bankName: string;
+  branchName: string;
   accountNumber: string;
   confirmAccountNumber: string;
   swiftBic: string;
@@ -119,9 +138,11 @@ interface FormData {
 
 const emptyForm: FormData = {
   deliveryChannel: "BANK_TRANSFER",
-  fullName: "",
+  firstName: "",
+  lastName: "",
   country: "",
   bankName: "",
+  branchName: "",
   accountNumber: "",
   confirmAccountNumber: "",
   swiftBic: "",
@@ -129,11 +150,42 @@ const emptyForm: FormData = {
   mobileNumber: "",
 };
 
+function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
+  const acct = String(b.accountNumber ?? "");
+  return {
+    deliveryChannel: b.deliveryChannel,
+    firstName: String(b.firstName ?? ""),
+    lastName: String(b.lastName ?? ""),
+    country: String(b.country ?? ""),
+    bankName: String(b.bankName ?? ""),
+    branchName: String(b.branchName ?? ""),
+    accountNumber: acct,
+    confirmAccountNumber: acct,
+    swiftBic: String(b.swiftBic ?? ""),
+    mobileMoneyProvider: String(b.mobileMoneyProvider ?? ""),
+    mobileNumber: "",
+  };
+}
+
+function nationalMobileFromStored(mobile: string | null | undefined): string {
+  const raw = String(mobile ?? "").trim();
+  if (!raw) return "";
+  try {
+    const p = parsePhoneNumberFromString(raw);
+    if (p?.nationalNumber) return String(p.nationalNumber);
+  } catch {
+    /* ignore */
+  }
+  return raw.replace(/\D/g, "");
+}
+
 export function AddBeneficiaryModal({
   open,
   onClose,
   onSuccess,
   lockCountry = null,
+  editBeneficiaryId = null,
+  onSubmitError,
 }: AddBeneficiaryModalProps) {
   const countryLocked = Boolean(
     lockCountry &&
@@ -157,6 +209,13 @@ export function AddBeneficiaryModal({
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [bankSearch, setBankSearch] = useState("");
+  const [bankIdLookupStatus, setBankIdLookupStatus] = useState<
+    "idle" | "loading" | "ok" | "not_found" | "error"
+  >("idle");
+  const bankIdLookupGen = useRef(0);
+  const isEditMode = Boolean(editBeneficiaryId);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editLoadError, setEditLoadError] = useState("");
 
   const filteredFlexCountries = useMemo(() => {
     const q = countrySearch.toLowerCase().trim();
@@ -180,6 +239,11 @@ export function AddBeneficiaryModal({
 
   const selectedFlexCountry = flexCountries.find(
     (c) => c.couName === formData.country,
+  );
+
+  const bankIdConfig = useMemo(
+    () => resolveBankIdentifierConfig(selectedFlexCountry?.couCode),
+    [selectedFlexCountry?.couCode],
   );
 
   // Close country dropdown on outside click
@@ -212,8 +276,14 @@ export function AddBeneficiaryModal({
       .then((r) => r.json())
       .then((json) => {
         const list = json?.data?.data;
-        if (!cancelled)
-          setFlexCountries(Array.isArray(list) ? list : []);
+        if (cancelled) return;
+        const raw = Array.isArray(list) ? list : [];
+        setFlexCountries(
+          raw.map((row: { couCode?: string; couName?: string }) => ({
+            couCode: String(row?.couCode ?? "").trim(),
+            couName: String(row?.couName ?? "").trim(),
+          })).filter((c) => c.couCode && c.couName),
+        );
       })
       .catch(() => {
         if (!cancelled) {
@@ -230,7 +300,13 @@ export function AddBeneficiaryModal({
   }, [open]);
 
   useEffect(() => {
-    if (!open || !lockCountry || flexCountries.length === 0) return;
+    if (
+      !open ||
+      !lockCountry ||
+      flexCountries.length === 0 ||
+      editBeneficiaryId
+    )
+      return;
     const byCode =
       lockCountry.couCode &&
       flexCountries.find(
@@ -243,16 +319,64 @@ export function AddBeneficiaryModal({
     );
     const match = byCode || byName;
     if (match) {
-      setFormData((prev) => ({ ...prev, country: match.couName }));
+      const name = match.couName != null ? String(match.couName) : "";
+      setFormData((prev) => ({ ...prev, country: name }));
     }
-  }, [open, lockCountry, flexCountries]);
+  }, [open, lockCountry, flexCountries, editBeneficiaryId]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setEditLoadError("");
+      return;
+    }
+
+    if (editBeneficiaryId) {
+      let cancelled = false;
+      setEditLoading(true);
+      setEditLoadError("");
+      setErrors({});
+      setSaveError("");
+      setIsConfirmingAccount(false);
+      setCountryOpen(false);
+      setCountrySearch("");
+      setBankOpen(false);
+      setBankSearch("");
+      setBankIdLookupStatus("idle");
+      setFlexBanks([]);
+
+      void api
+        .get<{ data: { beneficiary: CreatedBeneficiaryPayload } }>(
+          `/beneficiaries/${editBeneficiaryId}`,
+        )
+        .then((res) => {
+          if (cancelled) return;
+          const b = res.data.data.beneficiary;
+          setFormData(beneficiaryRecordToForm(b));
+          setLocalMobileNumber(nationalMobileFromStored(b.mobileNumber));
+          setEditLoading(false);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setEditLoadError("Could not load beneficiary. Try again.");
+            setEditLoading(false);
+            setFormData({ ...emptyForm });
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setEditLoading(false);
+    setEditLoadError("");
     setFormData(
       lockCountry?.couName?.trim()
-        ? { ...emptyForm, country: lockCountry.couName.trim() }
-        : emptyForm,
+        ? {
+            ...emptyForm,
+            country: String(lockCountry.couName).trim(),
+          }
+        : { ...emptyForm },
     );
     setErrors({});
     setSaveError("");
@@ -263,7 +387,8 @@ export function AddBeneficiaryModal({
     setFlexBanks([]);
     setBankOpen(false);
     setBankSearch("");
-  }, [open, lockCountry?.couName]);
+    setBankIdLookupStatus("idle");
+  }, [open, lockCountry?.couName, editBeneficiaryId]);
 
   useEffect(() => {
     if (!open) {
@@ -274,6 +399,12 @@ export function AddBeneficiaryModal({
     if (formData.deliveryChannel !== "BANK_TRANSFER") {
       setFlexBanks([]);
       setBanksLoading(false);
+      return;
+    }
+    if (bankIdConfig.hideFlexBankPicker) {
+      setFlexBanks([]);
+      setBanksLoading(false);
+      setBankOpen(false);
       return;
     }
     const couCode = selectedFlexCountry?.couCode;
@@ -290,7 +421,14 @@ export function AddBeneficiaryModal({
     })
       .then((r) => r.json())
       .then((json) => {
-        setFlexBanks(Array.isArray(json?.data) ? json.data : []);
+        const rows = Array.isArray(json?.data) ? json.data : [];
+        const banks: FlexBank[] = [];
+        for (const row of rows as { bankCode?: string; bankName?: string }[]) {
+          const bankCode = String(row?.bankCode ?? "").trim();
+          const bankName = String(row?.bankName ?? "").trim();
+          if (bankCode && bankName) banks.push({ bankCode, bankName });
+        }
+        setFlexBanks(banks);
       })
       .catch(() => {
         if (!ac.signal.aborted) setFlexBanks([]);
@@ -304,10 +442,118 @@ export function AddBeneficiaryModal({
     formData.deliveryChannel,
     formData.country,
     selectedFlexCountry?.couCode,
+    bankIdConfig.hideFlexBankPicker,
+  ]);
+
+  useEffect(() => {
+    if (!open || formData.deliveryChannel !== "BANK_TRANSFER") return;
+    const kind = bankIdConfig.lookup;
+    if (kind !== "ifsc" && kind !== "aba") {
+      setBankIdLookupStatus("idle");
+      return;
+    }
+
+    const delay = setTimeout(() => {
+      const gen = ++bankIdLookupGen.current;
+
+      const finish = () => {
+        if (bankIdLookupGen.current !== gen) return false;
+        return true;
+      };
+
+      if (kind === "ifsc") {
+        const code = normalizeIfsc(formData.swiftBic);
+        if (code.length !== 11) {
+          if (finish()) setBankIdLookupStatus("idle");
+          return;
+        }
+        if (finish()) setBankIdLookupStatus("loading");
+
+        void (async () => {
+          try {
+            const res = await fetch(
+              `/api/bank-lookup/ifsc/${encodeURIComponent(code)}`,
+            );
+            if (!finish()) return;
+            if (res.status === 404) {
+              setBankIdLookupStatus("not_found");
+              return;
+            }
+            if (!res.ok) {
+              setBankIdLookupStatus("error");
+              return;
+            }
+            const j = (await res.json()) as {
+              bank?: string;
+              branch?: string;
+            };
+            setFormData((prev) => ({
+              ...prev,
+              bankName: (j.bank ?? "").trim() || prev.bankName,
+              branchName: (j.branch ?? "").trim() || prev.branchName,
+            }));
+            setBankIdLookupStatus("ok");
+          } catch {
+            if (finish()) setBankIdLookupStatus("error");
+          }
+        })();
+        return;
+      }
+
+      const digits = normalizeAba(formData.swiftBic);
+      if (digits.length !== 9) {
+        if (finish()) setBankIdLookupStatus("idle");
+        return;
+      }
+      if (finish()) setBankIdLookupStatus("loading");
+
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/bank-lookup/aba/${encodeURIComponent(digits)}`,
+          );
+          if (!finish()) return;
+          if (res.status === 404) {
+            setBankIdLookupStatus("not_found");
+            return;
+          }
+          if (!res.ok) {
+            setBankIdLookupStatus("error");
+            return;
+          }
+          const j = (await res.json()) as {
+            bank?: string;
+            city?: string;
+            state?: string;
+          };
+          const bank = (j.bank ?? "").trim();
+          const city = (j.city ?? "").trim();
+          const state = (j.state ?? "").trim();
+          const branchLine = [city, state].filter(Boolean).join(", ");
+          setFormData((prev) => ({
+            ...prev,
+            bankName: bank || prev.bankName,
+            branchName: branchLine || prev.branchName,
+          }));
+          setBankIdLookupStatus("ok");
+        } catch {
+          if (finish()) setBankIdLookupStatus("error");
+        }
+      })();
+    }, 450);
+
+    return () => clearTimeout(delay);
+  }, [
+    open,
+    formData.deliveryChannel,
+    bankIdConfig.lookup,
+    formData.swiftBic,
+    selectedFlexCountry?.couCode,
   ]);
 
   function handleChange(field: keyof FormData, value: string) {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    const next = value == null ? "" : String(value);
+    setFormData((prev) => ({ ...prev, [field]: next }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
     setSaveError("");
   }
@@ -315,7 +561,9 @@ export function AddBeneficiaryModal({
   function validate(): boolean {
     const errs: Partial<Record<keyof FormData, string>> = {};
 
-    if (!formData.fullName.trim()) errs.fullName = "Full name is required";
+    if (!formData.firstName.trim())
+      errs.firstName = "First name is required";
+    if (!formData.lastName.trim()) errs.lastName = "Last name is required";
 
     if (formData.deliveryChannel === "BANK_TRANSFER") {
       if (!formData.country.trim()) errs.country = "Country is required";
@@ -326,8 +574,11 @@ export function AddBeneficiaryModal({
         errs.confirmAccountNumber = "Please confirm account number";
       else if (formData.accountNumber !== formData.confirmAccountNumber)
         errs.confirmAccountNumber = "Account numbers do not match";
-      if (!formData.swiftBic.trim())
-        errs.swiftBic = "SWIFT/BIC code is required";
+      const idErr = validateBankIdentifier(
+        formData.swiftBic,
+        bankIdConfig.lookup,
+      );
+      if (idErr) errs.swiftBic = idErr;
     }
 
     if (formData.deliveryChannel === "MOBILE_MONEY") {
@@ -355,14 +606,16 @@ export function AddBeneficiaryModal({
       setIsSaving(true);
       setSaveError("");
 
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         deliveryChannel: formData.deliveryChannel,
-        fullName: formData.fullName.trim(),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
       };
 
       if (formData.deliveryChannel === "BANK_TRANSFER") {
         payload.country = formData.country.trim();
         payload.bankName = formData.bankName.trim();
+        payload.branchName = formData.branchName.trim() || undefined;
         payload.accountNumber = formData.confirmAccountNumber.trim(); // Use confirmed account number
         payload.swiftBic = formData.swiftBic.trim();
       } else {
@@ -375,17 +628,33 @@ export function AddBeneficiaryModal({
           dial && digits ? `+${dial}${digits}` : digits || localMobileNumber;
       }
 
-      const res = await api.post<{
-        success: boolean;
-        data: { beneficiary: CreatedBeneficiaryPayload };
-      }>("/beneficiaries", payload);
-      const created = res.data.data.beneficiary;
-      await onSuccess?.(created);
+      if (editBeneficiaryId) {
+        const res = await api.patch<{
+          success: boolean;
+          data: { beneficiary: CreatedBeneficiaryPayload };
+        }>(`/beneficiaries/${editBeneficiaryId}`, payload);
+        const updated = res.data.data.beneficiary;
+        await onSuccess?.(updated);
+      } else {
+        const res = await api.post<{
+          success: boolean;
+          data: { beneficiary: CreatedBeneficiaryPayload };
+        }>("/beneficiaries", payload);
+        const created = res.data.data.beneficiary;
+        await onSuccess?.(created);
+      }
       onClose();
     } catch (error: any) {
-      setSaveError(
-        error.response?.data?.message || "Failed to add beneficiary",
-      );
+      const msg =
+        error.response?.data?.message ||
+        (editBeneficiaryId
+          ? "Failed to update beneficiary"
+          : "Failed to add beneficiary");
+      if (onSubmitError) {
+        onSubmitError(msg);
+      } else {
+        setSaveError(msg);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -393,18 +662,34 @@ export function AddBeneficiaryModal({
 
   if (!open) return null;
 
+  const showForm =
+    !editBeneficiaryId || (!editLoading && !editLoadError);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {isSaving && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-[2px]">
+                <Loader
+                  variant="centered"
+                  size="xl"
+                  label={
+                    isEditMode ? "Saving changes…" : "Adding beneficiary…"
+                  }
+                  sublabel="Please wait."
+                />
+              </div>
+            )}
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-200">
               <h2 className="text-lg font-semibold text-slate-900">
-                Add New Beneficiary
+                {isEditMode ? "Edit beneficiary" : "Add New Beneficiary"}
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                disabled={isSaving}
+                className="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
                 <svg
                   className="w-5 h-5"
@@ -416,7 +701,30 @@ export function AddBeneficiaryModal({
               </button>
             </div>
 
+            {editBeneficiaryId && editLoading && (
+              <Loader
+                variant="centered"
+                className="py-20"
+                size="xl"
+                label="Loading beneficiary…"
+              />
+            )}
+
+            {editBeneficiaryId && editLoadError && (
+              <div className="p-8 text-center space-y-4">
+                <p className="text-sm text-red-600">{editLoadError}</p>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="h-10 px-5 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
             {/* Form */}
+            {showForm && (
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               {/* Delivery Channel */}
               <div>
@@ -425,37 +733,70 @@ export function AddBeneficiaryModal({
                 </label>
                 <select
                   value={formData.deliveryChannel}
+                  disabled={isEditMode}
                   onChange={(e) =>
                     handleChange(
                       "deliveryChannel",
                       e.target.value as DeliveryChannel,
                     )
                   }
-                  className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors"
+                  className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                 >
                   <option value="BANK_TRANSFER">Bank Transfer</option>
                   <option value="MOBILE_MONEY">Mobile Money</option>
                 </select>
+                {isEditMode && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Delivery type cannot be changed. Add a new beneficiary to
+                    use a different channel.
+                  </p>
+                )}
               </div>
 
-              {/* Full Name */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  Beneficiary Full Name (as per bank account){" "}
-                  <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="John Doe"
-                  value={formData.fullName}
-                  onChange={(e) => handleChange("fullName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                    errors.fullName ? "border-red-400" : "border-slate-200"
-                  }`}
-                />
-                {errors.fullName && (
-                  <p className="mt-1 text-xs text-red-500">{errors.fullName}</p>
-                )}
+              {/* First / last name (as per bank account) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    First name (as per bank account){" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="First name"
+                    autoComplete="given-name"
+                    value={formData.firstName}
+                    onChange={(e) => handleChange("firstName", e.target.value)}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.firstName ? "border-red-400" : "border-slate-200"
+                    }`}
+                  />
+                  {errors.firstName && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.firstName}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Last name (as per bank account){" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Last name"
+                    autoComplete="family-name"
+                    value={formData.lastName}
+                    onChange={(e) => handleChange("lastName", e.target.value)}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.lastName ? "border-red-400" : "border-slate-200"
+                    }`}
+                  />
+                  {errors.lastName && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.lastName}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Bank Transfer Fields */}
@@ -554,13 +895,18 @@ export function AddBeneficiaryModal({
                                 </li>
                               )}
                               {!flexCountriesLoading &&
-                                filteredFlexCountries.map((c) => (
-                                  <li key={c.couCode}>
+                                filteredFlexCountries.map((c, idx) => (
+                                  <li
+                                    key={`bank-${c.couCode}-${c.couName}-${idx}`}
+                                  >
                                     <button
                                       type="button"
                                       onClick={() => {
                                         handleChange("country", c.couName);
                                         handleChange("bankName", "");
+                                        handleChange("branchName", "");
+                                        handleChange("swiftBic", "");
+                                        setBankIdLookupStatus("idle");
                                         setCountryOpen(false);
                                         setBankSearch("");
                                         setBankOpen(false);
@@ -609,112 +955,215 @@ export function AddBeneficiaryModal({
                     )}
                   </div>
 
+                  {bankIdConfig.showIdentifierBeforeBankDetails && (
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                        {bankIdConfig.fieldLabel}{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        placeholder={bankIdConfig.placeholder}
+                        value={formData.swiftBic}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const v =
+                            bankIdConfig.lookup === "ifsc"
+                              ? normalizeIfsc(raw)
+                              : bankIdConfig.lookup === "aba"
+                                ? normalizeAba(raw)
+                                : raw;
+                          handleChange("swiftBic", v);
+                        }}
+                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                          errors.swiftBic
+                            ? "border-red-400"
+                            : "border-slate-200"
+                        }`}
+                      />
+                      <p className="mt-1 text-xs text-slate-500">
+                        {bankIdConfig.hint}
+                      </p>
+                      {bankIdLookupStatus === "loading" && (
+                        <p className="mt-1 text-xs text-teal-600">
+                          Looking up bank details…
+                        </p>
+                      )}
+                      {bankIdLookupStatus === "ok" && (
+                        <p className="mt-1 text-xs text-teal-700">
+                          Bank and branch were filled automatically — you can
+                          edit them below if needed.
+                        </p>
+                      )}
+                      {bankIdLookupStatus === "not_found" && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Code not found. Check it, or enter bank and branch
+                          manually.
+                        </p>
+                      )}
+                      {bankIdLookupStatus === "error" && (
+                        <p className="mt-1 text-xs text-red-600">
+                          Lookup failed. Enter bank and branch manually.
+                        </p>
+                      )}
+                      {errors.swiftBic && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.swiftBic}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Bank Name <span className="text-red-500">*</span>
+                      Bank name <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative" data-bank-dropdown>
-                      <button
-                        type="button"
-                        disabled={
-                          !formData.country ||
-                          banksLoading ||
-                          flexBanks.length === 0
+                    {bankIdConfig.hideFlexBankPicker ? (
+                      <input
+                        type="text"
+                        placeholder={
+                          bankIdConfig.lookup === "ifsc"
+                            ? "Filled from IFSC or type manually"
+                            : bankIdConfig.lookup === "aba"
+                              ? "Filled from routing number or type manually"
+                              : "Bank name"
                         }
-                        onClick={() => {
-                          if (
+                        value={formData.bankName}
+                        onChange={(e) =>
+                          handleChange("bankName", e.target.value)
+                        }
+                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                          errors.bankName
+                            ? "border-red-400"
+                            : "border-slate-200"
+                        }`}
+                      />
+                    ) : (
+                      <div className="relative" data-bank-dropdown>
+                        <button
+                          type="button"
+                          disabled={
                             !formData.country ||
                             banksLoading ||
                             flexBanks.length === 0
-                          )
-                            return;
-                          setBankOpen((v) => !v);
-                          setBankSearch("");
-                          setCountryOpen(false);
-                        }}
-                        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
-                          errors.bankName ? "border-red-400" : "border-slate-200"
-                        } ${formData.bankName ? "text-slate-900" : "text-slate-400"}`}
-                      >
-                        {banksLoading ? (
-                          <span>Loading banks…</span>
-                        ) : flexBanks.length === 0 && formData.country ? (
-                          <span>No banks for this country</span>
-                        ) : formData.bankName ? (
-                          <span className="truncate">{formData.bankName}</span>
-                        ) : (
-                          <span>Select bank…</span>
-                        )}
-                        <svg
-                          className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
+                          }
+                          onClick={() => {
+                            if (
+                              !formData.country ||
+                              banksLoading ||
+                              flexBanks.length === 0
+                            )
+                              return;
+                            setBankOpen((v) => !v);
+                            setBankSearch("");
+                            setCountryOpen(false);
+                          }}
+                          className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                            errors.bankName
+                              ? "border-red-400"
+                              : "border-slate-200"
+                          } ${formData.bankName ? "text-slate-900" : "text-slate-400"}`}
                         >
-                          <path
-                            fillRule="evenodd"
-                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </button>
-
-                      {bankOpen && flexBanks.length > 0 && (
-                        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                          <div className="p-2 border-b border-slate-100">
-                            <input
-                              autoFocus
-                              placeholder="Search bank…"
-                              value={bankSearch}
-                              onChange={(e) => setBankSearch(e.target.value)}
-                              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                          {banksLoading ? (
+                            <span>Loading banks…</span>
+                          ) : flexBanks.length === 0 && formData.country ? (
+                            <span>No banks for this country</span>
+                          ) : formData.bankName ? (
+                            <span className="truncate">{formData.bankName}</span>
+                          ) : (
+                            <span>Select bank…</span>
+                          )}
+                          <svg
+                            className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                              clipRule="evenodd"
                             />
+                          </svg>
+                        </button>
+
+                        {bankOpen && flexBanks.length > 0 && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            <div className="p-2 border-b border-slate-100">
+                              <input
+                                autoFocus
+                                placeholder="Search bank…"
+                                value={bankSearch}
+                                onChange={(e) =>
+                                  setBankSearch(e.target.value)
+                                }
+                                className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                              />
+                            </div>
+                            <ul className="max-h-52 overflow-y-auto py-1">
+                              {filteredFlexBanks.map((b, idx) => (
+                                <li key={`${b.bankCode}-${b.bankName}-${idx}`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleChange("bankName", b.bankName);
+                                      setBankOpen(false);
+                                    }}
+                                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                                      formData.bankName === b.bankName
+                                        ? "bg-teal-50 text-teal-700 font-medium"
+                                        : "text-slate-700"
+                                    }`}
+                                  >
+                                    <span className="truncate">
+                                      {b.bankName}
+                                    </span>
+                                    {formData.bankName === b.bankName && (
+                                      <svg
+                                        className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                        viewBox="0 0 20 20"
+                                        fill="currentColor"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                              {filteredFlexBanks.length === 0 && (
+                                <li className="px-3 py-4 text-sm text-slate-400 text-center">
+                                  No banks match your search
+                                </li>
+                              )}
+                            </ul>
                           </div>
-                          <ul className="max-h-52 overflow-y-auto py-1">
-                            {filteredFlexBanks.map((b) => (
-                              <li key={b.bankCode}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleChange("bankName", b.bankName);
-                                    setBankOpen(false);
-                                  }}
-                                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                                    formData.bankName === b.bankName
-                                      ? "bg-teal-50 text-teal-700 font-medium"
-                                      : "text-slate-700"
-                                  }`}
-                                >
-                                  <span className="truncate">{b.bankName}</span>
-                                  {formData.bankName === b.bankName && (
-                                    <svg
-                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
-                                      viewBox="0 0 20 20"
-                                      fill="currentColor"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
-                                  )}
-                                </button>
-                              </li>
-                            ))}
-                            {filteredFlexBanks.length === 0 && (
-                              <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                No banks match your search
-                              </li>
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                     {errors.bankName && (
                       <p className="mt-1 text-xs text-red-500">
                         {errors.bankName}
                       </p>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      Branch name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Main Street"
+                      value={formData.branchName}
+                      onChange={(e) =>
+                        handleChange("branchName", e.target.value)
+                      }
+                      className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors"
+                    />
                   </div>
 
                   <div>
@@ -808,26 +1257,43 @@ export function AddBeneficiaryModal({
                     )}
                   </div>
 
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      SWIFT/BIC / Routing / Transit Number{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="EQBLKENA"
-                      value={formData.swiftBic}
-                      onChange={(e) => handleChange("swiftBic", e.target.value)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.swiftBic ? "border-red-400" : "border-slate-200"
-                      }`}
-                    />
-                    {errors.swiftBic && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.swiftBic}
+                  {!bankIdConfig.showIdentifierBeforeBankDetails && (
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                        {bankIdConfig.fieldLabel}{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        placeholder={bankIdConfig.placeholder}
+                        value={formData.swiftBic}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const v =
+                            bankIdConfig.lookup === "ifsc"
+                              ? normalizeIfsc(raw)
+                              : bankIdConfig.lookup === "aba"
+                                ? normalizeAba(raw)
+                                : raw;
+                          handleChange("swiftBic", v);
+                        }}
+                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                          errors.swiftBic
+                            ? "border-red-400"
+                            : "border-slate-200"
+                        }`}
+                      />
+                      <p className="mt-1 text-xs text-slate-500">
+                        {bankIdConfig.hint}
                       </p>
-                    )}
-                  </div>
+                      {errors.swiftBic && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.swiftBic}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -926,8 +1392,10 @@ export function AddBeneficiaryModal({
                                 </li>
                               )}
                               {!flexCountriesLoading &&
-                                filteredFlexCountries.map((c) => (
-                                  <li key={c.couCode}>
+                                filteredFlexCountries.map((c, idx) => (
+                                  <li
+                                    key={`mm-${c.couCode}-${c.couName}-${idx}`}
+                                  >
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1081,7 +1549,7 @@ export function AddBeneficiaryModal({
               )}
 
               {/* Error */}
-              {saveError && (
+              {saveError && !onSubmitError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
                   {saveError}
                 </div>
@@ -1105,14 +1573,17 @@ export function AddBeneficiaryModal({
                   {isSaving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Adding...
+                      {isEditMode ? "Saving…" : "Adding…"}
                     </>
+                  ) : isEditMode ? (
+                    "Save changes"
                   ) : (
                     "Add Beneficiary"
                   )}
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
   );

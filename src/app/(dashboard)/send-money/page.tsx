@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import api from "@/lib/api";
+import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
 import { AddBeneficiaryModal } from "@/components/beneficiaries/AddBeneficiaryModal";
 import {
   PhoneCountryInput,
@@ -9,6 +18,9 @@ import {
 } from "@/components/PhoneCountryInput";
 import Flag from "react-world-flags";
 import countriesIso from "i18n-iso-countries";
+import enCountries from "i18n-iso-countries/langs/en.json";
+
+countriesIso.registerLocale(enCountries);
 import {
   ALPHA2_TO_CURRENCY,
   CURRENCY_TO_FLAG_ALPHA2,
@@ -19,10 +31,14 @@ import {
   Loader2,
   ChevronDown,
   UserPlus,
+  Download,
+  Upload,
+  Eye,
+  X,
+  FileText,
 } from "lucide-react";
 
-const API_ROOT =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 function flexUrl(path: string) {
   return `${API_ROOT.replace(/\/$/, "")}/flex${path}`;
@@ -62,9 +78,11 @@ interface LookupOpt {
 interface Beneficiary {
   id: string;
   deliveryChannel: "BANK_TRANSFER" | "MOBILE_MONEY";
-  fullName: string;
+  firstName: string;
+  lastName: string;
   country?: string | null;
   bankName?: string | null;
+  branchName?: string | null;
   accountNumber?: string | null;
   swiftBic?: string | null;
   mobileMoneyProvider?: string | null;
@@ -83,6 +101,15 @@ interface CompanyAccount {
   instructions?: string | null;
 }
 
+interface PaymentProof {
+  id: string;
+  fileUrl: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+}
+
 interface TransferRow {
   id: string;
   referenceCode: string;
@@ -95,6 +122,7 @@ interface TransferRow {
   payInMethod?: string | null;
   payerPhone?: string | null;
   beneficiary?: Beneficiary | null;
+  paymentProofs?: PaymentProof[];
 }
 
 function alpha2FromCouCode(couCode: string): string | undefined {
@@ -107,6 +135,45 @@ function receiveCurrencyForCouCode(couCode: string): string {
   const a2 = alpha2FromCouCode(couCode);
   if (a2 && ALPHA2_TO_CURRENCY[a2]) return ALPHA2_TO_CURRENCY[a2];
   return "USD";
+}
+
+/** Map beneficiary `country` (Flex country name) to Flex corridor row for currency + filters. */
+function resolveRecipientFromBeneficiaryCountry(
+  countryLabel: string | null | undefined,
+  flexCountries: FlexCountry[],
+): { couCode: string; couName: string } | null {
+  const raw = (countryLabel ?? "").trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+
+  let fc = flexCountries.find((c) => c.couName.trim().toLowerCase() === lower);
+  if (!fc) {
+    fc = flexCountries.find(
+      (c) =>
+        c.couName.toLowerCase().includes(lower) ||
+        lower.includes(c.couName.toLowerCase()),
+    );
+  }
+  if (fc) return { couCode: fc.couCode, couName: fc.couName };
+
+  try {
+    const a2 = countriesIso.getAlpha2Code(raw, "en");
+    if (typeof a2 === "string" && a2.length === 2) {
+      const a3 = countriesIso.alpha2ToAlpha3(a2);
+      if (a3) {
+        const byAlpha3 = flexCountries.find(
+          (c) => c.couCode.toUpperCase() === a3.toUpperCase(),
+        );
+        if (byAlpha3)
+          return { couCode: byAlpha3.couCode, couName: byAlpha3.couName };
+        return { couCode: a3, couName: raw };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
 }
 
 function maskAccount(n?: string | null) {
@@ -128,13 +195,32 @@ function fmtMoney(n: number) {
 const STEPS = [
   "Amount & corridor",
   "Beneficiary",
-  "Compliance",
-  "Paying from",
-  "Review",
+  "Source & purpose",
+  "Pay & Review",
+  "Confirmation",
 ];
 
 const SELECT_FIELD =
   "w-full border border-slate-200 rounded-lg px-3 h-10 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors";
+
+/** Images + common documents for bank payment proof (browser/OS may still filter by picker). */
+const PAYMENT_PROOF_ACCEPT =
+  "image/*,.pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.ppt,.pptx,.csv,.heic,.heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/rtf";
+
+type BankProofRow = {
+  clientId: string;
+  remoteId?: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  displayUrl: string;
+  status: "uploading" | "saved" | "error";
+  errorMessage?: string;
+};
+
+function isImageMime(mime: string) {
+  return mime.startsWith("image/");
+}
 
 /** Themed sample accounts when API list is empty (dev). */
 const DUMMY_PAYOUT_ACCOUNTS: CompanyAccount[] = [
@@ -163,7 +249,12 @@ const DUMMY_PAYOUT_ACCOUNTS: CompanyAccount[] = [
   },
 ];
 
-export default function SendMoneyPage() {
+function SendMoneyPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const beneficiaryQueryId = searchParams.get("beneficiaryId");
+  const beneficiaryQueryProcessedRef = useRef<string | null>(null);
+
   const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -200,9 +291,7 @@ export default function SendMoneyPage() {
     "BANK_TRANSFER" | "MOBILE_MONEY" | ""
   >("");
   const [payerPhone, setPayerPhone] = useState("");
-  const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>(
-    [],
-  );
+  const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [postConfirmMessage, setPostConfirmMessage] = useState("");
@@ -213,6 +302,63 @@ export default function SendMoneyPage() {
   const [recipientSearch, setRecipientSearch] = useState("");
 
   const [showAddBeneficiaryModal, setShowAddBeneficiaryModal] = useState(false);
+
+  const bankProofInputRef = useRef<HTMLInputElement>(null);
+  const bankProofsRef = useRef<BankProofRow[]>([]);
+  const proofHydratedForTransferRef = useRef<string | null>(null);
+  const [bankPaymentProofs, setBankPaymentProofs] = useState<BankProofRow[]>(
+    [],
+  );
+  const [proofLightboxUrl, setProofLightboxUrl] = useState<string | null>(null);
+
+  bankProofsRef.current = bankPaymentProofs;
+
+  useEffect(() => {
+    return () => {
+      bankProofsRef.current.forEach((p) => {
+        if (p.displayUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(p.displayUrl);
+        }
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (step !== 5 || !transferId) return;
+    if (proofHydratedForTransferRef.current === transferId) return;
+    proofHydratedForTransferRef.current = transferId;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<{ data: { transfer: TransferRow } }>(
+          `/remittance/transfers/${transferId}`,
+        );
+        if (cancelled) return;
+        const t = data.data.transfer;
+        setTransferRow(t);
+        const proofs = t.paymentProofs ?? [];
+        if (proofs.length > 0) {
+          setBankPaymentProofs((prev) => {
+            if (prev.some((p) => p.status === "uploading")) return prev;
+            return proofs.map((p) => ({
+              clientId: p.id,
+              remoteId: p.id,
+              fileName: p.fileName,
+              mimeType: p.mimeType,
+              fileSize: p.fileSize,
+              displayUrl: p.fileUrl,
+              status: "saved" as const,
+            }));
+          });
+        }
+      } catch {
+        proofHydratedForTransferRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, transferId]);
 
   const addBeneficiaryLock = useMemo(() => {
     const name = recipientCouName.trim();
@@ -273,8 +419,8 @@ export default function SendMoneyPage() {
     if (!lookups) return null;
     return {
       source:
-        lookups.sourceOfIncome.find((o) => o.value === sourceOfIncome)
-          ?.label ?? sourceOfIncome,
+        lookups.sourceOfIncome.find((o) => o.value === sourceOfIncome)?.label ??
+        sourceOfIncome,
       purpose:
         lookups.transferPurpose.find((o) => o.value === transferPurpose)
           ?.label ?? transferPurpose,
@@ -285,12 +431,10 @@ export default function SendMoneyPage() {
   }, [lookups, sourceOfIncome, transferPurpose, relationship]);
 
   useEffect(() => {
-    if (step !== 4 || !ctx) return;
+    if (step !== 3 || !ctx) return;
     if (!ctx.canUseMobilePayIn) {
       setPayInMethod("BANK_TRANSFER");
-      return;
     }
-    setPayInMethod((m) => m || "BANK_TRANSFER");
   }, [step, ctx]);
 
   const loadInitial = useCallback(async () => {
@@ -306,9 +450,7 @@ export default function SendMoneyPage() {
             relationship: LookupOpt[];
           };
         }>("/remittance/lookups"),
-        api.get<{ data: { beneficiaries: Beneficiary[] } }>(
-          "/beneficiaries",
-        ),
+        api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries"),
         fetch(flexUrl("/countries"), { credentials: "include" }).then((r) =>
           r.json(),
         ),
@@ -334,10 +476,51 @@ export default function SendMoneyPage() {
   }, [loadInitial]);
 
   useEffect(() => {
+    if (!beneficiaryQueryId) {
+      beneficiaryQueryProcessedRef.current = null;
+      return;
+    }
+    if (loading || !beneficiaries.length || !flexCountries.length) return;
+
+    const b = beneficiaries.find((x) => x.id === beneficiaryQueryId);
+    if (!b) {
+      if (beneficiaries.length > 0)
+        beneficiaryQueryProcessedRef.current = beneficiaryQueryId;
+      return;
+    }
+
+    if (beneficiaryQueryProcessedRef.current === beneficiaryQueryId) return;
+    beneficiaryQueryProcessedRef.current = beneficiaryQueryId;
+
+    const resolved = resolveRecipientFromBeneficiaryCountry(
+      b.country,
+      flexCountries,
+    );
+    if (resolved) {
+      setRecipientCouCode(resolved.couCode);
+      setRecipientCouName(resolved.couName);
+    }
+    setBeneficiaryId(b.id);
+    setSelectedBen(b);
+  }, [loading, beneficiaryQueryId, beneficiaries, flexCountries]);
+
+  /** Changing recipient country clears a deep-linked beneficiary if it no longer matches. */
+  useEffect(() => {
+    if (!selectedBen || !recipientCouName.trim()) return;
+    const benCountry = (selectedBen.country ?? "").trim().toLowerCase();
+    const rec = recipientCouName.trim().toLowerCase();
+    if (benCountry && rec && benCountry !== rec) {
+      setSelectedBen(null);
+      setBeneficiaryId("");
+    }
+  }, [recipientCouName, selectedBen]);
+
+  useEffect(() => {
     if (!payCurrencyOpen && !recipientOpen) return;
     const close = (e: MouseEvent) => {
       const el = e.target as HTMLElement;
-      if (!el.closest("[data-pay-currency-dropdown]")) setPayCurrencyOpen(false);
+      if (!el.closest("[data-pay-currency-dropdown]"))
+        setPayCurrencyOpen(false);
       if (!el.closest("[data-recipient-country-dropdown]"))
         setRecipientOpen(false);
     };
@@ -388,13 +571,15 @@ export default function SendMoneyPage() {
   }, [refreshQuote]);
 
   useEffect(() => {
-    if (step !== 4 || payInMethod !== "BANK_TRANSFER" || !payCurrency) return;
+    if (payInMethod !== "BANK_TRANSFER" || !payCurrency) return;
+    if (step < 3 || step > STEPS.length) return;
     (async () => {
       try {
-        const { data } = await api.get<{ data: { accounts: CompanyAccount[] } }>(
-          "/remittance/company-accounts",
-          { params: { currency: payCurrency } },
-        );
+        const { data } = await api.get<{
+          data: { accounts: CompanyAccount[] };
+        }>("/remittance/company-accounts", {
+          params: { currency: payCurrency },
+        });
         setCompanyAccounts(data.data.accounts);
       } catch {
         setCompanyAccounts([]);
@@ -458,41 +643,24 @@ export default function SendMoneyPage() {
   }
 
   async function handleStep3Next() {
-    if (!transferId) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      const { data } = await api.patch<{ data: { transfer: TransferRow } }>(
-        `/remittance/transfers/${transferId}`,
-        {
-          step: 3,
-          sourceOfIncome,
-          transferPurpose,
-          relationshipToRecipient: relationship,
-        },
-      );
-      setTransferRow(data.data.transfer);
-      setStep(4);
-    } catch (e: unknown) {
-      const msg =
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Failed";
-      setError(msg);
-    } finally {
-      setSubmitting(false);
+    if (!transferId || !ctx) return;
+    if (!sourceOfIncome || !transferPurpose || !relationship) return;
+    if (!payInMethod) {
+      setError("Choose how you will pay us — bank transfer or mobile money.");
+      return;
     }
-  }
-
-  async function handleStep4Next() {
-    if (!transferId || !payInMethod) return;
     if (payInMethod === "MOBILE_MONEY") {
-      if (!ctx?.canUseMobilePayIn) {
-        setError("Mobile money pay-in is not available for your profile country.");
+      if (!ctx.canUseMobilePayIn) {
+        setError(
+          "Mobile money pay-in is not available for your profile country.",
+        );
         return;
       }
       const p = payerPhone.trim();
       if (!p) {
-        setError("Enter your mobile number with country code (e.g. +254712345678).");
+        setError(
+          "Enter your mobile number with country code (e.g. +254712345678).",
+        );
         return;
       }
       if (!isValidE164Phone(p)) {
@@ -505,17 +673,25 @@ export default function SendMoneyPage() {
     setSubmitting(true);
     setError("");
     try {
-      const { data } = await api.patch<{ data: { transfer: TransferRow } }>(
-        `/remittance/transfers/${transferId}`,
-        {
-          step: 4,
-          payInMethod,
-          payerPhone:
-            payInMethod === "MOBILE_MONEY" ? payerPhone.trim() : undefined,
-        },
-      );
-      setTransferRow(data.data.transfer);
-      setStep(5);
+      const { data: data3 } = await api.patch<{
+        data: { transfer: TransferRow };
+      }>(`/remittance/transfers/${transferId}`, {
+        step: 3,
+        sourceOfIncome,
+        transferPurpose,
+        relationshipToRecipient: relationship,
+      });
+      setTransferRow(data3.data.transfer);
+      const { data: data4 } = await api.patch<{
+        data: { transfer: TransferRow };
+      }>(`/remittance/transfers/${transferId}`, {
+        step: 4,
+        payInMethod,
+        payerPhone:
+          payInMethod === "MOBILE_MONEY" ? payerPhone.trim() : undefined,
+      });
+      setTransferRow(data4.data.transfer);
+      setStep(4);
     } catch (e: unknown) {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -541,7 +717,7 @@ export default function SendMoneyPage() {
       setPostConfirmMessage(
         typeof res.data.message === "string" ? res.data.message : "",
       );
-      setStep(6);
+      setStep(5);
     } catch (e: unknown) {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -552,7 +728,126 @@ export default function SendMoneyPage() {
     }
   }
 
+  async function addBankPaymentProofFiles(fileList: FileList | null) {
+    if (!fileList?.length || !transferId) {
+      if (!transferId) setError("Missing transfer. Refresh and try again.");
+      return;
+    }
+    const files = Array.from(fileList);
+    const pendingRows: BankProofRow[] = files.map((file, i) => ({
+      clientId: `pending-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      fileSize: file.size,
+      displayUrl: URL.createObjectURL(file),
+      status: "uploading",
+    }));
+    setBankPaymentProofs((prev) => [...prev, ...pendingRows]);
+    const pendingClientIds = new Set(pendingRows.map((p) => p.clientId));
+
+    const formData = new FormData();
+    for (const f of files) {
+      formData.append("files", f);
+    }
+
+    try {
+      const res = await api.post<{
+        data: { proofs: PaymentProof[] };
+      }>(`/remittance/transfers/${transferId}/payment-proof`, formData, {
+        transformRequest: [
+          (data, headers) => {
+            if (data instanceof FormData) {
+              delete headers["Content-Type"];
+            }
+            return data;
+          },
+        ],
+      });
+      const proofs = res.data.data.proofs;
+      setBankPaymentProofs((prev) => {
+        const rest = prev.filter((p) => !pendingClientIds.has(p.clientId));
+        for (const p of prev) {
+          if (
+            pendingClientIds.has(p.clientId) &&
+            p.displayUrl.startsWith("blob:")
+          ) {
+            URL.revokeObjectURL(p.displayUrl);
+          }
+        }
+        const saved: BankProofRow[] = proofs.map((proof) => ({
+          clientId: proof.id,
+          remoteId: proof.id,
+          fileName: proof.fileName,
+          mimeType: proof.mimeType,
+          fileSize: proof.fileSize,
+          displayUrl: proof.fileUrl,
+          status: "saved",
+        }));
+        return [...rest, ...saved];
+      });
+      setTransferRow((row) =>
+        row
+          ? { ...row, paymentProofs: [...(row.paymentProofs ?? []), ...proofs] }
+          : row,
+      );
+      setError("");
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Upload failed. Check file type and size, then retry.";
+      setBankPaymentProofs((prev) =>
+        prev.map((p) =>
+          pendingClientIds.has(p.clientId)
+            ? { ...p, status: "error" as const, errorMessage: msg }
+            : p,
+        ),
+      );
+      setError(msg);
+    }
+  }
+
+  async function removeBankProof(row: BankProofRow) {
+    if (row.remoteId && transferId) {
+      try {
+        await api.delete(
+          `/remittance/transfers/${transferId}/payment-proof/${row.remoteId}`,
+        );
+        setTransferRow((tr) =>
+          tr
+            ? {
+                ...tr,
+                paymentProofs: (tr.paymentProofs ?? []).filter(
+                  (p) => p.id !== row.remoteId,
+                ),
+              }
+            : tr,
+        );
+      } catch (e: unknown) {
+        const msg =
+          (e as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message ?? "Could not remove file";
+        setError(msg);
+        return;
+      }
+    }
+    if (row.displayUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(row.displayUrl);
+    }
+    setBankPaymentProofs((prev) => prev.filter((p) => p.clientId !== row.clientId));
+    setError("");
+  }
+
+  function viewBankProof(p: BankProofRow) {
+    if (isImageMime(p.mimeType)) {
+      setProofLightboxUrl(p.displayUrl);
+      return;
+    }
+    window.open(p.displayUrl, "_blank", "noopener,noreferrer");
+  }
+
   function resetFlow() {
+    beneficiaryQueryProcessedRef.current = null;
+    router.replace("/send-money", { scroll: false });
     setStep(1);
     setTransferId(null);
     setReferenceCode(null);
@@ -576,6 +871,16 @@ export default function SendMoneyPage() {
     setRecipientSearch("");
     setShowAddBeneficiaryModal(false);
     setError("");
+    proofHydratedForTransferRef.current = null;
+    setBankPaymentProofs((prev) => {
+      prev.forEach((p) => {
+        if (p.displayUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(p.displayUrl);
+        }
+      });
+      return [];
+    });
+    setProofLightboxUrl(null);
   }
 
   if (!mounted || loading) {
@@ -587,15 +892,15 @@ export default function SendMoneyPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-16">
+    <div className="max-w-5xl mx-auto pb-16">
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-slate-900">Send money</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Guided transfer — rates are indicative until payment is confirmed.
+          Guided transfer rates are indicative until payment is confirmed.
         </p>
       </div>
 
-      {step < 6 && (
+      {step <= STEPS.length && (
         <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-2">
           {STEPS.map((label, i) => {
             const n = i + 1;
@@ -612,14 +917,10 @@ export default function SendMoneyPage() {
                         : "bg-white text-slate-500 border-slate-200"
                   }`}
                 >
-                  {done ? (
-                    <Check className="w-3.5 h-3.5" />
-                  ) : (
-                    <span>{n}</span>
-                  )}
+                  {done ? <Check className="w-3.5 h-3.5" /> : <span>{n}</span>}
                   <span className="hidden sm:inline">{label}</span>
                 </div>
-                {n < 5 && (
+                {n < STEPS.length && (
                   <ChevronRight className="w-4 h-4 text-slate-300 mx-0.5" />
                 )}
               </div>
@@ -665,7 +966,7 @@ export default function SendMoneyPage() {
                     setPayAmount(v);
                   }}
                   placeholder="0"
-                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-teal-600 transition-colors"
+                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-teal-600 transition-colors"
                 />
               </div>
               <div className="relative shrink-0" data-pay-currency-dropdown>
@@ -776,11 +1077,14 @@ export default function SendMoneyPage() {
             <div className="mt-2 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
               <div className="flex-1 min-w-0 border-b-2 border-slate-200 pb-2">
                 <span className="sr-only">Recipient receives</span>
-                <p className="text-3xl sm:text-4xl font-bold text-slate-900 tabular-nums tracking-tight min-h-[2.5rem]">
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums tracking-tight min-h-[2.5rem]">
                   {quote ? fmtMoney(Number(quote.receiveAmount)) : "—"}
                 </p>
               </div>
-              <div className="relative shrink-0" data-recipient-country-dropdown>
+              <div
+                className="relative shrink-0"
+                data-recipient-country-dropdown
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -868,7 +1172,7 @@ export default function SendMoneyPage() {
 
           <p className="text-xs text-slate-500 pt-1 border-t border-slate-100">
             {quote
-              ? `Fees applicable ${fmtMoney(Number(quote.feeAmount))} ${quote.toCurrency}`
+              ? `Fees applicable ${fmtMoney(Number(quote.feeAmount))} ${quote.fromCurrency}`
               : "Fees will appear when a quote is available."}
           </p>
 
@@ -883,9 +1187,7 @@ export default function SendMoneyPage() {
             onClick={() => void handleStep1Next()}
             className="w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
           >
-            {submitting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : null}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Continue to beneficiary
           </button>
         </div>
@@ -909,7 +1211,9 @@ export default function SendMoneyPage() {
               }
               onClick={() => {
                 if (!recipientCouName.trim()) {
-                  setError("Choose a recipient country before adding a beneficiary.");
+                  setError(
+                    "Choose a recipient country before adding a beneficiary.",
+                  );
                   return;
                 }
                 setError("");
@@ -924,9 +1228,9 @@ export default function SendMoneyPage() {
           {filteredBeneficiaries.length === 0 ? (
             <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg p-3">
               No saved beneficiaries match this country yet. Use{" "}
-              <span className="font-semibold">Add new beneficiary</span> to
-              add one in the form that opens here; you stay on Send money and
-              the new recipient appears in this list when it is saved.
+              <span className="font-semibold">Add new beneficiary</span> to add
+              one in the form that opens here; you stay on Send money and the
+              new recipient appears in this list when it is saved.
             </p>
           ) : (
             <ul className="space-y-2 max-h-80 overflow-y-auto">
@@ -945,7 +1249,7 @@ export default function SendMoneyPage() {
                     }`}
                   >
                     <p className="text-sm font-semibold text-slate-900">
-                      {b.fullName}
+                      {formatBeneficiaryName(b)}
                     </p>
                     <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
                       {b.country && (
@@ -1008,7 +1312,7 @@ export default function SendMoneyPage() {
       )}
 
       {/* Step 3 */}
-      {step === 3 && lookups && (
+      {step === 3 && lookups && ctx && (
         <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-1">
@@ -1061,6 +1365,100 @@ export default function SendMoneyPage() {
               ))}
             </select>
           </div>
+
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1">
+                How you pay us <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-slate-500 mb-2 leading-relaxed">
+                Choose how you send funds <strong>to us</strong>. This is
+                separate from how your beneficiary receives the payout.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayInMethod("BANK_TRANSFER")}
+                  className={`h-10 px-4 rounded-lg text-sm border ${
+                    payInMethod === "BANK_TRANSFER"
+                      ? "bg-teal-600 text-white border-teal-600"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  Bank transfer
+                </button>
+                {ctx.canUseMobilePayIn ? (
+                  <button
+                    type="button"
+                    onClick={() => setPayInMethod("MOBILE_MONEY")}
+                    className={`h-10 px-4 rounded-lg text-sm border ${
+                      payInMethod === "MOBILE_MONEY"
+                        ? "bg-teal-600 text-white border-teal-600"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    Mobile money
+                  </button>
+                ) : (
+                  <div className="flex-1 min-w-[12rem] rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+                    <span className="font-medium text-slate-700">
+                      Mobile money pay-in
+                    </span>{" "}
+                    is only available when your profile country is in a
+                    supported market (e.g.{" "}
+                    {ctx.mobilePayInMarketsLabel || "Kenya, Tanzania, Uganda"}
+                    ). Your profile:{" "}
+                    <span className="font-medium text-slate-800">
+                      {ctx.senderCountryName ?? "—"}
+                      {ctx.senderCountryIso2
+                        ? ` (${ctx.senderCountryIso2})`
+                        : ""}
+                    </span>
+                    . Everyone can use <strong>Bank transfer</strong>.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {payInMethod === "MOBILE_MONEY" && ctx.canUseMobilePayIn && (
+              <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
+                <label
+                  className="text-sm font-medium text-slate-800 block mb-1"
+                  htmlFor="payer-phone-send-money"
+                >
+                  Your mobile number
+                </label>
+                <PhoneCountryInput
+                  key={`payer-phone-${transferId ?? "new"}-${payInMethod}`}
+                  id="payer-phone-send-money"
+                  value={payerPhone}
+                  onChange={setPayerPhone}
+                  disabled={submitting}
+                  defaultIso2={ctx.senderCountryIso2}
+                  hint={
+                    <>
+                      Search and pick your country code (same as on
+                      registration), then enter your number without the leading
+                      zero. We use this for an{" "}
+                      <strong>STK / mobile money collection</strong> for the
+                      amount you send. After you confirm, the push runs
+                      (sandbox: simulated).
+                    </>
+                  }
+                />
+              </div>
+            )}
+
+            {payInMethod === "BANK_TRANSFER" && (
+              <p className="text-xs text-slate-500 leading-relaxed">
+                After you confirm this transfer on the next step, we will show
+                our company bank details so you can pay from your banking app.
+                Use your <strong>transfer reference</strong> in the payment
+                description.
+              </p>
+            )}
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -1075,7 +1473,10 @@ export default function SendMoneyPage() {
                 submitting ||
                 !sourceOfIncome ||
                 !transferPurpose ||
-                !relationship
+                !relationship ||
+                !payInMethod ||
+                (payInMethod === "MOBILE_MONEY" &&
+                  !isValidE164Phone(payerPhone))
               }
               onClick={() => void handleStep3Next()}
               className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
@@ -1086,192 +1487,8 @@ export default function SendMoneyPage() {
         </div>
       )}
 
-      {/* Step 4 */}
-      {step === 4 && ctx && (
-        <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div>
-            <p className="text-sm font-medium text-slate-800">Paying from</p>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Choose how you will send funds to us. This is separate from how
-              your beneficiary receives the money (bank vs mobile wallet on
-              their side).
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setPayInMethod("BANK_TRANSFER")}
-              className={`h-10 px-4 rounded-lg text-sm border ${
-                payInMethod === "BANK_TRANSFER"
-                  ? "bg-teal-600 text-white border-teal-600"
-                  : "border-slate-200"
-              }`}
-            >
-              Bank transfer
-            </button>
-            {ctx.canUseMobilePayIn ? (
-              <button
-                type="button"
-                onClick={() => setPayInMethod("MOBILE_MONEY")}
-                className={`h-10 px-4 rounded-lg text-sm border ${
-                  payInMethod === "MOBILE_MONEY"
-                    ? "bg-teal-600 text-white border-teal-600"
-                    : "border-slate-200"
-                }`}
-              >
-                Mobile money
-              </button>
-            ) : (
-              <div className="flex-1 min-w-[12rem] rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
-                <span className="font-medium text-slate-700">
-                  Mobile money pay-in
-                </span>{" "}
-                is only available when your profile country is in a supported
-                market (e.g.{" "}
-                {ctx.mobilePayInMarketsLabel || "Kenya, Tanzania, Uganda"}).
-                Your profile:{" "}
-                <span className="font-medium text-slate-800">
-                  {ctx.senderCountryName ?? "—"}
-                  {ctx.senderCountryIso2 ? ` (${ctx.senderCountryIso2})` : ""}
-                </span>
-                . Everyone can use <strong>Bank transfer</strong>.
-              </div>
-            )}
-          </div>
-
-          {payInMethod === "BANK_TRANSFER" && (
-            <div className="space-y-4">
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Transfer to one of our accounts using your banking app. Use your
-                reference on the next screen in the payment description.
-              </p>
-              <div className="space-y-3">
-                {bankAccountsToShow.map((a) => (
-                  <div
-                    key={a.id}
-                    className="relative overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-white via-slate-50/40 to-teal-50/30 p-4 shadow-sm ring-1 ring-slate-100"
-                  >
-                    <div className="absolute right-0 top-0 h-16 w-16 rounded-bl-full bg-teal-500/10" />
-                    <div className="relative flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-700/90">
-                          Pay into
-                        </p>
-                        <p className="text-sm font-semibold text-slate-900 mt-0.5">
-                          {a.bankName}
-                        </p>
-                        {a.countryNote && (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {a.countryNote}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-teal-600/10 text-teal-800 border border-teal-200/60">
-                        {a.currency}
-                      </span>
-                    </div>
-                    <div className="relative mt-3 space-y-2 text-sm">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                          Account name
-                        </p>
-                        <p className="text-slate-800 font-medium">{a.accountName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                          Account number
-                        </p>
-                        <p className="font-mono text-sm font-semibold text-slate-900 tracking-wide">
-                          {a.accountNumber}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                        {a.swiftBic && (
-                          <span>
-                            <span className="text-slate-400">SWIFT</span>{" "}
-                            <span className="font-mono font-medium text-slate-800">
-                              {a.swiftBic}
-                            </span>
-                          </span>
-                        )}
-                        {a.iban && (
-                          <span>
-                            <span className="text-slate-400">IBAN</span>{" "}
-                            <span className="font-mono font-medium text-slate-800">
-                              {a.iban}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                      {a.instructions && (
-                        <p className="text-xs text-slate-500 pt-1 border-t border-slate-100 mt-2">
-                          {a.instructions}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {payInMethod === "MOBILE_MONEY" && ctx.canUseMobilePayIn && (
-            <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-              <label
-                className="text-sm font-medium text-slate-800 block mb-1"
-                htmlFor="payer-phone-send-money"
-              >
-                Your mobile number
-              </label>
-              <PhoneCountryInput
-                key={`payer-phone-${transferId ?? "new"}-${payInMethod}`}
-                id="payer-phone-send-money"
-                value={payerPhone}
-                onChange={setPayerPhone}
-                disabled={submitting}
-                defaultIso2={ctx.senderCountryIso2}
-                hint={
-                  <>
-                    Search and pick your country code (same as on registration),
-                    then enter your number without the leading zero. We use this
-                    for an <strong>STK / mobile money collection</strong> for the
-                    amount you send. After you confirm on the next step, the
-                    push runs (sandbox: simulated). You may need to upload
-                    payment confirmation for our team afterward.
-                  </>
-                }
-              />
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              className="flex-1 h-10 border border-slate-200 rounded-lg text-sm"
-              onClick={() => setStep(3)}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              disabled={
-                !payInMethod ||
-                submitting ||
-                (payInMethod === "MOBILE_MONEY" &&
-                  !isValidE164Phone(payerPhone))
-              }
-              onClick={() => void handleStep4Next()}
-              className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-            >
-              Review
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 5 */}
-      {step === 5 && quote && selectedBen && (
+      {/* Step 4 — Review */}
+      {step === 4 && quote && selectedBen && (
         <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-sm">
           <h2 className="font-semibold text-slate-900">Summary</h2>
           <p className="text-xs text-slate-500">
@@ -1299,7 +1516,7 @@ export default function SendMoneyPage() {
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Fees</dt>
                 <dd className="text-right">
-                  {fmtMoney(Number(quote.feeAmount))} {quote.toCurrency}
+                  {fmtMoney(Number(quote.feeAmount))} {quote.fromCurrency}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -1307,6 +1524,17 @@ export default function SendMoneyPage() {
                 <dd className="text-right tabular-nums">
                   1 {quote.fromCurrency} = {fmtMoney(quote.rate)}{" "}
                   {quote.toCurrency}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 pt-1 border-t border-slate-100">
+                <dt className="text-slate-700 shrink-0 font-medium">
+                  Total amount
+                </dt>
+                <dd className="font-semibold text-right tabular-nums text-slate-900">
+                  {fmtMoney(
+                    Number(quote.payAmount) + Number(quote.feeAmount),
+                  )}{" "}
+                  {quote.fromCurrency}
                 </dd>
               </div>
             </div>
@@ -1333,7 +1561,9 @@ export default function SendMoneyPage() {
               </p>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Beneficiary</dt>
-                <dd className="font-medium text-right">{selectedBen.fullName}</dd>
+                <dd className="font-medium text-right">
+                  {formatBeneficiaryName(selectedBen)}
+                </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Delivery channel</dt>
@@ -1349,6 +1579,11 @@ export default function SendMoneyPage() {
                   {selectedBen.deliveryChannel === "BANK_TRANSFER" ? (
                     <>
                       {selectedBen.bankName}
+                      {selectedBen.branchName ? (
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          {selectedBen.branchName}
+                        </span>
+                      ) : null}
                       <span className="block text-xs text-slate-500 mt-0.5 font-mono">
                         {selectedBen.accountNumber
                           ? maskAccount(selectedBen.accountNumber)
@@ -1363,26 +1598,6 @@ export default function SendMoneyPage() {
                       </span>
                     </>
                   )}
-                </dd>
-              </div>
-            </div>
-
-            <div className="pt-3 space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Compliance
-              </p>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500 shrink-0">Source of income</dt>
-                <dd className="text-right">{complianceLabels?.source ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500 shrink-0">Transfer purpose</dt>
-                <dd className="text-right">{complianceLabels?.purpose ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500 shrink-0">Relationship</dt>
-                <dd className="text-right">
-                  {complianceLabels?.relationship ?? "—"}
                 </dd>
               </div>
             </div>
@@ -1409,8 +1624,8 @@ export default function SendMoneyPage() {
               )}
               {payInMethod === "BANK_TRANSFER" && (
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Use the company account details from the previous step in your
-                  banking app. Include the transfer reference in the payment
+                  After you proceed, our company bank details appear on the
+                  final screen. Include your transfer reference in the payment
                   narrative.
                 </p>
               )}
@@ -1420,7 +1635,7 @@ export default function SendMoneyPage() {
             <button
               type="button"
               className="flex-1 h-10 border border-slate-200 rounded-lg text-sm"
-              onClick={() => setStep(4)}
+              onClick={() => setStep(3)}
             >
               Back
             </button>
@@ -1430,44 +1645,242 @@ export default function SendMoneyPage() {
               onClick={() => void handleConfirm()}
               className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
             >
-              Proceed
+              Proceed & Confirm
             </button>
           </div>
         </div>
       )}
 
-      {/* Done */}
-      {step === 6 && (
-        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm text-center space-y-4">
-          <div className="w-14 h-14 mx-auto rounded-full bg-teal-50 flex items-center justify-center">
-            <Check className="w-7 h-7 text-teal-600" />
+      {/* Done — final step */}
+      {step === 5 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5 w-full max-w-4xl mx-auto">
+          <div className="text-center space-y-2 sm:space-y-3">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-full bg-teal-50 flex items-center justify-center">
+              <Check className="w-6 h-6 sm:w-7 sm:h-7 text-teal-600" />
+            </div>
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900">
+              Transfer submitted
+            </h2>
+            <p className="text-sm text-slate-600 px-2">
+              Reference:{" "}
+              <span className="font-mono font-bold text-teal-700 break-all">
+                {referenceCode}
+              </span>
+            </p>
           </div>
-          <h2 className="text-lg font-semibold text-slate-900">
-            Transfer submitted
-          </h2>
-          <p className="text-sm text-slate-600">
-            Reference:{" "}
-            <span className="font-mono font-bold text-teal-700">
-              {referenceCode}
-            </span>
-          </p>
+
           {postConfirmMessage ? (
-            <p className="text-sm text-slate-700 max-w-lg mx-auto leading-relaxed">
+            <p className="text-sm text-slate-700 max-w-lg mx-auto text-center leading-relaxed px-2">
               {postConfirmMessage}
             </p>
           ) : null}
-          {payInMethod === "MOBILE_MONEY" || transferRow?.payInMethod === "MOBILE_MONEY" ? (
-            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-teal-100 rounded-lg p-4 bg-teal-50/30">
+
+          {(payInMethod === "BANK_TRANSFER" ||
+            transferRow?.payInMethod === "BANK_TRANSFER") && (
+            <div className="space-y-3 sm:space-y-4 text-left">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 sm:p-4">
+                <p className="text-xs font-semibold text-slate-800">
+                  Pay into one of our accounts
+                </p>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-snug">
+                  Transfer from your banking app. Use your reference in the
+                  payment description.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {bankAccountsToShow.map((a) => (
+                    <div
+                      key={a.id}
+                      className="rounded-lg border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm text-[11px] sm:text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="font-semibold text-slate-900 leading-tight">
+                          {a.bankName}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-teal-600/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 border border-teal-200/50">
+                          {a.currency}
+                        </span>
+                      </div>
+                      {a.countryNote ? (
+                        <p className="text-slate-500 mb-1.5 line-clamp-1">
+                          {a.countryNote}
+                        </p>
+                      ) : null}
+                      <dl className="space-y-1.5 text-slate-700">
+                        <div>
+                          <dt className="text-[10px] uppercase tracking-wide text-slate-400">
+                            Account name
+                          </dt>
+                          <dd className="font-medium text-slate-800 leading-tight">
+                            {a.accountName}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] uppercase tracking-wide text-slate-400">
+                            Account no.
+                          </dt>
+                          <dd className="font-mono font-semibold text-slate-900 tracking-wide break-all">
+                            {a.accountNumber}
+                          </dd>
+                        </div>
+                        {(a.swiftBic || a.iban) && (
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-600 pt-0.5">
+                            {a.swiftBic ? (
+                              <span>
+                                <span className="text-slate-400">SWIFT</span>{" "}
+                                <span className="font-mono">{a.swiftBic}</span>
+                              </span>
+                            ) : null}
+                            {a.iban ? (
+                              <span>
+                                <span className="text-slate-400">IBAN</span>{" "}
+                                <span className="font-mono break-all">
+                                  {a.iban}
+                                </span>
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                        {a.instructions ? (
+                          <p className="text-slate-500 line-clamp-2 mt-1 pt-1 border-t border-slate-100">
+                            {a.instructions}
+                          </p>
+                        ) : null}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-teal-200/90 bg-white p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      Payment proof{" "}
+                      <span className="font-normal text-slate-500">
+                        (optional)
+                      </span>
+                    </p>
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed">
+                      Upload bank receipts, screenshots, PDFs, or other
+                      documents. Files are saved to this transfer so you can see
+                      them on your transactions list. Images open in a preview;
+                      other types open in a new tab.
+                    </p>
+                  </div>
+                  <div className="shrink-0 w-full sm:w-auto sm:min-w-[10rem]">
+                    <input
+                      ref={bankProofInputRef}
+                      type="file"
+                      className="sr-only"
+                      accept={PAYMENT_PROOF_ACCEPT}
+                      multiple
+                      onChange={(e) => {
+                        void addBankPaymentProofFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => bankProofInputRef.current?.click()}
+                      className="w-full sm:w-auto h-9 px-4 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <Upload className="w-3.5 h-3.5 shrink-0" />
+                      Choose files
+                    </button>
+                  </div>
+                </div>
+                {bankPaymentProofs.length > 0 ? (
+                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {bankPaymentProofs.map((p) => (
+                      <li
+                        key={p.clientId}
+                        className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/90 p-2"
+                      >
+                        <div className="h-11 w-11 shrink-0 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
+                          {isImageMime(p.mimeType) && p.status !== "error" ? (
+                            <button
+                              type="button"
+                              onClick={() => viewBankProof(p)}
+                              disabled={p.status === "uploading"}
+                              className="h-full w-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:opacity-50"
+                              aria-label={`View ${p.fileName}`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={p.displayUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ) : (
+                            <FileText
+                              className="w-5 h-5 text-slate-500"
+                              aria-hidden
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-[11px] font-medium text-slate-800 truncate"
+                            title={p.fileName}
+                          >
+                            {p.fileName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 tabular-nums">
+                            {p.status === "uploading" ? (
+                              <span className="text-teal-700">Uploading…</span>
+                            ) : p.status === "error" ? (
+                              <span className="text-red-600">
+                                {p.errorMessage ?? "Upload failed"}
+                              </span>
+                            ) : p.fileSize >= 1024 * 1024 ? (
+                              `${(p.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                            ) : (
+                              `${(p.fileSize / 1024).toFixed(1)} KB`
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => viewBankProof(p)}
+                            disabled={p.status === "uploading" || p.status === "error"}
+                            className="p-1.5 rounded-md text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40"
+                            aria-label="View file"
+                            title="View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removeBankProof(p)}
+                            disabled={p.status === "uploading"}
+                            className="p-1.5 rounded-md text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                            aria-label="Remove file"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {payInMethod === "MOBILE_MONEY" ||
+          transferRow?.payInMethod === "MOBILE_MONEY" ? (
+            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-teal-100 rounded-lg p-3 sm:p-4 bg-teal-50/30">
               <p className="font-semibold text-slate-800 text-sm">
                 Mobile money — what happens next
               </p>
               <ol className="list-decimal list-inside space-y-2 leading-relaxed">
                 <li>
                   <strong>STK push:</strong> We initiate a collection request to{" "}
-                  <span className="font-mono">
-                    {payerPhone.trim() ||
-                      transferRow?.payerPhone ||
-                      "—"}
+                  <span className="font-mono break-all">
+                    {payerPhone.trim() || transferRow?.payerPhone || "—"}
                   </span>
                   . Approve the prompt on your phone when it appears (sandbox:
                   not connected to a live provider yet).
@@ -1478,53 +1891,97 @@ export default function SendMoneyPage() {
                 </li>
                 <li>
                   <strong>Receipt and proof:</strong> Keep your mobile-money
-                  confirmation. Upload payment proof for our team to review so we
-                  can complete compliance and payout.
+                  confirmation. Upload payment proof for our team to review so
+                  we can complete compliance and payout.
                 </li>
                 <li>
-                  After review, we process the payout to your beneficiary according
-                  to the delivery channel you chose.
+                  After review, we process the payout to your beneficiary
+                  according to the delivery channel you chose.
                 </li>
               </ol>
             </div>
           ) : (
-            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-slate-200 rounded-lg p-4 bg-slate-50/50">
+            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-slate-200 rounded-lg p-3 sm:p-4 bg-slate-50/50">
               <p className="font-semibold text-slate-800 text-sm">
                 Bank transfer — what happens next
               </p>
               <ol className="list-decimal list-inside space-y-2 leading-relaxed">
                 <li>
-                  Pay the amount using your bank app to one of our company
-                  accounts (see the previous step). Always include reference{" "}
-                  <span className="font-mono font-medium text-teal-800">
+                  Pay from your bank using the account details above. Include
+                  reference{" "}
+                  <span className="font-mono font-medium text-teal-800 break-all">
                     {referenceCode}
                   </span>{" "}
                   in the payment description.
                 </li>
                 <li>
-                  <strong>Admin review:</strong> Our team reconciles incoming
-                  transfers. Upload bank payment proof when asked so we can match
-                  your payment faster.
+                  <strong>Payment proof:</strong> Use the upload section below
+                  the bank details to add screenshots or documents so we can
+                  match your transfer faster.
                 </li>
                 <li>
-                  After admin approval, we send the funds to your beneficiary using
-                  the payout details from your transfer.
+                  <strong>Admin review:</strong> Our team reconciles incoming
+                  transfers and may request more information.
+                </li>
+                <li>
+                  After approval, we send funds to your beneficiary using the
+                  payout details from this transfer.
                 </li>
               </ol>
             </div>
           )}
-          <p className="text-xs text-slate-500">
+
+          <p className="text-xs text-slate-500 text-center">
             Status: <strong>PENDING_PAYMENT</strong>
           </p>
-          <button
-            type="button"
-            onClick={resetFlow}
-            className="h-10 px-6 bg-slate-900 text-white rounded-lg text-sm font-medium"
-          >
-            New transfer
-          </button>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch w-full max-w-md mx-auto pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                /* TODO: download receipt */
+              }}
+              className="h-10 px-5 sm:px-6 border border-slate-200 bg-white text-slate-800 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-4 h-4 shrink-0" aria-hidden />
+              Download receipt
+            </button>
+            <button
+              type="button"
+              onClick={resetFlow}
+              className="h-10 px-5 sm:px-6 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
+            >
+              New transfer
+            </button>
+          </div>
         </div>
       )}
+
+      {proofLightboxUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Payment proof preview"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 sm:p-6"
+          onClick={() => setProofLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+            onClick={() => setProofLightboxUrl(null)}
+            aria-label="Close preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={proofLightboxUrl}
+            alt="Payment proof"
+            className="max-h-[min(90vh,900px)] max-w-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       <AddBeneficiaryModal
         open={showAddBeneficiaryModal}
@@ -1548,5 +2005,19 @@ export default function SendMoneyPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function SendMoneyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[40vh]">
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
+        </div>
+      }
+    >
+      <SendMoneyPageContent />
+    </Suspense>
   );
 }

@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 
-type SpinnerSize = "sm" | "md" | "lg";
+type SpinnerSize = "sm" | "md" | "lg" | "xl";
 
 const sizeClasses: Record<SpinnerSize, string> = {
   sm: "h-4 w-4",
   md: "h-5 w-5",
   lg: "h-8 w-8",
+  xl: "h-11 w-11",
 };
 
 interface SpinnerProps {

@@ -111,6 +111,13 @@ export default function DashboardClient({ user }: { user: User }) {
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <ActionCard
+          title="Beneficiaries"
+          description="Manage recipients"
+          href="/beneficiaries"
+          locked={!isKycApproved}
+          onClick={() => router.push("/beneficiaries")}
+        />
+        <ActionCard
           title="Send Money"
           description="Transfer funds internationally"
           href="/send-money"
@@ -124,43 +131,6 @@ export default function DashboardClient({ user }: { user: User }) {
           locked={!isKycApproved}
           onClick={() => router.push("/transactions")}
         />
-        <ActionCard
-          title="Beneficiaries"
-          description="Manage recipients"
-          href="/beneficiaries"
-          locked={!isKycApproved}
-          onClick={() => router.push("/beneficiaries")}
-        />
-      </div>
-
-      {/* Account status card */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-slate-900 mb-4">
-          Account Status
-        </h2>
-        <div className="space-y-3">
-          <StatusRow
-            label="Account type"
-            value={user?.role === "INDIVIDUAL" ? "Individual" : "Corporate"}
-          />
-          <StatusRow
-            label="KYC status"
-            value={user?.kycStatus || "PENDING"}
-            isStatus
-          />
-          <StatusRow
-            label="Member since"
-            value={
-              user?.createdAt
-                ? new Date(user.createdAt).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "—"
-            }
-          />
-        </div>
       </div>
     </div>
   );
@@ -206,47 +176,6 @@ function ActionCard({
           <></>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatusRow({
-  label,
-  value,
-  isStatus,
-}: {
-  label: string;
-  value: string;
-  isStatus?: boolean;
-}) {
-  const statusColors: Record<string, string> = {
-    PENDING: "bg-amber-50 text-amber-700",
-    SUBMITTED: "bg-blue-50 text-blue-700",
-    APPROVED: "bg-emerald-50 text-emerald-700",
-    REJECTED: "bg-red-50 text-red-700",
-    SUSPENDED: "bg-slate-100 text-slate-600",
-  };
-
-  const statusLabels: Record<string, string> = {
-    PENDING: "Pending",
-    SUBMITTED: "Under Review",
-    APPROVED: "Approved",
-    REJECTED: "Rejected",
-    SUSPENDED: "Suspended",
-  };
-
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      {isStatus ? (
-        <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[value] || ""}`}
-        >
-          {statusLabels[value] || value}
-        </span>
-      ) : (
-        <span className="text-sm font-medium text-slate-900">{value}</span>
-      )}
     </div>
   );
 }

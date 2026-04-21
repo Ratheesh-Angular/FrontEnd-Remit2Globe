@@ -170,9 +170,11 @@ export default function RegisterPage() {
       });
 
       if (response.data.success) {
+        const userId = response.data.data?.user?.id as string | undefined;
         setSuccessMessage("Account created! Redirecting to verification...");
         setTimeout(() => {
-          window.location.href = `/verify?email=${encodeURIComponent(formData.email)}&phone=${encodeURIComponent(`+${selectedCountry!.dialCode}${localPhone}`)}`;
+          const uid = userId ? `&userId=${encodeURIComponent(userId)}` : "";
+          window.location.href = `/verify?email=${encodeURIComponent(formData.email)}&phone=${encodeURIComponent(`+${selectedCountry!.dialCode}${localPhone}`)}${uid}`;
         }, 2000);
       }
     } catch (error: any) {

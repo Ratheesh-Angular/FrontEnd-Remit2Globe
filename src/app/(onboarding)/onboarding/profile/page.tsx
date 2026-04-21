@@ -1,12 +1,40 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuthStore } from "@/store/auth.store";
+import { useState, useEffect, useRef, useCallback } from "react";
 import api from "@/lib/api";
-import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { useSearchParams, useRouter } from "next/navigation";
 import Flag from "react-world-flags";
-type Section = "personal" | "identity" | "address";
+import {
+  VerificationDocuments,
+  type KycDocumentRow,
+} from "./VerificationDocuments";
+import { KycSubmittedPanel } from "./KycSubmittedPanel";
+
+type Section =
+  | "personal"
+  | "identity"
+  | "address"
+  | "documents"
+  | "submitted";
+
+/** Citizen: primary ID type. Empty when resident or not chosen yet. */
+type CitizenDocType = "" | "PASSPORT" | "NATIONAL_ID";
+
+interface ResidenceAddressForm {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
+const emptyResidenceAddress: ResidenceAddressForm = {
+  line1: "",
+  line2: "",
+  city: "",
+  state: "",
+  postalCode: "",
+};
 
 interface IndividualForm {
   firstName: string;
@@ -16,16 +44,22 @@ interface IndividualForm {
   // nationality: string;
   isNational: boolean;
   passportNumber: string;
+  /** Resident (foreign): issuing country of passport — mandatory. */
+  passportIssuingCountry: string;
   passportIssue: string;
   passportExpiry: string;
+  /** Citizen: passport vs national ID — drives which fields are shown. */
+  citizenPrimaryDocumentType: CitizenDocType;
   workPermitNumber: string;
   workPermitIssue: string;
   workPermitExpiry: string;
   nationalIdNumber: string;
+  /** Citizen + national ID as primary document */
+  nationalIdIssuingCountry: string;
   nationalIdIssue: string;
   nationalIdExpiry: string;
 
-  residentialAddress: string;
+  residenceAddress: ResidenceAddressForm;
 
   country: string;
   contactEmail: string;
@@ -42,16 +76,19 @@ const empty: IndividualForm = {
   // nationality: "",
   isNational: false,
   passportNumber: "",
+  passportIssuingCountry: "",
   passportIssue: "",
   passportExpiry: "",
+  citizenPrimaryDocumentType: "",
   workPermitNumber: "",
   workPermitIssue: "",
   workPermitExpiry: "",
   nationalIdNumber: "",
+  nationalIdIssuingCountry: "",
   nationalIdIssue: "",
   nationalIdExpiry: "",
 
-  residentialAddress: "",
+  residenceAddress: { ...emptyResidenceAddress },
 
   country: "",
   contactEmail: "",
@@ -69,12 +106,22 @@ const sections: { key: Section; label: string; description: string }[] = [
   {
     key: "identity",
     label: "Identity Documents",
-    description: "Passport, ID and work permit details",
+    description: "",
   },
   {
     key: "address",
-    label: "Address & Contact",
+    label: "Residential Address",
     description: "Residential address and contact info",
+  },
+  {
+    key: "documents",
+    label: "Verification Documents",
+    description: "Upload identity and supporting documents",
+  },
+  {
+    key: "submitted",
+    label: "Application complete",
+    description: "Your KYC has been submitted for review",
   },
 ];
 
@@ -139,18 +186,386 @@ const COUNTRIES: { code: string; name: string }[] = [
   { code: "VN", name: "Vietnam" },
   { code: "ZW", name: "Zimbabwe" },
 ];
+
+function buildSanitizedKycPayload(form: IndividualForm): IndividualForm {
+  const out: IndividualForm = {
+    ...form,
+    residenceAddress: {
+      line1: form.residenceAddress.line1.trim(),
+      line2: form.residenceAddress.line2.trim(),
+      city: form.residenceAddress.city.trim(),
+      state: form.residenceAddress.state.trim(),
+      postalCode: form.residenceAddress.postalCode.trim(),
+    },
+  };
+  if (!form.isNational) {
+    out.citizenPrimaryDocumentType = "";
+  } else {
+    if (form.citizenPrimaryDocumentType === "PASSPORT") {
+      out.nationalIdNumber = "";
+      out.nationalIdIssuingCountry = "";
+      out.nationalIdIssue = "";
+      out.nationalIdExpiry = "";
+    }
+    if (form.citizenPrimaryDocumentType === "NATIONAL_ID") {
+      out.passportNumber = "";
+      out.passportIssue = "";
+      out.passportExpiry = "";
+      out.passportIssuingCountry = "";
+      out.nationalIdExpiry = "";
+    }
+  }
+  return out;
+}
+
+function inferCitizenDocType(profile: Record<string, unknown>): CitizenDocType {
+  const raw = profile.citizenPrimaryDocumentType as string | undefined;
+  if (raw === "PASSPORT" || raw === "NATIONAL_ID") return raw;
+  if (!profile.isNational) return "";
+  const hasP = Boolean((profile.passportNumber as string)?.toString().trim());
+  const hasN = Boolean((profile.nationalIdNumber as string)?.toString().trim());
+  if (hasP && !hasN) return "PASSPORT";
+  if (hasN && !hasP) return "NATIONAL_ID";
+  return "";
+}
+
+function parseResidenceFromProfile(
+  p: Record<string, unknown>,
+): ResidenceAddressForm {
+  const raw = p.residenceAddress;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    return {
+      line1: String(o.line1 ?? "").trim(),
+      line2: String(o.line2 ?? "").trim(),
+      city: String(o.city ?? "").trim(),
+      state: String(o.state ?? "").trim(),
+      postalCode: String(o.postalCode ?? "").trim(),
+    };
+  }
+  const legacy = String(p.residentialAddress ?? "").trim();
+  if (legacy) {
+    return { ...emptyResidenceAddress, line1: legacy };
+  }
+  return { ...emptyResidenceAddress };
+}
+
+function formSignature(form: IndividualForm): string {
+  return JSON.stringify(buildSanitizedKycPayload(form));
+}
+
+function formFromSignature(signature: string): IndividualForm {
+  const raw = JSON.parse(signature) as IndividualForm;
+  return {
+    ...empty,
+    ...raw,
+    residenceAddress: {
+      ...emptyResidenceAddress,
+      ...(raw.residenceAddress ?? {}),
+    },
+  };
+}
+
+function inferSavedSectionsFromForm(f: IndividualForm): Section[] {
+  const saved: Section[] = [];
+  const personalComplete = Boolean(
+    f.firstName.trim() &&
+    f.lastName.trim() &&
+    f.dateOfBirth &&
+    f.occupation.trim() &&
+    f.country.trim(),
+  );
+  if (personalComplete) saved.push("personal");
+
+  let identityComplete = false;
+  if (!f.isNational) {
+    identityComplete = Boolean(
+      f.passportNumber.trim() &&
+      f.passportIssuingCountry.trim() &&
+      f.passportIssue &&
+      f.passportExpiry,
+    );
+  } else if (f.citizenPrimaryDocumentType === "PASSPORT") {
+    identityComplete = Boolean(
+      f.passportNumber.trim() &&
+      f.passportIssuingCountry.trim() &&
+      f.passportIssue &&
+      f.passportExpiry,
+    );
+  } else if (f.citizenPrimaryDocumentType === "NATIONAL_ID") {
+    identityComplete = Boolean(
+      f.nationalIdNumber.trim() &&
+      f.nationalIdIssuingCountry.trim() &&
+      f.nationalIdIssue,
+    );
+  }
+  if (identityComplete) saved.push("identity");
+
+  const ra = f.residenceAddress;
+  if (ra.line1.trim() && ra.city.trim() && ra.state.trim()) {
+    saved.push("address");
+  }
+  return saved;
+}
+
+/** Same rules as the verification documents step: required uploads for this profile path. */
+function inferDocumentsSectionFromApi(
+  f: IndividualForm,
+  documents: { documentType?: string }[] | undefined,
+): boolean {
+  if (!documents?.length) return false;
+  if (f.isNational && !f.citizenPrimaryDocumentType) return false;
+
+  const uploaded = new Set(
+    documents.map((d) => d.documentType).filter(Boolean) as string[],
+  );
+
+  const needsPassportSlots =
+    !f.isNational || f.citizenPrimaryDocumentType === "PASSPORT";
+  const needsWorkPermit = !f.isNational;
+  const needsNationalId =
+    f.isNational && f.citizenPrimaryDocumentType === "NATIONAL_ID";
+
+  if (needsPassportSlots) {
+    if (!uploaded.has("PASSPORT_FRONT") || !uploaded.has("PASSPORT_BACK")) {
+      return false;
+    }
+  }
+  if (needsWorkPermit) {
+    if (
+      !uploaded.has("WORK_PERMIT_FRONT") ||
+      !uploaded.has("WORK_PERMIT_BACK")
+    ) {
+      return false;
+    }
+  }
+  if (needsNationalId) {
+    if (
+      !uploaded.has("NATIONAL_ID_FRONT") ||
+      !uploaded.has("NATIONAL_ID_BACK")
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function recomputeSavedSections(
+  f: IndividualForm,
+  docs: { documentType?: string }[] | undefined,
+): Section[] {
+  const inferred = inferSavedSectionsFromForm(f);
+  if (inferDocumentsSectionFromApi(f, docs)) {
+    inferred.push("documents");
+  }
+  return inferred;
+}
+
+function mergeSavedSectionsWithKycStatus(
+  f: IndividualForm,
+  docs: KycDocumentRow[] | undefined,
+  kycStatus: string | undefined,
+): Section[] {
+  const base = recomputeSavedSections(f, docs);
+  if (kycStatus === "SUBMITTED" || kycStatus === "APPROVED") {
+    const merged = new Set<Section>([
+      ...base,
+      "personal",
+      "identity",
+      "address",
+      "documents",
+      "submitted",
+    ]);
+    return Array.from(merged);
+  }
+  return base;
+}
+
+type FormErrors = Partial<
+  Record<Exclude<keyof IndividualForm, "residenceAddress">, string>
+> & {
+  residenceAddress?: Partial<Record<keyof ResidenceAddressForm, string>>;
+};
+
+function CountrySelectDropdown({
+  value,
+  onChange,
+  error,
+  placeholder = "Select country…",
+}: {
+  value: string;
+  onChange: (countryName: string) => void;
+  error?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!rootRef.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const filtered = COUNTRIES.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((v) => !v);
+          setSearch("");
+        }}
+        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left
+          focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white
+          ${error ? "border-red-400" : "border-slate-200"}
+          ${value ? "text-slate-900" : "text-slate-400"}`}
+      >
+        {value ? (
+          <>
+            <span className="text-base leading-none shrink-0">
+              <Flag
+                code={COUNTRIES.find((c) => c.name === value)?.code ?? ""}
+                style={{
+                  width: 20,
+                  height: 14,
+                  borderRadius: 2,
+                  objectFit: "cover",
+                }}
+              />
+            </span>
+            <span className="truncate">{value}</span>
+          </>
+        ) : (
+          <span>{placeholder}</span>
+        )}
+        <svg
+          className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input
+              autoFocus
+              placeholder="Search country…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+            />
+          </div>
+          <ul className="max-h-52 overflow-y-auto py-1">
+            {filtered.map((c) => (
+              <li key={c.code}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(c.name);
+                    setOpen(false);
+                  }}
+                  className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                    value === c.name
+                      ? "bg-teal-50 text-teal-700 font-medium"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <Flag
+                    code={c.code}
+                    style={{
+                      width: 20,
+                      height: 14,
+                      borderRadius: 2,
+                      objectFit: "cover",
+                    }}
+                  />
+                  <span>{c.name}</span>
+                </button>
+              </li>
+            ))}
+            {filtered.length === 0 && (
+              <li className="px-3 py-4 text-sm text-slate-400 text-center">
+                No countries found
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function KycProfilePage() {
-  const { user } = useAuthStore();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("personal");
   const [form, setForm] = useState<IndividualForm>(empty);
-  const [errors, setErrors] = useState<
-    Partial<Record<keyof IndividualForm, string>>
-  >({});
+  const formRef = useRef(form);
+  formRef.current = form;
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSections, setSavedSections] = useState<Section[]>([]);
-  const [countryOpen, setCountryOpen] = useState(false);
-  const [countrySearch, setCountrySearch] = useState("");
+  const [persistedSignature, setPersistedSignature] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [kycDocuments, setKycDocuments] = useState<KycDocumentRow[]>([]);
+  const [kycLifecycleStatus, setKycLifecycleStatus] = useState<
+    string | undefined
+  >(undefined);
+  const [kycSubmittedAt, setKycSubmittedAt] = useState<Date | null>(null);
+
+  const syncDocumentsFromServer = useCallback(async () => {
+    try {
+      const res = await api.get("/kyc/profile");
+      const userRow = res.data.data as {
+        documents?: KycDocumentRow[];
+        kycStatus?: string;
+      };
+      const docs = userRow?.documents ?? [];
+      setKycDocuments(docs);
+      if (userRow?.kycStatus != null) setKycLifecycleStatus(userRow.kycStatus);
+      setSavedSections(
+        mergeSavedSectionsWithKycStatus(
+          formRef.current,
+          docs,
+          userRow?.kycStatus,
+        ),
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleKycSubmitted = useCallback(() => {
+    setPersistedSignature(formSignature(formRef.current));
+    setKycLifecycleStatus("SUBMITTED");
+    setKycSubmittedAt(new Date());
+    setSavedSections([
+      "personal",
+      "identity",
+      "address",
+      "documents",
+      "submitted",
+    ]);
+    setActiveSection("submitted");
+    router.replace("/onboarding/profile", { scroll: false });
+  }, [router]);
 
   // ─── Load profile ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -158,60 +573,95 @@ export default function KycProfilePage() {
       try {
         setIsLoading(true);
         const res = await api.get("/kyc/profile");
-        const profile = res.data.data?.individualProfile;
-        const userData = res.data.data?.user;
+        // API returns the user record at `data` (includes individualProfile, corporateProfile, country, …)
+        const userRow = res.data.data as
+          | {
+              country?: string | null;
+              individualProfile?: Record<string, unknown> | null;
+              documents?: KycDocumentRow[];
+              kycStatus?: string;
+              updatedAt?: string;
+            }
+          | undefined;
+        const profile = userRow?.individualProfile;
+        const countryFromRegistration = userRow?.country?.trim() || "";
+
+        let nextForm: IndividualForm;
 
         if (profile) {
-          // Split fullName into firstName, middleName, lastName
-          const nameParts = (profile.fullName || "").trim().split(/\s+/);
+          const p = profile as Record<string, unknown>;
+          const nameParts = String(p.fullName ?? "")
+            .trim()
+            .split(/\s+/);
           const firstName = nameParts[0] || "";
           const lastName =
             nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
           const middleName =
             nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "";
 
-          setForm({
+          const isoDate = (v: unknown) =>
+            v ? new Date(v as string).toISOString().split("T")[0] : "";
+
+          nextForm = {
             firstName,
             middleName,
             lastName,
-            dateOfBirth: profile.dateOfBirth
-              ? new Date(profile.dateOfBirth).toISOString().split("T")[0]
-              : "",
-            // nationality: profile.nationality || "",
-            isNational: profile.isNational || false,
-            passportNumber: profile.passportNumber || "",
-            passportIssue: profile.passportIssue
-              ? new Date(profile.passportIssue).toISOString().split("T")[0]
-              : "",
-            passportExpiry: profile.passportExpiry
-              ? new Date(profile.passportExpiry).toISOString().split("T")[0]
-              : "",
-            workPermitNumber: profile.workPermitNumber || "",
-            workPermitIssue: profile.workPermitIssue
-              ? new Date(profile.workPermitIssue).toISOString().split("T")[0]
-              : "",
-            workPermitExpiry: profile.workPermitExpiry
-              ? new Date(profile.workPermitExpiry).toISOString().split("T")[0]
-              : "",
-            nationalIdNumber: profile.nationalIdNumber || "",
-            nationalIdIssue: profile.nationalIdIssue
-              ? new Date(profile.nationalIdIssue).toISOString().split("T")[0]
-              : "",
-            nationalIdExpiry: profile.nationalIdExpiry
-              ? new Date(profile.nationalIdExpiry).toISOString().split("T")[0]
-              : "",
+            dateOfBirth: isoDate(p.dateOfBirth),
+            isNational: Boolean(p.isNational),
+            passportNumber: String(p.passportNumber ?? ""),
+            passportIssuingCountry: String(p.passportIssuingCountry ?? ""),
+            passportIssue: isoDate(p.passportIssue),
+            passportExpiry: isoDate(p.passportExpiry),
+            citizenPrimaryDocumentType: inferCitizenDocType(p),
+            workPermitNumber: String(p.workPermitNumber ?? ""),
+            workPermitIssue: isoDate(p.workPermitIssue),
+            workPermitExpiry: isoDate(p.workPermitExpiry),
+            nationalIdNumber: String(p.nationalIdNumber ?? ""),
+            nationalIdIssuingCountry: String(p.nationalIdIssuingCountry ?? ""),
+            nationalIdIssue: isoDate(p.nationalIdIssue),
+            nationalIdExpiry: isoDate(p.nationalIdExpiry),
 
-            residentialAddress: profile.residentialAddress || "",
+            residenceAddress: parseResidenceFromProfile(p),
 
-            country: profile.country || userData?.country || "",
-            contactEmail: profile.contactEmail || "",
-            contactPhone: profile.contactPhone || 123456789,
-            occupation: profile.occupation || "",
-            employerName: profile.employerName || "",
-          });
-        } else if (userData?.country) {
-          // If no profile yet but user has country from registration
-          setForm((prev) => ({ ...prev, country: userData.country }));
+            country: countryFromRegistration || String(p.country ?? ""),
+            contactEmail: String(p.contactEmail ?? ""),
+            contactPhone: String(p.contactPhone ?? ""),
+            occupation: String(p.occupation ?? ""),
+            employerName: String(p.employerName ?? ""),
+          };
+        } else if (countryFromRegistration) {
+          nextForm = {
+            ...empty,
+            country: countryFromRegistration,
+            residenceAddress: { ...emptyResidenceAddress },
+          };
+        } else {
+          nextForm = {
+            ...empty,
+            residenceAddress: { ...emptyResidenceAddress },
+          };
+        }
+
+        setForm(nextForm);
+        setKycLifecycleStatus(userRow?.kycStatus);
+        const docRows = (userRow?.documents ?? []) as KycDocumentRow[];
+        setKycDocuments(docRows);
+        setSavedSections(
+          mergeSavedSectionsWithKycStatus(
+            nextForm,
+            docRows,
+            userRow?.kycStatus,
+          ),
+        );
+        setPersistedSignature(formSignature(nextForm));
+        if (
+          userRow?.kycStatus === "SUBMITTED" ||
+          userRow?.kycStatus === "APPROVED"
+        ) {
+          setKycSubmittedAt(
+            userRow.updatedAt ? new Date(userRow.updatedAt) : new Date(),
+          );
+          setActiveSection("submitted");
         }
       } catch (e) {
         console.error(e);
@@ -222,13 +672,61 @@ export default function KycProfilePage() {
     loadProfile();
   }, []);
 
-  const setField = (field: keyof IndividualForm, value: string | boolean) => {
+  useEffect(() => {
+    if (isLoading) return;
+    if (savedSections.includes("submitted")) return;
+    if (searchParams.get("step") !== "documents") return;
+    if (!savedSections.includes("address")) return;
+    setActiveSection("documents");
+    router.replace("/onboarding/profile", { scroll: false });
+  }, [isLoading, searchParams, savedSections, router]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (searchParams.get("step") !== "submitted") return;
+    const ok =
+      savedSections.includes("submitted") ||
+      kycLifecycleStatus === "SUBMITTED" ||
+      kycLifecycleStatus === "APPROVED";
+    if (!ok) return;
+    setActiveSection("submitted");
+    router.replace("/onboarding/profile", { scroll: false });
+  }, [isLoading, searchParams, savedSections, kycLifecycleStatus, router]);
+
+  const setField = (
+    field: Exclude<keyof IndividualForm, "residenceAddress">,
+    value: string | boolean,
+  ) => {
+    setSaveError(null);
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
+  const setResidenceField = (
+    sub: keyof ResidenceAddressForm,
+    value: string,
+  ) => {
+    setSaveError(null);
+    setForm((prev) => ({
+      ...prev,
+      residenceAddress: { ...prev.residenceAddress, [sub]: value },
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      residenceAddress: {
+        ...prev.residenceAddress,
+        [sub]: "",
+      },
+    }));
+  };
+
   const validateSection = (section: Section): boolean => {
-    const newErrors: Partial<Record<keyof IndividualForm, string>> = {};
+    if (section === "documents" || section === "submitted") {
+      setErrors({});
+      return true;
+    }
+
+    const newErrors: FormErrors = {};
 
     if (section === "personal") {
       if (!form.firstName.trim())
@@ -240,8 +738,10 @@ export default function KycProfilePage() {
       //   newErrors.nationality = "Nationality is required";
       if (!form.occupation.trim())
         newErrors.occupation = "Occupation is required";
-      if (!form.country.trim())
-        newErrors.country = "Country of residence is required";
+      if (!form.country.trim()) {
+        newErrors.country =
+          "Country of residence from your registration is required. If this appears empty, refresh the page or contact support.";
+      }
       // Check if user selected resident or citizen
       if (form.isNational === undefined || form.isNational === null) {
         newErrors.isNational = "Please select Resident or Citizen" as any;
@@ -252,23 +752,48 @@ export default function KycProfilePage() {
       if (!form.isNational) {
         if (!form.passportNumber.trim())
           newErrors.passportNumber = "Passport number is required";
+        if (!form.passportIssuingCountry.trim())
+          newErrors.passportIssuingCountry =
+            "Passport issuing country is required";
         if (!form.passportIssue)
           newErrors.passportIssue = "Issue date is required";
         if (!form.passportExpiry)
           newErrors.passportExpiry = "Expiry date is required";
       } else {
-        if (!form.nationalIdNumber.trim())
-          newErrors.nationalIdNumber = "National ID is required";
-        if (!form.nationalIdIssue)
-          newErrors.nationalIdIssue = "Issue date is required";
-        if (!form.nationalIdExpiry)
-          newErrors.nationalIdExpiry = "Expiry date is required";
+        if (!form.citizenPrimaryDocumentType) {
+          newErrors.citizenPrimaryDocumentType =
+            "Select whether you are using a passport or national ID";
+        }
+        if (form.citizenPrimaryDocumentType === "PASSPORT") {
+          if (!form.passportNumber.trim())
+            newErrors.passportNumber = "Passport number is required";
+          if (!form.passportIssuingCountry.trim())
+            newErrors.passportIssuingCountry =
+              "Passport issuing country is required";
+          if (!form.passportIssue)
+            newErrors.passportIssue = "Issue date is required";
+          if (!form.passportExpiry)
+            newErrors.passportExpiry = "Expiry date is required";
+        }
+        if (form.citizenPrimaryDocumentType === "NATIONAL_ID") {
+          if (!form.nationalIdNumber.trim())
+            newErrors.nationalIdNumber = "National ID number is required";
+          if (!form.nationalIdIssuingCountry.trim())
+            newErrors.nationalIdIssuingCountry =
+              "National ID issuing country is required";
+          if (!form.nationalIdIssue)
+            newErrors.nationalIdIssue = "Issue date is required";
+        }
       }
     }
 
     if (section === "address") {
-      if (!form.residentialAddress.trim())
-        newErrors.residentialAddress = "Residential Address is required";
+      const ra = form.residenceAddress;
+      const raErr: Partial<Record<keyof ResidenceAddressForm, string>> = {};
+      if (!ra.line1.trim()) raErr.line1 = "Address line 1 is required";
+      if (!ra.city.trim()) raErr.city = "City is required";
+      if (!ra.state.trim()) raErr.state = "State is required";
+      if (Object.keys(raErr).length) newErrors.residenceAddress = raErr;
 
       // if (!form.country.trim()) newErrors.country = "Country is required";
       // if (!form.contactPhone.trim())
@@ -279,11 +804,31 @@ export default function KycProfilePage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const flowComplete = savedSections.includes("submitted");
+
+  const canAccessSection = (key: Section) => {
+    if (flowComplete && key !== "submitted") return false;
+    if (key === "submitted") {
+      return (
+        savedSections.includes("submitted") ||
+        kycLifecycleStatus === "SUBMITTED" ||
+        kycLifecycleStatus === "APPROVED"
+      );
+    }
+    if (key !== "documents") return true;
+    return savedSections.includes("address");
+  };
+
   const saveSection = async (section: Section) => {
+    if (section === "documents" || section === "submitted") return;
     if (!validateSection(section)) return;
     try {
       setIsSaving(true);
-      await api.post("/kyc/individual/profile", form);
+      setSaveError(null);
+      const payload = buildSanitizedKycPayload(form);
+      await api.post("/kyc/individual/profile", payload);
+      const sig = JSON.stringify(payload);
+      setPersistedSignature(sig);
       setSavedSections((prev) =>
         prev.includes(section) ? prev : [...prev, section],
       );
@@ -291,28 +836,68 @@ export default function KycProfilePage() {
       if (currentIndex < sections.length - 1) {
         setActiveSection(sections[currentIndex + 1].key);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
+      const msg =
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response &&
+        error.response.data &&
+        typeof error.response.data === "object" &&
+        "message" in error.response.data &&
+        typeof (error.response.data as { message: unknown }).message ===
+          "string"
+          ? (error.response.data as { message: string }).message
+          : "Save failed. Please try again.";
+      setSaveError(msg);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const inputClass = (field: keyof IndividualForm) =>
+  const isDirty =
+    persistedSignature.length > 0 && formSignature(form) !== persistedSignature;
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+
+  const requestNavigateToSection = (target: Section) => {
+    if (target === activeSection) return;
+    if (flowComplete && target !== "submitted") return;
+    if (!canAccessSection(target)) return;
+    if (isDirty) {
+      const leave = window.confirm(
+        "You have unsaved changes on this step. Save before leaving or your edits will be lost.\n\nPress OK to leave without saving, or Cancel to stay.",
+      );
+      if (!leave) return;
+      setForm(formFromSignature(persistedSignature));
+      setErrors({});
+      setSaveError(null);
+    }
+    setActiveSection(target);
+  };
+
+  const inputClass = (
+    field: Exclude<keyof IndividualForm, "residenceAddress">,
+  ) =>
     `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
       errors[field] ? "border-red-400" : "border-slate-200"
     }`;
 
-  // ─── Close country dropdown on outside click ──────────────────────────────
-  useEffect(() => {
-    if (!countryOpen) return;
-    const close = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-country-dropdown]")) setCountryOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [countryOpen]);
+  const addrInputClass = (sub: keyof ResidenceAddressForm) =>
+    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+      errors.residenceAddress?.[sub] ? "border-red-400" : "border-slate-200"
+    }`;
 
   // Early return AFTER all hooks ─────────────────────────────────────────────
   if (isLoading) {
@@ -323,7 +908,6 @@ export default function KycProfilePage() {
     );
   }
 
-  const allSectionsDone = sections.every((s) => savedSections.includes(s.key));
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
@@ -335,16 +919,38 @@ export default function KycProfilePage() {
         </p>
       </div>
 
+      {isDirty && activeSection !== "submitted" && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          You have unsaved changes. Save this step before you refresh, close the
+          tab, or switch to another step—or your edits will be lost.
+        </div>
+      )}
+
       {/* Progress steps */}
       <div className="flex items-center gap-2">
         {sections.map((section, index) => {
           const isDone = savedSections.includes(section.key);
           const isActive = activeSection === section.key;
+          const allowed = canAccessSection(section.key);
           return (
             <div key={section.key} className="flex items-center gap-2 flex-1">
               <button
-                onClick={() => setActiveSection(section.key)}
-                className="flex items-center gap-2 flex-1"
+                type="button"
+                disabled={!allowed}
+                title={
+                  !allowed
+                    ? flowComplete
+                      ? "Your application has been submitted."
+                      : "Save the Address step first to upload documents."
+                    : undefined
+                }
+                onClick={() => requestNavigateToSection(section.key)}
+                className={`flex items-center gap-2 flex-1 text-left ${
+                  !allowed ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               >
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
@@ -375,14 +981,22 @@ export default function KycProfilePage() {
 
       {/* Section card */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">
-            {sections.find((s) => s.key === activeSection)?.label}
-          </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {sections.find((s) => s.key === activeSection)?.description}
-          </p>
-        </div>
+        {activeSection !== "submitted" && (
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              {sections.find((s) => s.key === activeSection)?.label}
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {sections.find((s) => s.key === activeSection)?.description}
+            </p>
+          </div>
+        )}
+
+        {activeSection === "submitted" && (
+          <KycSubmittedPanel
+            submittedAt={kycSubmittedAt ?? new Date()}
+          />
+        )}
 
         {/* PERSONAL */}
         {activeSection === "personal" && (
@@ -435,128 +1049,41 @@ export default function KycProfilePage() {
             </Field> */}
 
             <Field label="Country of Residence" required error={errors.country}>
-              <div className="relative" data-country-dropdown>
-                {/* Trigger button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCountryOpen((v) => !v);
-                    setCountrySearch("");
-                  }}
-                  className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left
-        focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600
-        transition-colors bg-white
-        ${errors.country ? "border-red-400" : "border-slate-200"}
-        ${form.country ? "text-slate-900" : "text-slate-400"}`}
-                >
-                  {form.country ? (
-                    <>
-                      <span className="text-base leading-none">
-                        <Flag
-                          code={
-                            COUNTRIES.find((c) => c.name === form.country)
-                              ?.code ?? ""
-                          }
-                          style={{
-                            width: 20,
-                            height: 14,
-                            borderRadius: 2,
-                            objectFit: "cover",
-                          }}
-                        />
-                      </span>
-                      <span>{form.country}</span>
-                    </>
-                  ) : (
-                    <span>Select country…</span>
-                  )}
-                  <svg
-                    className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </button>
-
-                {/* Dropdown panel */}
-                {countryOpen && (
-                  <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                    {/* Search */}
-                    <div className="p-2 border-b border-slate-100">
-                      <input
-                        autoFocus
-                        placeholder="Search country…"
-                        value={countrySearch}
-                        onChange={(e) => setCountrySearch(e.target.value)}
-                        className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md
-              focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              <div
+                className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-slate-50 text-slate-700 cursor-not-allowed select-none border-slate-200 ${
+                  errors.country ? "border-red-400" : ""
+                }`}
+                title="Taken from your registration — contact support to change."
+              >
+                {form.country ? (
+                  <>
+                    <span className="text-base leading-none shrink-0 opacity-90">
+                      <Flag
+                        code={
+                          COUNTRIES.find((c) => c.name === form.country)
+                            ?.code ?? ""
+                        }
+                        style={{
+                          width: 20,
+                          height: 14,
+                          borderRadius: 2,
+                          objectFit: "cover",
+                        }}
                       />
-                    </div>
-
-                    {/* List */}
-                    <ul className="max-h-52 overflow-y-auto py-1">
-                      {COUNTRIES.filter((c) =>
-                        c.name
-                          .toLowerCase()
-                          .includes(countrySearch.toLowerCase()),
-                      ).map((c) => (
-                        <li key={c.code}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setField("country", c.name);
-                              setCountryOpen(false);
-                            }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left
-                  hover:bg-teal-50 hover:text-teal-700 transition-colors
-                  ${form.country === c.name ? "bg-teal-50 text-teal-700 font-medium" : "text-slate-700"}`}
-                          >
-                            <span className="text-base leading-none">
-                              <Flag
-                                code={c.code}
-                                style={{
-                                  width: 20,
-                                  height: 14,
-                                  borderRadius: 2,
-                                  objectFit: "cover",
-                                }}
-                              />
-                            </span>
-                            <span>{c.name}</span>
-                            {form.country === c.name && (
-                              <svg
-                                className="ml-auto w-4 h-4 text-teal-600"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                              >
-                                <path
-                                  fillRule="evenodd"
-                                  d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                      {COUNTRIES.filter((c) =>
-                        c.name
-                          .toLowerCase()
-                          .includes(countrySearch.toLowerCase()),
-                      ).length === 0 && (
-                        <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                          No countries found
-                        </li>
-                      )}
-                    </ul>
-                  </div>
+                    </span>
+                    <span className="font-medium">{form.country}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">Loading country…</span>
                 )}
+                {/* <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 bg-white">
+                  From registration
+                </span> */}
               </div>
+              {/* <p className="text-xs text-slate-500 mt-1.5">
+                This matches the country you selected when you created your
+                account. It cannot be changed here.
+              </p> */}
             </Field>
 
             <div>
@@ -620,18 +1147,36 @@ export default function KycProfilePage() {
             {!form.isNational && (
               <div className="space-y-4">
                 <SectionLabel>Passport Details</SectionLabel>
-                <Field
-                  label="Passport Number"
-                  required
-                  error={errors.passportNumber}
-                >
-                  <input
-                    className={inputClass("passportNumber")}
-                    placeholder="e.g. A12345678"
-                    value={form.passportNumber}
-                    onChange={(e) => setField("passportNumber", e.target.value)}
-                  />
-                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field
+                    label="Passport Number"
+                    required
+                    error={errors.passportNumber}
+                  >
+                    <input
+                      className={inputClass("passportNumber")}
+                      placeholder="e.g. A12345678"
+                      value={form.passportNumber}
+                      onChange={(e) =>
+                        setField("passportNumber", e.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Passport issuing country"
+                    required
+                    error={errors.passportIssuingCountry}
+                  >
+                    <CountrySelectDropdown
+                      value={form.passportIssuingCountry}
+                      onChange={(name) =>
+                        setField("passportIssuingCountry", name)
+                      }
+                      error={Boolean(errors.passportIssuingCountry)}
+                      placeholder="Select issuing country…"
+                    />
+                  </Field>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Field
                     label="Issue Date"
@@ -707,52 +1252,146 @@ export default function KycProfilePage() {
             )}
 
             {form.isNational && (
-              <div className="space-y-4">
-                <SectionLabel>Passport / National ID Details</SectionLabel>
+              <div className="space-y-5">
                 <Field
-                  label="Passport / National ID Number"
+                  label="Primary document"
                   required
-                  error={errors.nationalIdNumber}
+                  error={errors.citizenPrimaryDocumentType}
                 >
-                  <input
-                    className={inputClass("nationalIdNumber")}
-                    placeholder="Passport / National ID number"
-                    value={form.nationalIdNumber}
+                  <select
+                    className={inputClass("citizenPrimaryDocumentType")}
+                    value={form.citizenPrimaryDocumentType}
                     onChange={(e) =>
-                      setField("nationalIdNumber", e.target.value)
+                      setField(
+                        "citizenPrimaryDocumentType",
+                        e.target.value as CitizenDocType,
+                      )
                     }
-                  />
+                  >
+                    <option value="">Select document type…</option>
+                    <option value="PASSPORT">Passport</option>
+                    <option value="NATIONAL_ID">National ID</option>
+                  </select>
                 </Field>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field
-                    label="Issue Date"
-                    required
-                    error={errors.nationalIdIssue}
-                  >
-                    <input
-                      type="date"
-                      className={inputClass("nationalIdIssue")}
-                      value={form.nationalIdIssue}
-                      onChange={(e) =>
-                        setField("nationalIdIssue", e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="Expiry Date"
-                    required
-                    error={errors.nationalIdExpiry}
-                  >
-                    <input
-                      type="date"
-                      className={inputClass("nationalIdExpiry")}
-                      value={form.nationalIdExpiry}
-                      onChange={(e) =>
-                        setField("nationalIdExpiry", e.target.value)
-                      }
-                    />
-                  </Field>
-                </div>
+
+                {form.citizenPrimaryDocumentType === "PASSPORT" && (
+                  <div className="space-y-4">
+                    <SectionLabel>Passport</SectionLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field
+                        label="Passport number"
+                        required
+                        error={errors.passportNumber}
+                      >
+                        <input
+                          className={inputClass("passportNumber")}
+                          placeholder="e.g. A12345678"
+                          value={form.passportNumber}
+                          onChange={(e) =>
+                            setField("passportNumber", e.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="Passport issuing country"
+                        required
+                        error={errors.passportIssuingCountry}
+                      >
+                        <CountrySelectDropdown
+                          value={form.passportIssuingCountry}
+                          onChange={(name) =>
+                            setField("passportIssuingCountry", name)
+                          }
+                          error={Boolean(errors.passportIssuingCountry)}
+                          placeholder="Select issuing country…"
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field
+                        label="Issue date"
+                        required
+                        error={errors.passportIssue}
+                      >
+                        <input
+                          type="date"
+                          className={inputClass("passportIssue")}
+                          value={form.passportIssue}
+                          onChange={(e) =>
+                            setField("passportIssue", e.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="Expiry date"
+                        required
+                        error={errors.passportExpiry}
+                      >
+                        <input
+                          type="date"
+                          className={inputClass("passportExpiry")}
+                          value={form.passportExpiry}
+                          onChange={(e) =>
+                            setField("passportExpiry", e.target.value)
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                )}
+
+                {form.citizenPrimaryDocumentType === "NATIONAL_ID" && (
+                  <div className="space-y-4">
+                    <SectionLabel>National ID</SectionLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field
+                        label="National ID number"
+                        required
+                        error={errors.nationalIdNumber}
+                      >
+                        <input
+                          className={inputClass("nationalIdNumber")}
+                          placeholder="National ID number"
+                          value={form.nationalIdNumber}
+                          onChange={(e) =>
+                            setField("nationalIdNumber", e.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="National ID issuing country"
+                        required
+                        error={errors.nationalIdIssuingCountry}
+                      >
+                        <CountrySelectDropdown
+                          value={form.nationalIdIssuingCountry}
+                          onChange={(name) =>
+                            setField("nationalIdIssuingCountry", name)
+                          }
+                          error={Boolean(errors.nationalIdIssuingCountry)}
+                          placeholder="Select issuing country…"
+                        />
+                      </Field>
+                    </div>
+                    <Field
+                      label="Issue date"
+                      required
+                      error={errors.nationalIdIssue}
+                    >
+                      <input
+                        type="date"
+                        className={inputClass("nationalIdIssue")}
+                        value={form.nationalIdIssue}
+                        onChange={(e) =>
+                          setField("nationalIdIssue", e.target.value)
+                        }
+                      />
+                    </Field>
+                    <p className="text-xs text-slate-500">
+                      National ID does not require an expiry date.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -762,23 +1401,70 @@ export default function KycProfilePage() {
         {activeSection === "address" && (
           <div className="space-y-4">
             <SectionLabel>Residential Address</SectionLabel>
-            <Field
-              label="Residential Address"
-              required
-              error={errors.residentialAddress}
-            >
-              <textarea
-                className={`border rounded-lg px-3 py-2.5 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors resize-none ${
-                  errors.residentialAddress
-                    ? "border-red-400"
-                    : "border-slate-200"
-                }`}
-                placeholder="Enter your full residential address "
-                rows={3}
-                value={form.residentialAddress}
-                onChange={(e) => setField("residentialAddress", e.target.value)}
-              />
-            </Field>
+            <div className="space-y-4">
+              <Field
+                label="Address line 1"
+                required
+                error={errors.residenceAddress?.line1}
+              >
+                <input
+                  className={addrInputClass("line1")}
+                  placeholder="Street address, P.O. box"
+                  value={form.residenceAddress.line1}
+                  onChange={(e) => setResidenceField("line1", e.target.value)}
+                />
+              </Field>
+              <Field
+                label="Address line 2"
+                error={errors.residenceAddress?.line2}
+              >
+                <input
+                  className={addrInputClass("line2")}
+                  placeholder="Apartment, suite, unit (optional)"
+                  value={form.residenceAddress.line2}
+                  onChange={(e) => setResidenceField("line2", e.target.value)}
+                />
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="City"
+                  required
+                  error={errors.residenceAddress?.city}
+                >
+                  <input
+                    className={addrInputClass("city")}
+                    placeholder="City"
+                    value={form.residenceAddress.city}
+                    onChange={(e) => setResidenceField("city", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="State"
+                  required
+                  error={errors.residenceAddress?.state}
+                >
+                  <input
+                    className={addrInputClass("state")}
+                    placeholder="State / province"
+                    value={form.residenceAddress.state}
+                    onChange={(e) => setResidenceField("state", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field
+                label="Postal code"
+                error={errors.residenceAddress?.postalCode}
+              >
+                <input
+                  className={addrInputClass("postalCode")}
+                  placeholder="Postal or ZIP code (optional)"
+                  value={form.residenceAddress.postalCode}
+                  onChange={(e) =>
+                    setResidenceField("postalCode", e.target.value)
+                  }
+                />
+              </Field>
+            </div>
 
             {/* <SectionLabel>Contact Information</SectionLabel> */}
             {/* <div className="grid grid-cols-2 gap-4">
@@ -804,60 +1490,73 @@ export default function KycProfilePage() {
           </div>
         )}
 
+        {activeSection === "documents" && (
+          <VerificationDocuments
+            isNational={form.isNational}
+            citizenDocType={form.citizenPrimaryDocumentType}
+            documents={kycDocuments}
+            onDocumentsSynced={syncDocumentsFromServer}
+            onKycSubmitted={handleKycSubmitted}
+          />
+        )}
+
+        {saveError && activeSection !== "submitted" && (
+          <p className="text-sm text-red-600 whitespace-pre-wrap">
+            {saveError}
+          </p>
+        )}
+
         {/* Buttons */}
-        <div className="flex justify-between items-center pt-2">
-          {activeSection !== "personal" && (
+        {activeSection !== "documents" && activeSection !== "submitted" && (
+          <div className="flex justify-between items-center pt-2">
+            {activeSection !== "personal" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const currentIndex = sections.findIndex(
+                    (s) => s.key === activeSection,
+                  );
+                  requestNavigateToSection(sections[currentIndex - 1].key);
+                }}
+                className="text-sm text-slate-600 hover:text-slate-900 font-medium"
+              >
+                Back
+              </button>
+            )}
+            <div className="ml-auto">
+              <button
+                type="button"
+                onClick={() => saveSection(activeSection)}
+                disabled={isSaving}
+                className="h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save and Continue"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeSection === "documents" && !flowComplete && (
+          <div className="flex justify-between items-center pt-2">
             <button
+              type="button"
               onClick={() => {
-                const currentIndex = sections.findIndex(
-                  (s) => s.key === activeSection,
-                );
-                setActiveSection(sections[currentIndex - 1].key);
+                requestNavigateToSection("address");
               }}
               className="text-sm text-slate-600 hover:text-slate-900 font-medium"
             >
               Back
             </button>
-          )}
-          <div className="ml-auto">
-            <button
-              onClick={() => saveSection(activeSection)}
-              disabled={isSaving}
-              className="h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Saving...
-                </>
-              ) : activeSection === "address" ? (
-                "Save and Continue to Documents"
-              ) : (
-                "Save and Continue"
-              )}
-            </button>
           </div>
-        </div>
+        )}
       </div>
-
-      {/* All done banner */}
-      {allSectionsDone && (
-        <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-teal-800">
-              Profile complete!
-            </p>
-            <p className="text-sm text-teal-700">
-              Now upload your required documents
-            </p>
-          </div>
-          <Link href="/onboarding/documents">
-            <Button className="shrink-0 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg flex items-center transition-colors">
-              Upload Documents
-            </Button>
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

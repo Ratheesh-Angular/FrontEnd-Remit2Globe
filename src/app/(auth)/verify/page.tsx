@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import api from "@/lib/api";
+
+const PASSWORD_SETUP_SESSION_KEY = "passwordSetupToken";
 
 export default function VerifyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
   const phone = searchParams.get("phone") || "";
+  const userId = searchParams.get("userId") || "";
 
   const [emailOtp, setEmailOtp] = useState(["", "", "", "", "", ""]);
   const [phoneOtp, setPhoneOtp] = useState(["", "", "", "", "", ""]);
@@ -91,17 +95,24 @@ export default function VerifyPage() {
   };
 
   const handleVerifyEmail = async (code: string) => {
+    if (!userId) {
+      setError("Missing account reference. Return to registration and try again.");
+      return;
+    }
     setIsLoading(true);
     try {
-      // TODO: Implement email verification API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setEmailVerified(true);
-      // Auto-focus first phone OTP input after email verification
-      setTimeout(() => {
-        phoneInputRefs.current[0]?.focus();
-      }, 300);
-    } catch (error: any) {
-      setError(error.message || "Invalid email verification code");
+      const res = await api.post("/otp/verify-email", { userId, code });
+      if (res.data.success) {
+        setEmailVerified(true);
+        setTimeout(() => {
+          phoneInputRefs.current[0]?.focus();
+        }, 300);
+      }
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: { message?: string } } };
+      setError(
+        ax.response?.data?.message || "Invalid email verification code",
+      );
       setEmailOtp(["", "", "", "", "", ""]);
       emailInputRefs.current[0]?.focus();
     } finally {
@@ -110,17 +121,34 @@ export default function VerifyPage() {
   };
 
   const handleVerifyPhone = async (code: string) => {
+    if (!userId) {
+      setError("Missing account reference. Return to registration and try again.");
+      return;
+    }
     setIsLoading(true);
     try {
-      // TODO: Implement phone verification API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setPhoneVerified(true);
-      // Redirect to dashboard after both verifications
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1500);
-    } catch (error: any) {
-      setError(error.message || "Invalid phone verification code");
+      const res = await api.post("/otp/verify-phone", { userId, code });
+      if (res.data.success) {
+        setPhoneVerified(true);
+        const data = res.data.data as {
+          fullyVerified?: boolean;
+          passwordSetupToken?: string;
+        };
+        if (data?.fullyVerified && data.passwordSetupToken) {
+          sessionStorage.setItem(
+            PASSWORD_SETUP_SESSION_KEY,
+            data.passwordSetupToken,
+          );
+          setTimeout(() => router.push("/set-password"), 1200);
+        } else if (data?.fullyVerified) {
+          setTimeout(() => router.push("/login"), 1200);
+        }
+      }
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: { message?: string } } };
+      setError(
+        ax.response?.data?.message || "Invalid phone verification code",
+      );
       setPhoneOtp(["", "", "", "", "", ""]);
       phoneInputRefs.current[0]?.focus();
     } finally {
@@ -130,16 +158,23 @@ export default function VerifyPage() {
 
   const handleResendOtp = async (type: "email" | "phone") => {
     if (!canResend) return;
-    
+    if (!userId) {
+      setError("Missing account reference. Return to registration and try again.");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // TODO: Implement resend OTP API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await api.post("/otp/resend", {
+        userId,
+        type: type === "email" ? "EMAIL" : "PHONE",
+      });
       setResendTimer(60);
       setCanResend(false);
       setError("");
-    } catch (error: any) {
-      setError(error.message || "Failed to resend code");
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: { message?: string } } };
+      setError(ax.response?.data?.message || "Failed to resend code");
     } finally {
       setIsLoading(false);
     }
@@ -197,6 +232,19 @@ export default function VerifyPage() {
           <p className="text-sm text-slate-500 mt-1">
             We've sent verification codes to secure your account
           </p>
+          {!userId && (
+            <p className="text-sm text-amber-700 mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Missing account link. Please{" "}
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="text-teal-700 font-medium underline"
+              >
+                register again
+              </button>{" "}
+              or open the link from your confirmation email.
+            </p>
+          )}
         </div>
 
         {/* Email Verification Section */}
@@ -248,7 +296,9 @@ export default function VerifyPage() {
             {emailOtp.map((digit, index) => (
               <input
                 key={index}
-                ref={(el) => (emailInputRefs.current[index] = el)}
+                ref={(el) => {
+                  emailInputRefs.current[index] = el;
+                }}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
@@ -346,7 +396,9 @@ export default function VerifyPage() {
             {phoneOtp.map((digit, index) => (
               <input
                 key={index}
-                ref={(el) => (phoneInputRefs.current[index] = el)}
+                ref={(el) => {
+                  phoneInputRefs.current[index] = el;
+                }}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
@@ -399,7 +451,7 @@ export default function VerifyPage() {
                 clipRule="evenodd"
               />
             </svg>
-            Verification complete! Redirecting to dashboard...
+            Verification complete! Redirecting…
           </div>
         )}
 
