@@ -8,13 +8,18 @@ import {
   type ReactNode,
 } from "react";
 import Flag from "react-world-flags";
-import { parsePhoneNumberFromString } from "libphonenumber-js";
+import {
+  isValidPhoneNumber,
+  parsePhoneNumberFromString,
+} from "libphonenumber-js/max";
 import { ALL_COUNTRIES, type Country } from "@/lib/phone-countries";
 
+/** E.164 validation using full lib metadata — the default `min` build can reject valid numbers. */
 export function isValidE164Phone(value: string): boolean {
+  const raw = value.trim();
+  if (!raw) return false;
   try {
-    const p = parsePhoneNumberFromString(value.trim());
-    return Boolean(p?.isValid());
+    return isValidPhoneNumber(raw);
   } catch {
     return false;
   }

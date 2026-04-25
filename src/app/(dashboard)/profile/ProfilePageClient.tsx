@@ -212,10 +212,7 @@ export default function ProfilePageClient() {
   }, [load]);
 
   const role = me?.role ?? (full as { role?: string })?.role;
-  const individual = full?.individualProfile as Record<
-    string,
-    unknown
-  > | null;
+  const individual = full?.individualProfile as Record<string, unknown> | null;
   const corporate = full?.corporateProfile as Record<string, unknown> | null;
   const documents = (full?.documents as Array<Record<string, unknown>>) ?? [];
 
@@ -245,7 +242,10 @@ export default function ProfilePageClient() {
 
       {/* Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex gap-1 overflow-x-auto pb-px" aria-label="Profile sections">
+        <nav
+          className="flex gap-1 overflow-x-auto pb-px"
+          aria-label="Profile sections"
+        >
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -286,10 +286,7 @@ export default function ProfilePageClient() {
                 <dl>
                   <DetailRow label="Email" value={me.email} />
                   <DetailRow label="Phone" value={me.phone} />
-                  <DetailRow
-                    label="Registration country"
-                    value={me.country}
-                  />
+                  <DetailRow label="Registration country" value={me.country} />
                   <DetailRow
                     label="Account type"
                     value={
@@ -389,7 +386,9 @@ export default function ProfilePageClient() {
                       <DetailRow
                         label="Regulatory license issued"
                         value={fmtDate(
-                          corporate?.regulatoryLicenseIssue as string | undefined,
+                          corporate?.regulatoryLicenseIssue as
+                            | string
+                            | undefined,
                         )}
                       />
                       <DetailRow
@@ -437,13 +436,13 @@ export default function ProfilePageClient() {
                         label="Full name"
                         value={
                           (individual?.fullName as string) ||
-                            [
-                              individual?.firstName,
-                              individual?.middleName,
-                              individual?.lastName,
-                            ]
-                              .filter(Boolean)
-                              .join(" ") ||
+                          [
+                            individual?.firstName,
+                            individual?.middleName,
+                            individual?.lastName,
+                          ]
+                            .filter(Boolean)
+                            .join(" ") ||
                           ""
                         }
                       />
@@ -467,7 +466,7 @@ export default function ProfilePageClient() {
                       />
                       <DetailRow
                         label="Nationality"
-                        value={individual?.nationality as string}
+                        value={individual?.passportIssuingCountry as string}
                       />
                       <DetailRow
                         label="National / foreign"
@@ -502,8 +501,7 @@ export default function ProfilePageClient() {
                         />
                       ) : null}
                       {!individual?.isNational ||
-                      individual?.citizenPrimaryDocumentType ===
-                        "PASSPORT" ? (
+                      individual?.citizenPrimaryDocumentType === "PASSPORT" ? (
                         <DetailRow
                           label="Passport issuing country"
                           value={individual?.passportIssuingCountry as string}
@@ -529,9 +527,7 @@ export default function ProfilePageClient() {
                       "NATIONAL_ID" ? (
                         <DetailRow
                           label="National ID issuing country"
-                          value={
-                            individual?.nationalIdIssuingCountry as string
-                          }
+                          value={individual?.nationalIdIssuingCountry as string}
                         />
                       ) : null}
                       <DetailRow
@@ -610,7 +606,7 @@ export default function ProfilePageClient() {
                         label="Country"
                         value={individual?.country as string}
                       />
-                      <DetailRow
+                      {/* <DetailRow
                         label="Contact email"
                         value={individual?.contactEmail as string}
                       />
@@ -621,7 +617,7 @@ export default function ProfilePageClient() {
                             ? String(individual.contactPhone)
                             : ""
                         }
-                      />
+                      /> */}
                       <DetailRow
                         label="Occupation"
                         value={individual?.occupation as string}
@@ -719,9 +715,7 @@ export default function ProfilePageClient() {
 
 function JsonOrEmpty({ value }: { value: unknown }) {
   if (value == null || (Array.isArray(value) && value.length === 0)) {
-    return (
-      <p className="text-sm text-slate-500 py-2">Not provided</p>
-    );
+    return <p className="text-sm text-slate-500 py-2">Not provided</p>;
   }
   return (
     <pre className="text-xs bg-slate-50 border border-slate-100 rounded-lg p-4 overflow-x-auto text-slate-800 max-h-80">
@@ -750,11 +744,7 @@ function ChangePasswordPanel({
   const strongOk = meetsStrongPassword(password);
   const matchOk = password.length > 0 && password === confirm;
   const canSubmit =
-    hasPassword &&
-    currentPassword &&
-    strongOk &&
-    matchOk &&
-    !loading;
+    hasPassword && currentPassword && strongOk && matchOk && !loading;
 
   const barW =
     strength === "strong" ? "100%" : strength === "medium" ? "66%" : "33%";

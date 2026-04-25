@@ -36,7 +36,9 @@ import {
   Eye,
   X,
   FileText,
+  Copy,
 } from "lucide-react";
+import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
 
 const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -116,6 +118,7 @@ interface TransferRow {
   status: string;
   payCurrency?: string | null;
   payAmount?: unknown;
+  feeAmount?: unknown;
   receiveCurrency?: string | null;
   receiveAmount?: unknown;
   recipientCountryLabel?: string | null;
@@ -179,6 +182,21 @@ function resolveRecipientFromBeneficiaryCountry(
 function maskAccount(n?: string | null) {
   if (!n || n.length < 4) return "····";
   return `····${n.slice(-4)}`;
+}
+
+function payoutDetailsForReceipt(b: Beneficiary): string {
+  if (b.deliveryChannel === "BANK_TRANSFER") {
+    return [
+      b.bankName,
+      b.branchName,
+      b.accountNumber ? `Account ${maskAccount(b.accountNumber)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  return (
+    [b.mobileMoneyProvider, b.mobileNumber].filter(Boolean).join(" · ") || "—"
+  );
 }
 
 function payCurrencyFlagCode(currency: string): string {
@@ -302,6 +320,7 @@ function SendMoneyPageContent() {
   const [recipientSearch, setRecipientSearch] = useState("");
 
   const [showAddBeneficiaryModal, setShowAddBeneficiaryModal] = useState(false);
+  const [payReviewTermsAccepted, setPayReviewTermsAccepted] = useState(false);
 
   const bankProofInputRef = useRef<HTMLInputElement>(null);
   const bankProofsRef = useRef<BankProofRow[]>([]);
@@ -310,6 +329,7 @@ function SendMoneyPageContent() {
     [],
   );
   const [proofLightboxUrl, setProofLightboxUrl] = useState<string | null>(null);
+  const [referenceCopied, setReferenceCopied] = useState(false);
 
   bankProofsRef.current = bankPaymentProofs;
 
@@ -322,6 +342,10 @@ function SendMoneyPageContent() {
       });
     };
   }, []);
+
+  useEffect(() => {
+    if (step === 4) setPayReviewTermsAccepted(false);
+  }, [step]);
 
   useEffect(() => {
     if (step !== 5 || !transferId) return;
@@ -415,6 +439,44 @@ function SendMoneyPageContent() {
     return match.length > 0 ? match : DUMMY_PAYOUT_ACCOUNTS;
   }, [companyAccounts, payCurrency]);
 
+  /** Amounts for the confirmation step (quote still in memory, or transfer from API). */
+  const confirmationAmounts = useMemo(() => {
+    if (quote) {
+      const youSend = Number(quote.payAmount);
+      const fee = Number(quote.feeAmount);
+      return {
+        fromCurrency: quote.fromCurrency,
+        toCurrency: quote.toCurrency,
+        youSend,
+        fee,
+        receive: Number(quote.receiveAmount),
+        totalToPay: youSend + fee,
+        hasRate: true as const,
+        rate: quote.rate,
+      };
+    }
+    const tr = transferRow;
+    if (tr?.payAmount != null && tr.payCurrency) {
+      const youSend = Number(tr.payAmount);
+      const fee =
+        tr.feeAmount != null && tr.feeAmount !== "" ? Number(tr.feeAmount) : 0;
+      return {
+        fromCurrency: tr.payCurrency,
+        toCurrency: (tr.receiveCurrency ?? "—") as string,
+        youSend,
+        fee,
+        receive:
+          tr.receiveAmount != null && tr.receiveAmount !== ""
+            ? Number(tr.receiveAmount)
+            : null,
+        totalToPay: youSend + fee,
+        hasRate: false as const,
+        rate: null as number | null,
+      };
+    }
+    return null;
+  }, [quote, transferRow]);
+
   const complianceLabels = useMemo(() => {
     if (!lookups) return null;
     return {
@@ -450,7 +512,9 @@ function SendMoneyPageContent() {
             relationship: LookupOpt[];
           };
         }>("/remittance/lookups"),
-        api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries"),
+        api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries", {
+          params: { activeOnly: "true" },
+        }),
         fetch(flexUrl("/countries"), { credentials: "include" }).then((r) =>
           r.json(),
         ),
@@ -704,6 +768,7 @@ function SendMoneyPageContent() {
 
   async function handleConfirm() {
     if (!transferId) return;
+    if (!payReviewTermsAccepted) return;
     setSubmitting(true);
     setError("");
     setPostConfirmMessage("");
@@ -833,7 +898,9 @@ function SendMoneyPageContent() {
     if (row.displayUrl.startsWith("blob:")) {
       URL.revokeObjectURL(row.displayUrl);
     }
-    setBankPaymentProofs((prev) => prev.filter((p) => p.clientId !== row.clientId));
+    setBankPaymentProofs((prev) =>
+      prev.filter((p) => p.clientId !== row.clientId),
+    );
     setError("");
   }
 
@@ -881,6 +948,64 @@ function SendMoneyPageContent() {
       return [];
     });
     setProofLightboxUrl(null);
+    setReferenceCopied(false);
+  }
+
+  async function copyReferenceCode() {
+    const ref = referenceCode ?? transferRow?.referenceCode;
+    if (!ref) return;
+    try {
+      await navigator.clipboard.writeText(ref);
+      setReferenceCopied(true);
+      window.setTimeout(() => setReferenceCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function handleDownloadTransferReceipt() {
+    const ben = selectedBen ?? transferRow?.beneficiary ?? null;
+    if (!ben) return;
+    const ref = (referenceCode ?? transferRow?.referenceCode ?? "").trim();
+    if (!ref) return;
+    const payInIsMobile =
+      payInMethod === "MOBILE_MONEY" ||
+      transferRow?.payInMethod === "MOBILE_MONEY";
+    const amt = confirmationAmounts;
+    downloadTransferReceiptPdf({
+      referenceCode: ref,
+      status: (transferRow?.status ?? "PENDING_PAYMENT").toString(),
+      generatedAt: new Date(),
+      amounts: amt
+        ? {
+            fromCurrency: amt.fromCurrency,
+            toCurrency: amt.toCurrency,
+            youSend: amt.youSend,
+            fee: amt.fee,
+            totalToPay: amt.totalToPay,
+            receive: amt.receive,
+            hasRate: amt.hasRate,
+            rate: amt.hasRate && amt.rate != null ? amt.rate : null,
+          }
+        : null,
+      recipientCountry: recipientCouName,
+      beneficiary: {
+        displayName: formatBeneficiaryName(ben),
+        deliveryLabel:
+          ben.deliveryChannel === "BANK_TRANSFER"
+            ? "Bank transfer"
+            : "Mobile money",
+        payoutDetails: payoutDetailsForReceipt(ben),
+      },
+      compliance: complianceLabels,
+      payInLabel: payInIsMobile
+        ? "Mobile money (STK / collection to us)"
+        : "Bank transfer to our company account",
+      payerPhone: payInIsMobile
+        ? payerPhone.trim() || transferRow?.payerPhone || null
+        : null,
+      additionalNote: postConfirmMessage?.trim() || undefined,
+    });
   }
 
   if (!mounted || loading) {
@@ -1170,7 +1295,7 @@ function SendMoneyPageContent() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-500 pt-1 border-t border-slate-100">
+          <p className="text-xs text-slate-500 ">
             {quote
               ? `Fees applicable ${fmtMoney(Number(quote.feeAmount))} ${quote.fromCurrency}`
               : "Fees will appear when a quote is available."}
@@ -1188,7 +1313,7 @@ function SendMoneyPageContent() {
             className="w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Continue to beneficiary
+            Send money
           </button>
         </div>
       )}
@@ -1323,7 +1448,7 @@ function SendMoneyPageContent() {
               onChange={(e) => setSourceOfIncome(e.target.value)}
               className={SELECT_FIELD}
             >
-              <option value="">Select…</option>
+              <option value="">Source of income</option>
               {lookups.sourceOfIncome.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -1340,7 +1465,7 @@ function SendMoneyPageContent() {
               onChange={(e) => setTransferPurpose(e.target.value)}
               className={SELECT_FIELD}
             >
-              <option value="">Select…</option>
+              <option value="">Purpose of transfer</option>
               {lookups.transferPurpose.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -1357,7 +1482,7 @@ function SendMoneyPageContent() {
               onChange={(e) => setRelationship(e.target.value)}
               className={SELECT_FIELD}
             >
-              <option value="">Select…</option>
+              <option value="">Relationship to recipient</option>
               {lookups.relationship.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -1439,10 +1564,7 @@ function SendMoneyPageContent() {
                     <>
                       Search and pick your country code (same as on
                       registration), then enter your number without the leading
-                      zero. We use this for an{" "}
-                      <strong>STK / mobile money collection</strong> for the
-                      amount you send. After you confirm, the push runs
-                      (sandbox: simulated).
+                      zero.
                     </>
                   }
                 />
@@ -1527,13 +1649,11 @@ function SendMoneyPageContent() {
                 </dd>
               </div>
               <div className="flex justify-between gap-4 pt-1 border-t border-slate-100">
-                <dt className="text-slate-700 shrink-0 font-medium">
+                <dt className="text-slate-700 shrink-0 font-medium py-2">
                   Total amount
                 </dt>
-                <dd className="font-semibold text-right tabular-nums text-slate-900">
-                  {fmtMoney(
-                    Number(quote.payAmount) + Number(quote.feeAmount),
-                  )}{" "}
+                <dd className="font-semibold text-right tabular-nums text-slate-900 py-2">
+                  {fmtMoney(Number(quote.payAmount) + Number(quote.feeAmount))}{" "}
                   {quote.fromCurrency}
                 </dd>
               </div>
@@ -1547,7 +1667,7 @@ function SendMoneyPageContent() {
                 <dt className="text-slate-500 shrink-0">Paying to (country)</dt>
                 <dd className="font-medium text-right">{recipientCouName}</dd>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify-between gap-4 pb-2">
                 <dt className="text-slate-500 shrink-0">Transfer reference</dt>
                 <dd className="font-mono text-xs font-semibold text-teal-800 text-right break-all">
                   {referenceCode ?? transferRow?.referenceCode ?? "—"}
@@ -1610,7 +1730,7 @@ function SendMoneyPageContent() {
                 <dt className="text-slate-500 shrink-0">Paying from</dt>
                 <dd className="font-medium text-right">
                   {payInMethod === "MOBILE_MONEY"
-                    ? "Mobile money (STK / collection)"
+                    ? "Mobile money"
                     : "Bank transfer"}
                 </dd>
               </div>
@@ -1631,6 +1751,24 @@ function SendMoneyPageContent() {
               )}
             </div>
           </dl>
+          <div className="pt-4 border-t border-slate-100">
+            <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-800">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-2 focus:ring-teal-500/20 focus:ring-offset-0 shrink-0"
+                checked={payReviewTermsAccepted}
+                onChange={(e) => setPayReviewTermsAccepted(e.target.checked)}
+                aria-required="true"
+              />
+              <span className="leading-relaxed">
+                I accept the terms and conditions
+                <span className="text-red-500" aria-hidden>
+                  {" "}
+                  *
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex gap-2 pt-4">
             <button
               type="button"
@@ -1641,7 +1779,7 @@ function SendMoneyPageContent() {
             </button>
             <button
               type="button"
-              disabled={submitting}
+              disabled={submitting || !payReviewTermsAccepted}
               onClick={() => void handleConfirm()}
               className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
             >
@@ -1653,122 +1791,188 @@ function SendMoneyPageContent() {
 
       {/* Done — final step */}
       {step === 5 && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5 w-full max-w-4xl mx-auto">
-          <div className="text-center space-y-2 sm:space-y-3">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-full bg-teal-50 flex items-center justify-center">
-              <Check className="w-6 h-6 sm:w-7 sm:h-7 text-teal-600" />
+        <div className="w-full max-w-4xl  bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
+          <div className="w-full flex flex-col items-center text-center space-y-4">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-teal-50 flex items-center justify-center">
+                <Check
+                  className="w-5 h-5 sm:w-6 sm:h-6 text-teal-600"
+                  aria-hidden
+                />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900">
+                  Transfer submitted
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  Status:{" "}
+                  <span className="font-medium text-slate-700">
+                    PENDING_PAYMENT
+                  </span>
+                </p>
+              </div>
             </div>
-            <h2 className="text-base sm:text-lg font-semibold text-slate-900">
-              Transfer submitted
-            </h2>
-            <p className="text-sm text-slate-600 px-2">
-              Reference:{" "}
-              <span className="font-mono font-bold text-teal-700 break-all">
-                {referenceCode}
-              </span>
-            </p>
+
+            {confirmationAmounts ? (
+              <div className="w-full max-w-md rounded-xl border border-teal-100 bg-gradient-to-b from-teal-50/80 to-slate-50/60 p-3 sm:p-4 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-800/80">
+                  Total to pay
+                </p>
+                <p className="mt-1 text-2xl sm:text-3xl font-semibold tabular-nums text-slate-900 tracking-tight">
+                  {fmtMoney(confirmationAmounts.totalToPay)}{" "}
+                  <span className="text-lg sm:text-xl font-semibold text-slate-800">
+                    {confirmationAmounts.fromCurrency}
+                  </span>
+                </p>
+                <div className="mt-3 space-y-1 text-xs text-slate-600 max-w-xs mx-auto text-left">
+                  <div className="flex justify-between gap-4">
+                    <span>Send amount</span>
+                    <span className="tabular-nums text-slate-800">
+                      {fmtMoney(confirmationAmounts.youSend)}{" "}
+                      {confirmationAmounts.fromCurrency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Fee</span>
+                    <span className="tabular-nums text-slate-800">
+                      {fmtMoney(confirmationAmounts.fee)}{" "}
+                      {confirmationAmounts.fromCurrency}
+                    </span>
+                  </div>
+                  {confirmationAmounts.receive != null ? (
+                    <div className="flex justify-between gap-4 pt-1 border-t border-teal-100/80">
+                      <span className="text-slate-500">Recipient gets</span>
+                      <span className="font-medium tabular-nums text-teal-800">
+                        {fmtMoney(confirmationAmounts.receive)}{" "}
+                        {confirmationAmounts.toCurrency}
+                      </span>
+                    </div>
+                  ) : null}
+                  {confirmationAmounts.hasRate &&
+                  confirmationAmounts.rate != null ? (
+                    <p className="pt-1 text-[11px] text-slate-500 tabular-nums text-center">
+                      1 {confirmationAmounts.fromCurrency} ={" "}
+                      {fmtMoney(confirmationAmounts.rate)}{" "}
+                      {confirmationAmounts.toCurrency}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="w-full max-w-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-center sm:text-left">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] text-slate-500">
+                  Transfer reference (use in payment)
+                </p>
+                <p
+                  className="font-mono text-xs sm:text-sm font-semibold text-teal-800 break-all"
+                  title={referenceCode ?? transferRow?.referenceCode ?? ""}
+                >
+                  {referenceCode ?? transferRow?.referenceCode ?? "—"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyReferenceCode()}
+                className="shrink-0 self-center h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1 mx-auto sm:ml-0 sm:mr-0"
+              >
+                {referenceCopied ? (
+                  "Copied"
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" aria-hidden />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
+          <p className="text-xs sm:text-sm font-medium text-center text-slate-800 mb-0 pb-2">
+            Pay to our account
+          </p>
+
           {postConfirmMessage ? (
-            <p className="text-sm text-slate-700 max-w-lg mx-auto text-center leading-relaxed px-2">
+            <p className="text-sm text-slate-700 text-center leading-relaxed max-w-lg mx-auto px-2">
               {postConfirmMessage}
             </p>
           ) : null}
 
           {(payInMethod === "BANK_TRANSFER" ||
             transferRow?.payInMethod === "BANK_TRANSFER") && (
-            <div className="space-y-3 sm:space-y-4 text-left">
-              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 sm:p-4">
-                <p className="text-xs font-semibold text-slate-800">
-                  Pay into one of our accounts
-                </p>
-                <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-snug">
-                  Transfer from your banking app. Use your reference in the
-                  payment description.
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {bankAccountsToShow.map((a) => (
-                    <div
-                      key={a.id}
-                      className="rounded-lg border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm text-[11px] sm:text-xs"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <span className="font-semibold text-slate-900 leading-tight">
-                          {a.bankName}
-                        </span>
-                        <span className="shrink-0 rounded-full bg-teal-600/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 border border-teal-200/50">
-                          {a.currency}
-                        </span>
+            <div className="w-full max-w-3xl mx-auto space-y-3 text-center">
+              <ul className="space-y-2 w-full text-left">
+                {bankAccountsToShow.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 text-xs shadow-sm"
+                  >
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      <span className="font-semibold text-slate-900 leading-tight">
+                        {a.bankName}
+                      </span>
+                      <span className="shrink-0 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">
+                        {a.currency}
+                      </span>
+                    </div>
+                    {a.countryNote ? (
+                      <p className="text-[11px] text-slate-500 mb-1.5 line-clamp-1">
+                        {a.countryNote}
+                      </p>
+                    ) : null}
+                    <dl className="space-y-1 text-slate-700">
+                      <div className="flex flex-wrap gap-x-1 gap-y-0">
+                        <dt className="text-slate-400 shrink-0">Name</dt>
+                        <dd className="font-medium text-slate-800 min-w-0">
+                          {a.accountName}
+                        </dd>
                       </div>
-                      {a.countryNote ? (
-                        <p className="text-slate-500 mb-1.5 line-clamp-1">
-                          {a.countryNote}
+                      <div className="flex flex-wrap gap-x-1 gap-y-0 items-baseline">
+                        <dt className="text-slate-400 shrink-0">Account</dt>
+                        <dd className="font-mono font-semibold text-slate-900 break-all">
+                          {a.accountNumber}
+                        </dd>
+                      </div>
+                      {(a.swiftBic || a.iban) && (
+                        <div className="text-[11px] text-slate-600 flex flex-wrap gap-x-2 gap-y-0.5">
+                          {a.swiftBic ? (
+                            <span>
+                              SWIFT{" "}
+                              <span className="font-mono">{a.swiftBic}</span>
+                            </span>
+                          ) : null}
+                          {a.iban ? (
+                            <span>
+                              IBAN{" "}
+                              <span className="font-mono break-all">
+                                {a.iban}
+                              </span>
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                      {a.instructions ? (
+                        <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 line-clamp-2">
+                          {a.instructions}
                         </p>
                       ) : null}
-                      <dl className="space-y-1.5 text-slate-700">
-                        <div>
-                          <dt className="text-[10px] uppercase tracking-wide text-slate-400">
-                            Account name
-                          </dt>
-                          <dd className="font-medium text-slate-800 leading-tight">
-                            {a.accountName}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-[10px] uppercase tracking-wide text-slate-400">
-                            Account no.
-                          </dt>
-                          <dd className="font-mono font-semibold text-slate-900 tracking-wide break-all">
-                            {a.accountNumber}
-                          </dd>
-                        </div>
-                        {(a.swiftBic || a.iban) && (
-                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-600 pt-0.5">
-                            {a.swiftBic ? (
-                              <span>
-                                <span className="text-slate-400">SWIFT</span>{" "}
-                                <span className="font-mono">{a.swiftBic}</span>
-                              </span>
-                            ) : null}
-                            {a.iban ? (
-                              <span>
-                                <span className="text-slate-400">IBAN</span>{" "}
-                                <span className="font-mono break-all">
-                                  {a.iban}
-                                </span>
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                        {a.instructions ? (
-                          <p className="text-slate-500 line-clamp-2 mt-1 pt-1 border-t border-slate-100">
-                            {a.instructions}
-                          </p>
-                        ) : null}
-                      </dl>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
 
-              <div className="rounded-lg border border-dashed border-teal-200/90 bg-white p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                      Payment proof{" "}
-                      <span className="font-normal text-slate-500">
-                        (optional)
-                      </span>
-                    </p>
-                    <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed">
-                      Upload bank receipts, screenshots, PDFs, or other
-                      documents. Files are saved to this transfer so you can see
-                      them on your transactions list. Images open in a preview;
-                      other types open in a new tab.
-                    </p>
-                  </div>
-                  <div className="shrink-0 w-full sm:w-auto sm:min-w-[10rem]">
+              <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 sm:p-4 w-full text-left">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
+                  <p className="text-xs text-slate-600 text-center sm:text-left flex-1 min-w-0">
+                    <span className="font-medium text-slate-800">
+                      Payment proof
+                    </span>{" "}
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Receipts or screenshots help us match your payment faster.
+                    </span>
+                  </p>
+                  <div className="shrink-0 flex justify-center sm:justify-end">
                     <input
                       ref={bankProofInputRef}
                       type="file"
@@ -1783,21 +1987,21 @@ function SendMoneyPageContent() {
                     <button
                       type="button"
                       onClick={() => bankProofInputRef.current?.click()}
-                      className="w-full sm:w-auto h-9 px-4 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors inline-flex items-center justify-center gap-2"
+                      className="h-8 w-full sm:w-auto px-3 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5"
                     >
-                      <Upload className="w-3.5 h-3.5 shrink-0" />
-                      Choose files
+                      <Upload className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                      Upload
                     </button>
                   </div>
                 </div>
                 {bankPaymentProofs.length > 0 ? (
-                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <ul className="mt-2 space-y-1.5">
                     {bankPaymentProofs.map((p) => (
                       <li
                         key={p.clientId}
-                        className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/90 p-2"
+                        className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/80 p-1.5"
                       >
-                        <div className="h-11 w-11 shrink-0 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
+                        <div className="h-8 w-8 shrink-0 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
                           {isImageMime(p.mimeType) && p.status !== "error" ? (
                             <button
                               type="button"
@@ -1815,7 +2019,7 @@ function SendMoneyPageContent() {
                             </button>
                           ) : (
                             <FileText
-                              className="w-5 h-5 text-slate-500"
+                              className="w-4 h-4 text-slate-500"
                               aria-hidden
                             />
                           )}
@@ -1845,21 +2049,23 @@ function SendMoneyPageContent() {
                           <button
                             type="button"
                             onClick={() => viewBankProof(p)}
-                            disabled={p.status === "uploading" || p.status === "error"}
-                            className="p-1.5 rounded-md text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40"
+                            disabled={
+                              p.status === "uploading" || p.status === "error"
+                            }
+                            className="p-1 rounded text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40"
                             aria-label="View file"
                             title="View"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => void removeBankProof(p)}
                             disabled={p.status === "uploading"}
-                            className="p-1.5 rounded-md text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                            className="p-1 rounded text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
                             aria-label="Remove file"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </li>
@@ -1872,84 +2078,42 @@ function SendMoneyPageContent() {
 
           {payInMethod === "MOBILE_MONEY" ||
           transferRow?.payInMethod === "MOBILE_MONEY" ? (
-            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-teal-100 rounded-lg p-3 sm:p-4 bg-teal-50/30">
-              <p className="font-semibold text-slate-800 text-sm">
-                Mobile money — what happens next
-              </p>
-              <ol className="list-decimal list-inside space-y-2 leading-relaxed">
-                <li>
-                  <strong>STK push:</strong> We initiate a collection request to{" "}
-                  <span className="font-mono break-all">
-                    {payerPhone.trim() || transferRow?.payerPhone || "—"}
-                  </span>
-                  . Approve the prompt on your phone when it appears (sandbox:
-                  not connected to a live provider yet).
-                </li>
-                <li>
-                  <strong>Pending → processing:</strong> Your transfer stays in{" "}
-                  <strong>PENDING_PAYMENT</strong> until we confirm funds.
-                </li>
-                <li>
-                  <strong>Receipt and proof:</strong> Keep your mobile-money
-                  confirmation. Upload payment proof for our team to review so
-                  we can complete compliance and payout.
-                </li>
-                <li>
-                  After review, we process the payout to your beneficiary
-                  according to the delivery channel you chose.
-                </li>
-              </ol>
-            </div>
-          ) : (
-            <div className="text-left max-w-lg mx-auto space-y-3 text-xs text-slate-600 border border-slate-200 rounded-lg p-3 sm:p-4 bg-slate-50/50">
-              <p className="font-semibold text-slate-800 text-sm">
-                Bank transfer — what happens next
-              </p>
-              <ol className="list-decimal list-inside space-y-2 leading-relaxed">
-                <li>
-                  Pay from your bank using the account details above. Include
-                  reference{" "}
-                  <span className="font-mono font-medium text-teal-800 break-all">
-                    {referenceCode}
-                  </span>{" "}
-                  in the payment description.
-                </li>
-                <li>
-                  <strong>Payment proof:</strong> Use the upload section below
-                  the bank details to add screenshots or documents so we can
-                  match your transfer faster.
-                </li>
-                <li>
-                  <strong>Admin review:</strong> Our team reconciles incoming
-                  transfers and may request more information.
-                </li>
-                <li>
-                  After approval, we send funds to your beneficiary using the
-                  payout details from this transfer.
-                </li>
-              </ol>
-            </div>
+            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-teal-100 bg-teal-50/30 px-3 py-2 max-w-2xl mx-auto text-center">
+              <span className="font-medium text-slate-800">Mobile money: </span>
+              Approve the collection on{" "}
+              <span className="font-mono text-[11px]">
+                {payerPhone.trim() || transferRow?.payerPhone || "—"}
+              </span>
+              . We move to processing once funds are confirmed, then pay out to
+              your beneficiary.
+            </p>
+          ) : null}
+
+          {!(
+            payInMethod === "MOBILE_MONEY" ||
+            transferRow?.payInMethod === "MOBILE_MONEY"
+          ) && (
+            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 max-w-2xl mx-auto text-center">
+              Once the funds are credited to our account, the transfer will be
+              automatically processed to your beneficiary account. The transfer
+              status will be updated on the transaction history page
+            </p>
           )}
 
-          <p className="text-xs text-slate-500 text-center">
-            Status: <strong>PENDING_PAYMENT</strong>
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch w-full max-w-md mx-auto pt-1">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-stretch w-full max-w-md mx-auto">
             <button
               type="button"
-              onClick={() => {
-                /* TODO: download receipt */
-              }}
-              className="h-10 px-5 sm:px-6 border border-slate-200 bg-white text-slate-800 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+              onClick={handleDownloadTransferReceipt}
+              disabled={!selectedBen && !transferRow?.beneficiary}
+              className="h-9 sm:h-10 flex-1 min-w-0 sm:min-w-[8rem] border border-slate-200 bg-white text-slate-800 rounded-lg text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4 shrink-0" aria-hidden />
-              Download receipt
+              <Download className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              Receipt
             </button>
             <button
               type="button"
               onClick={resetFlow}
-              className="h-10 px-5 sm:px-6 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
+              className="h-9 sm:h-10 flex-1 min-w-0 sm:min-w-[8rem] bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
             >
               New transfer
             </button>
@@ -1991,7 +2155,7 @@ function SendMoneyPageContent() {
           try {
             const benRes = await api.get<{
               data: { beneficiaries: Beneficiary[] };
-            }>("/beneficiaries");
+            }>("/beneficiaries", { params: { activeOnly: "true" } });
             const list = benRes.data.data.beneficiaries;
             setBeneficiaries(list);
             const row = list.find((x) => x.id === created.id);

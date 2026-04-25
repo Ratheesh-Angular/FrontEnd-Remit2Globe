@@ -9,6 +9,7 @@ import {
   maskPhoneLast4,
 } from "@/lib/beneficiaryDisplay";
 import { AddBeneficiaryModal } from "@/components/beneficiaries/AddBeneficiaryModal";
+import { BeneficiaryActiveToggle } from "@/components/beneficiaries/BeneficiaryActiveToggle";
 import { ViewBeneficiaryModal } from "@/components/beneficiaries/ViewBeneficiaryModal";
 import { AppDialog } from "@/components/ui/AppDialog";
 import type { AppDialogProps } from "@/components/ui/AppDialog";
@@ -31,6 +32,8 @@ interface Beneficiary {
   mobileMoneyProvider?: string;
   mobileNumber?: string;
   createdAt: string;
+  /** false = hidden from Send money picker */
+  active?: boolean;
 }
 
 type DialogFields = Pick<
@@ -133,7 +136,7 @@ export default function BeneficiariesPage() {
       title: isEdit ? "Beneficiary updated" : "Beneficiary added",
       message: isEdit
         ? "Their details have been saved."
-        : "You can use them for transfers anytime.",
+        : "You can use them for sending money anytime.",
     });
   }
 
@@ -214,9 +217,17 @@ export default function BeneficiariesPage() {
               : maskPhoneLast4(b.mobileNumber);
             const name = formatBeneficiaryName(b);
 
+            const isActive = b.active !== false;
+
             return (
               <li key={b.id}>
-                <div className="group rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm hover:border-slate-300 hover:shadow-md transition-all">
+                <div
+                  className={`group rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${
+                    isActive
+                      ? "border-slate-200 hover:border-slate-300"
+                      : "border-slate-200/80 border-dashed opacity-95"
+                  }`}
+                >
                   <div className="flex gap-4">
                     <div
                       className="shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center text-sm font-semibold shadow-inner"
@@ -247,23 +258,58 @@ export default function BeneficiariesPage() {
                           {isBank ? "Bank" : "Mobile"}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-100">
-                        <Link
-                          href={`/send-money?beneficiaryId=${encodeURIComponent(b.id)}`}
-                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm shadow-teal-600/20"
-                        >
-                          <SendHorizontal className="w-3.5 h-3.5" />
-                          Send money
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setViewId(b.id)}
-                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View
-                        </button>
-                        <button
+                      <div className="flex flex-col gap-3 mt-4 pt-3 border-t border-slate-100 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isActive ? (
+                            <Link
+                              href={`/send-money?beneficiaryId=${encodeURIComponent(b.id)}`}
+                              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm shadow-teal-600/20"
+                            >
+                              <SendHorizontal className="w-3.5 h-3.5" />
+                              Send money
+                            </Link>
+                          ) : (
+                            <p className="text-xs text-slate-500 max-w-[14rem]">
+                              Inactive recipients are hidden in Send money. Turn
+                              on <span className="font-medium">Active</span> to
+                              use them.
+                            </p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setViewId(b.id)}
+                            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 sm:ml-auto">
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400 hidden sm:inline">
+                            Status
+                          </span>
+                          <BeneficiaryActiveToggle
+                            beneficiaryId={b.id}
+                            active={isActive}
+                            onChange={(next) => {
+                              setBeneficiaries((prev) =>
+                                prev.map((row) =>
+                                  row.id === b.id
+                                    ? { ...row, active: next }
+                                    : row,
+                                ),
+                              );
+                            }}
+                            onError={(message) => {
+                              setDialog({
+                                variant: "error",
+                                title: "Could not update status",
+                                message,
+                              });
+                            }}
+                          />
+                        </div>
+                        {/* <button
                           type="button"
                           onClick={() => {
                             setShowAddModal(false);
@@ -281,7 +327,7 @@ export default function BeneficiariesPage() {
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Remove
-                        </button>
+                        </button> */}
                       </div>
                     </div>
                   </div>

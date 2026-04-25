@@ -5,6 +5,7 @@ import type { Session } from "next-auth";
 import { getSession, signOut as nextAuthSignOut } from "next-auth/react";
 import { useAuthStore, type AuthUser } from "@/store/auth.store";
 import api from "@/lib/api";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -13,29 +14,40 @@ import {
   Users,
   User,
   LogOut,
+  Lock,
 } from "lucide-react";
 
-const navItems = [
+const navItems: {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  /** When true, only enabled if KYC is APPROVED (same rules as dashboard quick actions). */
+  requiresKyc?: boolean;
+}[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
+    label: "Beneficiaries",
+    href: "/beneficiaries",
+    icon: Users,
+    requiresKyc: true,
+  },
+  {
     label: "Send Money",
     href: "/send-money",
     icon: Send,
+    requiresKyc: true,
   },
   {
     label: "Transactions",
     href: "/transactions",
     icon: ArrowLeftRight,
+    requiresKyc: true,
   },
-  {
-    label: "Beneficiaries",
-    href: "/beneficiaries",
-    icon: Users,
-  },
+
   {
     label: "Profile",
     href: "/profile",
@@ -69,6 +81,7 @@ export default function DashboardLayoutClient({
   const { user, setUser, setLoading } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const isKycApproved = user?.kycStatus === "APPROVED";
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -133,11 +146,32 @@ export default function DashboardLayoutClient({
         {/* Nav */}
         <nav className="flex-1 px-4 py-6 space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const locked = Boolean(item.requiresKyc && !isKycApproved);
+            const isActive = !locked && pathname === item.href;
+            if (locked) {
+              return (
+                <div
+                  key={item.href}
+                  title="Complete identity verification to unlock"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed opacity-60"
+                  aria-disabled
+                >
+                  <span className="text-base shrink-0">
+                    <item.icon className="w-5 h-5" />
+                  </span>
+                  <span className="flex-1 min-w-0">{item.label}</span>
+                  <Lock
+                    className="w-4 h-4 shrink-0 text-slate-300"
+                    aria-hidden
+                  />
+                </div>
+              );
+            }
             return (
-              <a
+              <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   ${
@@ -151,7 +185,7 @@ export default function DashboardLayoutClient({
                   <item.icon className="w-5 h-5" />
                 </span>
                 {item.label}
-              </a>
+              </Link>
             );
           })}
         </nav>

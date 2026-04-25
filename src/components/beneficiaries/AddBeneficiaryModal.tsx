@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import api from "@/lib/api";
 import {
   normalizeAba,
@@ -9,7 +9,9 @@ import {
   validateBankIdentifier,
 } from "@/lib/beneficiary-bank-identifier";
 import { Loader } from "@/components/ui/Loader";
-import Flag from "react-world-flags";
+import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
+import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useFlexCountries } from "@/hooks/useFlexCountries";
 import countriesIso from "i18n-iso-countries";
 import {
   getCountryCallingCode,
@@ -17,16 +19,10 @@ import {
   type CountryCode,
 } from "libphonenumber-js";
 
-const API_ROOT =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 function flexApiUrl(path: string) {
   return `${API_ROOT.replace(/\/$/, "")}/flex${path}`;
-}
-
-interface FlexCountry {
-  couCode: string;
-  couName: string;
 }
 
 interface FlexBank {
@@ -51,39 +47,6 @@ function dialCodeFromCouCode(couCode: string): string | undefined {
   }
 }
 
-function FlexCountryFlag({
-  couCode,
-  style,
-}: {
-  couCode: string;
-  style?: CSSProperties;
-}) {
-  const a2 = alpha2FromCouCode(couCode);
-  if (a2) {
-    return (
-      <Flag
-        code={a2}
-        style={{
-          width: 20,
-          height: 14,
-          borderRadius: 2,
-          objectFit: "cover",
-          ...style,
-        }}
-      />
-    );
-  }
-  return (
-    <span
-      className="inline-flex items-center justify-center shrink-0 bg-slate-200 rounded text-[8px] font-semibold text-slate-600 uppercase"
-      style={{ width: 20, height: 14, ...style }}
-    >
-      {couCode.slice(0, 2)}
-    </span>
-  );
-}
-
-
 type DeliveryChannel = "BANK_TRANSFER" | "MOBILE_MONEY";
 
 export interface CreatedBeneficiaryPayload {
@@ -98,6 +61,7 @@ export interface CreatedBeneficiaryPayload {
   swiftBic?: string | null;
   mobileMoneyProvider?: string | null;
   mobileNumber?: string | null;
+  active?: boolean;
 }
 
 export type LockCountry = {
@@ -109,9 +73,7 @@ export type AddBeneficiaryModalProps = {
   open: boolean;
   onClose: () => void;
   /** Called after a successful create, before `onClose`. May return a Promise. */
-  onSuccess?: (
-    beneficiary: CreatedBeneficiaryPayload,
-  ) => void | Promise<void>;
+  onSuccess?: (beneficiary: CreatedBeneficiaryPayload) => void | Promise<void>;
   /** When set, destination country is fixed to this corridor (Flex list match). */
   lockCountry?: LockCountry | null;
   /** When set, modal loads this beneficiary and PATCHes on save instead of creating. */
@@ -188,8 +150,7 @@ export function AddBeneficiaryModal({
   onSubmitError,
 }: AddBeneficiaryModalProps) {
   const countryLocked = Boolean(
-    lockCountry &&
-      (lockCountry.couName?.trim() || lockCountry.couCode?.trim()),
+    lockCountry && (lockCountry.couName?.trim() || lockCountry.couCode?.trim()),
   );
 
   const [formData, setFormData] = useState<FormData>(emptyForm);
@@ -199,12 +160,12 @@ export function AddBeneficiaryModal({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isConfirmingAccount, setIsConfirmingAccount] = useState(false);
-  const [countryOpen, setCountryOpen] = useState(false);
-  const [countrySearch, setCountrySearch] = useState("");
   const [localMobileNumber, setLocalMobileNumber] = useState("");
-  const [flexCountries, setFlexCountries] = useState<FlexCountry[]>([]);
-  const [flexCountriesLoading, setFlexCountriesLoading] = useState(false);
-  const [flexCountriesError, setFlexCountriesError] = useState("");
+  const {
+    countries: flexCountries,
+    loading: flexCountriesLoading,
+    error: flexCountriesError,
+  } = useFlexCountries(open);
   const [flexBanks, setFlexBanks] = useState<FlexBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
@@ -216,16 +177,6 @@ export function AddBeneficiaryModal({
   const isEditMode = Boolean(editBeneficiaryId);
   const [editLoading, setEditLoading] = useState(false);
   const [editLoadError, setEditLoadError] = useState("");
-
-  const filteredFlexCountries = useMemo(() => {
-    const q = countrySearch.toLowerCase().trim();
-    if (!q) return flexCountries;
-    return flexCountries.filter(
-      (c) =>
-        c.couName.toLowerCase().includes(q) ||
-        c.couCode.toLowerCase().includes(q),
-    );
-  }, [flexCountries, countrySearch]);
 
   const filteredFlexBanks = useMemo(() => {
     const q = bankSearch.toLowerCase().trim();
@@ -246,17 +197,6 @@ export function AddBeneficiaryModal({
     [selectedFlexCountry?.couCode],
   );
 
-  // Close country dropdown on outside click
-  useEffect(() => {
-    if (!countryOpen) return;
-    const close = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-country-dropdown]")) setCountryOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [countryOpen]);
-
   useEffect(() => {
     if (!bankOpen) return;
     const close = (e: MouseEvent) => {
@@ -266,38 +206,6 @@ export function AddBeneficiaryModal({
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [bankOpen]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setFlexCountriesLoading(true);
-    setFlexCountriesError("");
-    fetch(flexApiUrl("/countries"), { credentials: "include" })
-      .then((r) => r.json())
-      .then((json) => {
-        const list = json?.data?.data;
-        if (cancelled) return;
-        const raw = Array.isArray(list) ? list : [];
-        setFlexCountries(
-          raw.map((row: { couCode?: string; couName?: string }) => ({
-            couCode: String(row?.couCode ?? "").trim(),
-            couName: String(row?.couName ?? "").trim(),
-          })).filter((c) => c.couCode && c.couName),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFlexCountries([]);
-          setFlexCountriesError("Could not load countries");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setFlexCountriesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   useEffect(() => {
     if (
@@ -337,8 +245,6 @@ export function AddBeneficiaryModal({
       setErrors({});
       setSaveError("");
       setIsConfirmingAccount(false);
-      setCountryOpen(false);
-      setCountrySearch("");
       setBankOpen(false);
       setBankSearch("");
       setBankIdLookupStatus("idle");
@@ -381,8 +287,6 @@ export function AddBeneficiaryModal({
     setErrors({});
     setSaveError("");
     setIsConfirmingAccount(false);
-    setCountryOpen(false);
-    setCountrySearch("");
     setLocalMobileNumber("");
     setFlexBanks([]);
     setBankOpen(false);
@@ -561,8 +465,7 @@ export function AddBeneficiaryModal({
   function validate(): boolean {
     const errs: Partial<Record<keyof FormData, string>> = {};
 
-    if (!formData.firstName.trim())
-      errs.firstName = "First name is required";
+    if (!formData.firstName.trim()) errs.firstName = "First name is required";
     if (!formData.lastName.trim()) errs.lastName = "Last name is required";
 
     if (formData.deliveryChannel === "BANK_TRANSFER") {
@@ -662,929 +565,710 @@ export function AddBeneficiaryModal({
 
   if (!open) return null;
 
-  const showForm =
-    !editBeneficiaryId || (!editLoading && !editLoadError);
+  const showForm = !editBeneficiaryId || (!editLoading && !editLoadError);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {isSaving && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-[2px]">
-                <Loader
-                  variant="centered"
-                  size="xl"
-                  label={
-                    isEditMode ? "Saving changes…" : "Adding beneficiary…"
-                  }
-                  sublabel="Please wait."
+      <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {isSaving && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-[2px]">
+            <Loader
+              variant="centered"
+              size="xl"
+              label={isEditMode ? "Saving changes…" : "Adding beneficiary…"}
+              sublabel="Please wait."
+            />
+          </div>
+        )}
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">
+            {isEditMode ? "Edit beneficiary" : "Add New Beneficiary"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+          </button>
+        </div>
+
+        {editBeneficiaryId && editLoading && (
+          <Loader
+            variant="centered"
+            className="py-20"
+            size="xl"
+            label="Loading beneficiary…"
+          />
+        )}
+
+        {editBeneficiaryId && editLoadError && (
+          <div className="p-8 text-center space-y-4">
+            <p className="text-sm text-red-600">{editLoadError}</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 px-5 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        )}
+
+        {/* Form */}
+        {showForm && (
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {/* Delivery Channel */}
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                Delivery Channel <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.deliveryChannel}
+                disabled={isEditMode}
+                onChange={(e) =>
+                  handleChange(
+                    "deliveryChannel",
+                    e.target.value as DeliveryChannel,
+                  )
+                }
+                className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+              >
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="MOBILE_MONEY">Mobile Money</option>
+              </select>
+              {isEditMode && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Delivery type cannot be changed. Add a new beneficiary to use
+                  a different channel.
+                </p>
+              )}
+            </div>
+
+            {/* First / last name (as per bank account) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  First name (as per bank account){" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="First name"
+                  autoComplete="given-name"
+                  value={formData.firstName}
+                  onChange={(e) => handleChange("firstName", e.target.value)}
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                    errors.firstName ? "border-red-400" : "border-slate-200"
+                  }`}
                 />
+                {errors.firstName && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {errors.firstName}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Last name (as per bank account){" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  autoComplete="family-name"
+                  value={formData.lastName}
+                  onChange={(e) => handleChange("lastName", e.target.value)}
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                    errors.lastName ? "border-red-400" : "border-slate-200"
+                  }`}
+                />
+                {errors.lastName && (
+                  <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Bank Transfer Fields */}
+            {formData.deliveryChannel === "BANK_TRANSFER" && (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Destination Country <span className="text-red-500">*</span>
+                  </label>
+                  {countryLocked ? (
+                    <>
+                      <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
+                        {selectedFlexCountry ? (
+                          <>
+                            <FlexCountryFlag
+                              couCode={selectedFlexCountry.couCode}
+                            />
+                            <span className="font-medium">
+                              {selectedFlexCountry.couName}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-medium">
+                            {formData.country ||
+                              lockCountry?.couName?.trim() ||
+                              "—"}
+                          </span>
+                        )}
+                        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
+                          From transfer
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Country matches the recipient you selected for this
+                        transfer.
+                      </p>
+                    </>
+                  ) : (
+                    <FlexCountrySelect
+                      value={formData.country}
+                      onChange={(couName) => {
+                        handleChange("country", couName);
+                        handleChange("bankName", "");
+                        handleChange("branchName", "");
+                        handleChange("swiftBic", "");
+                        setBankIdLookupStatus("idle");
+                        setBankSearch("");
+                        setBankOpen(false);
+                      }}
+                      error={Boolean(errors.country)}
+                      placeholder="Select country…"
+                      countries={flexCountries}
+                      countriesLoading={flexCountriesLoading}
+                      countriesError={flexCountriesError}
+                    />
+                  )}
+                  {errors.country && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.country}
+                    </p>
+                  )}
+                </div>
+
+                {bankIdConfig.showIdentifierBeforeBankDetails && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      {bankIdConfig.fieldLabel}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder={bankIdConfig.placeholder}
+                      value={formData.swiftBic}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const v =
+                          bankIdConfig.lookup === "ifsc"
+                            ? normalizeIfsc(raw)
+                            : bankIdConfig.lookup === "aba"
+                              ? normalizeAba(raw)
+                              : raw;
+                        handleChange("swiftBic", v);
+                      }}
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        errors.swiftBic ? "border-red-400" : "border-slate-200"
+                      }`}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      {bankIdConfig.hint}
+                    </p>
+                    {bankIdLookupStatus === "loading" && (
+                      <p className="mt-1 text-xs text-teal-600">
+                        Looking up bank details…
+                      </p>
+                    )}
+                    {bankIdLookupStatus === "ok" && (
+                      <p className="mt-1 text-xs text-teal-700">
+                        Bank and branch were filled automatically — you can edit
+                        them below if needed.
+                      </p>
+                    )}
+                    {bankIdLookupStatus === "not_found" && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Code not found. Check it, or enter bank and branch
+                        manually.
+                      </p>
+                    )}
+                    {bankIdLookupStatus === "error" && (
+                      <p className="mt-1 text-xs text-red-600">
+                        Lookup failed. Enter bank and branch manually.
+                      </p>
+                    )}
+                    {errors.swiftBic && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.swiftBic}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Bank name <span className="text-red-500">*</span>
+                  </label>
+                  {bankIdConfig.hideFlexBankPicker ? (
+                    <input
+                      type="text"
+                      placeholder={
+                        bankIdConfig.lookup === "ifsc"
+                          ? "Filled from IFSC or type manually"
+                          : bankIdConfig.lookup === "aba"
+                            ? "Filled from routing number or type manually"
+                            : "Bank name"
+                      }
+                      value={formData.bankName}
+                      onChange={(e) => handleChange("bankName", e.target.value)}
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        errors.bankName ? "border-red-400" : "border-slate-200"
+                      }`}
+                    />
+                  ) : (
+                    <div className="relative" data-bank-dropdown>
+                      <button
+                        type="button"
+                        disabled={
+                          !formData.country ||
+                          banksLoading ||
+                          flexBanks.length === 0
+                        }
+                        onClick={() => {
+                          if (
+                            !formData.country ||
+                            banksLoading ||
+                            flexBanks.length === 0
+                          )
+                            return;
+                          setBankOpen((v) => !v);
+                          setBankSearch("");
+                        }}
+                        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                          errors.bankName
+                            ? "border-red-400"
+                            : "border-slate-200"
+                        } ${formData.bankName ? "text-slate-900" : "text-slate-400"}`}
+                      >
+                        {banksLoading ? (
+                          <span>Loading banks…</span>
+                        ) : flexBanks.length === 0 && formData.country ? (
+                          <span>No banks for this country</span>
+                        ) : formData.bankName ? (
+                          <span className="truncate">{formData.bankName}</span>
+                        ) : (
+                          <span>Select bank…</span>
+                        )}
+                        <svg
+                          className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+
+                      {bankOpen && flexBanks.length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                          <div className="p-2 border-b border-slate-100">
+                            <input
+                              autoFocus
+                              placeholder="Search bank…"
+                              value={bankSearch}
+                              onChange={(e) => setBankSearch(e.target.value)}
+                              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                            />
+                          </div>
+                          <ul className="max-h-52 overflow-y-auto py-1">
+                            {filteredFlexBanks.map((b, idx) => (
+                              <li key={`${b.bankCode}-${b.bankName}-${idx}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleChange("bankName", b.bankName);
+                                    setBankOpen(false);
+                                  }}
+                                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                                    formData.bankName === b.bankName
+                                      ? "bg-teal-50 text-teal-700 font-medium"
+                                      : "text-slate-700"
+                                  }`}
+                                >
+                                  <span className="truncate">{b.bankName}</span>
+                                  {formData.bankName === b.bankName && (
+                                    <svg
+                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                </button>
+                              </li>
+                            ))}
+                            {filteredFlexBanks.length === 0 && (
+                              <li className="px-3 py-4 text-sm text-slate-400 text-center">
+                                No banks match your search
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {errors.bankName && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.bankName}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Branch name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Main Street"
+                    value={formData.branchName}
+                    onChange={(e) => handleChange("branchName", e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Account Number / IBAN{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type={isConfirmingAccount ? "password" : "text"}
+                    placeholder="0123456789"
+                    value={formData.accountNumber}
+                    onChange={(e) => {
+                      handleChange("accountNumber", e.target.value);
+                      // Inline validation if confirm field has value
+                      if (
+                        formData.confirmAccountNumber &&
+                        e.target.value !== formData.confirmAccountNumber
+                      ) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          confirmAccountNumber: "Account numbers do not match",
+                        }));
+                      } else if (
+                        formData.confirmAccountNumber &&
+                        e.target.value === formData.confirmAccountNumber
+                      ) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          confirmAccountNumber: undefined,
+                        }));
+                      }
+                    }}
+                    onFocus={() => setIsConfirmingAccount(false)}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.accountNumber
+                        ? "border-red-400"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {errors.accountNumber && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.accountNumber}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Confirm Account Number / IBAN{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Re-enter account number"
+                    value={formData.confirmAccountNumber}
+                    onPaste={(e) => e.preventDefault()}
+                    onCopy={(e) => e.preventDefault()}
+                    onCut={(e) => e.preventDefault()}
+                    onChange={(e) => {
+                      handleChange("confirmAccountNumber", e.target.value);
+                      // Inline validation
+                      if (
+                        e.target.value &&
+                        formData.accountNumber !== e.target.value
+                      ) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          confirmAccountNumber: "Account numbers do not match",
+                        }));
+                      } else {
+                        setErrors((prev) => ({
+                          ...prev,
+                          confirmAccountNumber: undefined,
+                        }));
+                      }
+                    }}
+                    onFocus={() => setIsConfirmingAccount(true)}
+                    onBlur={() => setIsConfirmingAccount(false)}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.confirmAccountNumber
+                        ? "border-red-400"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {errors.confirmAccountNumber && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.confirmAccountNumber}
+                    </p>
+                  )}
+                </div>
+
+                {!bankIdConfig.showIdentifierBeforeBankDetails && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      {bankIdConfig.fieldLabel}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder={bankIdConfig.placeholder}
+                      value={formData.swiftBic}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const v =
+                          bankIdConfig.lookup === "ifsc"
+                            ? normalizeIfsc(raw)
+                            : bankIdConfig.lookup === "aba"
+                              ? normalizeAba(raw)
+                              : raw;
+                        handleChange("swiftBic", v);
+                      }}
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        errors.swiftBic ? "border-red-400" : "border-slate-200"
+                      }`}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      {bankIdConfig.hint}
+                    </p>
+                    {errors.swiftBic && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.swiftBic}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Mobile Money Fields */}
+            {formData.deliveryChannel === "MOBILE_MONEY" && (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Country <span className="text-red-500">*</span>
+                  </label>
+                  {countryLocked ? (
+                    <>
+                      <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
+                        {selectedFlexCountry ? (
+                          <>
+                            <FlexCountryFlag
+                              couCode={selectedFlexCountry.couCode}
+                            />
+                            <span className="font-medium">
+                              {selectedFlexCountry.couName}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-medium">
+                            {formData.country ||
+                              lockCountry?.couName?.trim() ||
+                              "—"}
+                          </span>
+                        )}
+                        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
+                          From transfer
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Country matches the recipient you selected for this
+                        transfer.
+                      </p>
+                    </>
+                  ) : (
+                    <FlexCountrySelect
+                      value={formData.country}
+                      onChange={(couName) => {
+                        handleChange("country", couName);
+                        setLocalMobileNumber("");
+                      }}
+                      error={Boolean(errors.country)}
+                      placeholder="Select country…"
+                      countries={flexCountries}
+                      countriesLoading={flexCountriesLoading}
+                      countriesError={flexCountriesError}
+                    />
+                  )}
+                  {errors.country && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.country}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Mobile Money Provider{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.mobileMoneyProvider}
+                    onChange={(e) =>
+                      handleChange("mobileMoneyProvider", e.target.value)
+                    }
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.mobileMoneyProvider
+                        ? "border-red-400"
+                        : "border-slate-200"
+                    } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"}`}
+                  >
+                    <option value="">Select provider</option>
+                    <option value="M-Pesa">M-Pesa</option>
+                    <option value="Wallet Money">Wallet Money</option>
+                  </select>
+                  {errors.mobileMoneyProvider && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.mobileMoneyProvider}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <div
+                    className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+                      errors.mobileNumber
+                        ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
+                        : "border-slate-200"
+                    }`}
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="flex items-center gap-1.5 px-3 h-10 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
+                        {formData.country && selectedFlexCountry ? (
+                          <>
+                            <FlexCountryFlag
+                              couCode={selectedFlexCountry.couCode}
+                            />
+                            {dialCodeFromCouCode(
+                              selectedFlexCountry.couCode,
+                            ) ? (
+                              <span className="text-slate-700 font-medium">
+                                +
+                                {dialCodeFromCouCode(
+                                  selectedFlexCountry.couCode,
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 text-xs">—</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">Select country</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder={
+                        formData.country && selectedFlexCountry
+                          ? "National mobile number (7–15 digits)"
+                          : "Select country first"
+                      }
+                      value={localMobileNumber}
+                      onChange={(e) => {
+                        if (!selectedFlexCountry) return;
+                        const digits = e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 15);
+                        setLocalMobileNumber(digits);
+                        setErrors((prev) => ({
+                          ...prev,
+                          mobileNumber: undefined,
+                        }));
+                      }}
+                      disabled={!formData.country}
+                      className="flex-1 h-10 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
+                    />
+                  </div>
+                  {errors.mobileNumber && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.mobileNumber}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Error */}
+            {saveError && !onSubmitError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                {saveError}
               </div>
             )}
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {isEditMode ? "Edit beneficiary" : "Add New Beneficiary"}
-              </h2>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                className="flex-1 h-10 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
-                <svg
-                  className="w-5 h-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                </svg>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    {isEditMode ? "Saving…" : "Adding…"}
+                  </>
+                ) : isEditMode ? (
+                  "Save changes"
+                ) : (
+                  "Add Beneficiary"
+                )}
               </button>
             </div>
-
-            {editBeneficiaryId && editLoading && (
-              <Loader
-                variant="centered"
-                className="py-20"
-                size="xl"
-                label="Loading beneficiary…"
-              />
-            )}
-
-            {editBeneficiaryId && editLoadError && (
-              <div className="p-8 text-center space-y-4">
-                <p className="text-sm text-red-600">{editLoadError}</p>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="h-10 px-5 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Close
-                </button>
-              </div>
-            )}
-
-            {/* Form */}
-            {showForm && (
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {/* Delivery Channel */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  Delivery Channel <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.deliveryChannel}
-                  disabled={isEditMode}
-                  onChange={(e) =>
-                    handleChange(
-                      "deliveryChannel",
-                      e.target.value as DeliveryChannel,
-                    )
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
-                >
-                  <option value="BANK_TRANSFER">Bank Transfer</option>
-                  <option value="MOBILE_MONEY">Mobile Money</option>
-                </select>
-                {isEditMode && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Delivery type cannot be changed. Add a new beneficiary to
-                    use a different channel.
-                  </p>
-                )}
-              </div>
-
-              {/* First / last name (as per bank account) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                    First name (as per bank account){" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="First name"
-                    autoComplete="given-name"
-                    value={formData.firstName}
-                    onChange={(e) => handleChange("firstName", e.target.value)}
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.firstName ? "border-red-400" : "border-slate-200"
-                    }`}
-                  />
-                  {errors.firstName && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.firstName}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                    Last name (as per bank account){" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Last name"
-                    autoComplete="family-name"
-                    value={formData.lastName}
-                    onChange={(e) => handleChange("lastName", e.target.value)}
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.lastName ? "border-red-400" : "border-slate-200"
-                    }`}
-                  />
-                  {errors.lastName && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.lastName}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Bank Transfer Fields */}
-              {formData.deliveryChannel === "BANK_TRANSFER" && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Destination Country{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    {countryLocked ? (
-                      <>
-                        <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                          {selectedFlexCountry ? (
-                            <>
-                              <FlexCountryFlag
-                                couCode={selectedFlexCountry.couCode}
-                              />
-                              <span className="font-medium">
-                                {selectedFlexCountry.couName}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="font-medium">
-                              {formData.country ||
-                                lockCountry?.couName?.trim() ||
-                                "—"}
-                            </span>
-                          )}
-                          <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
-                            From transfer
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Country matches the recipient you selected for this
-                          transfer.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="relative" data-country-dropdown>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCountryOpen((v) => !v);
-                            setCountrySearch("");
-                            setBankOpen(false);
-                          }}
-                          className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white ${
-                            errors.country
-                              ? "border-red-400"
-                              : "border-slate-200"
-                          } ${formData.country ? "text-slate-900" : "text-slate-400"}`}
-                        >
-                          {formData.country && selectedFlexCountry ? (
-                            <>
-                              <FlexCountryFlag
-                                couCode={selectedFlexCountry.couCode}
-                              />
-                              <span>{formData.country}</span>
-                            </>
-                          ) : formData.country ? (
-                            <span>{formData.country}</span>
-                          ) : (
-                            <span>Select country…</span>
-                          )}
-                          <svg
-                            className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </button>
-
-                        {countryOpen && (
-                          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="p-2 border-b border-slate-100">
-                              <input
-                                autoFocus
-                                placeholder="Search country…"
-                                value={countrySearch}
-                                onChange={(e) =>
-                                  setCountrySearch(e.target.value)
-                                }
-                                className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                              />
-                            </div>
-                            <ul className="max-h-52 overflow-y-auto py-1">
-                              {flexCountriesLoading && (
-                                <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                  Loading countries…
-                                </li>
-                              )}
-                              {!flexCountriesLoading &&
-                                filteredFlexCountries.map((c, idx) => (
-                                  <li
-                                    key={`bank-${c.couCode}-${c.couName}-${idx}`}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleChange("country", c.couName);
-                                        handleChange("bankName", "");
-                                        handleChange("branchName", "");
-                                        handleChange("swiftBic", "");
-                                        setBankIdLookupStatus("idle");
-                                        setCountryOpen(false);
-                                        setBankSearch("");
-                                        setBankOpen(false);
-                                      }}
-                                      className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                                        formData.country === c.couName
-                                          ? "bg-teal-50 text-teal-700 font-medium"
-                                          : "text-slate-700"
-                                      }`}
-                                    >
-                                      <FlexCountryFlag couCode={c.couCode} />
-                                      <span>{c.couName}</span>
-                                      {formData.country === c.couName && (
-                                        <svg
-                                          className="ml-auto w-4 h-4 text-teal-600"
-                                          viewBox="0 0 20 20"
-                                          fill="currentColor"
-                                        >
-                                          <path
-                                            fillRule="evenodd"
-                                            d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                            clipRule="evenodd"
-                                          />
-                                        </svg>
-                                      )}
-                                    </button>
-                                  </li>
-                                ))}
-                              {!flexCountriesLoading &&
-                                filteredFlexCountries.length === 0 && (
-                                  <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                    {flexCountriesError
-                                      ? flexCountriesError
-                                      : "No countries found"}
-                                  </li>
-                                )}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {errors.country && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.country}
-                      </p>
-                    )}
-                  </div>
-
-                  {bankIdConfig.showIdentifierBeforeBankDetails && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                        {bankIdConfig.fieldLabel}{" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        autoComplete="off"
-                        placeholder={bankIdConfig.placeholder}
-                        value={formData.swiftBic}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const v =
-                            bankIdConfig.lookup === "ifsc"
-                              ? normalizeIfsc(raw)
-                              : bankIdConfig.lookup === "aba"
-                                ? normalizeAba(raw)
-                                : raw;
-                          handleChange("swiftBic", v);
-                        }}
-                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                          errors.swiftBic
-                            ? "border-red-400"
-                            : "border-slate-200"
-                        }`}
-                      />
-                      <p className="mt-1 text-xs text-slate-500">
-                        {bankIdConfig.hint}
-                      </p>
-                      {bankIdLookupStatus === "loading" && (
-                        <p className="mt-1 text-xs text-teal-600">
-                          Looking up bank details…
-                        </p>
-                      )}
-                      {bankIdLookupStatus === "ok" && (
-                        <p className="mt-1 text-xs text-teal-700">
-                          Bank and branch were filled automatically — you can
-                          edit them below if needed.
-                        </p>
-                      )}
-                      {bankIdLookupStatus === "not_found" && (
-                        <p className="mt-1 text-xs text-amber-700">
-                          Code not found. Check it, or enter bank and branch
-                          manually.
-                        </p>
-                      )}
-                      {bankIdLookupStatus === "error" && (
-                        <p className="mt-1 text-xs text-red-600">
-                          Lookup failed. Enter bank and branch manually.
-                        </p>
-                      )}
-                      {errors.swiftBic && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {errors.swiftBic}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Bank name <span className="text-red-500">*</span>
-                    </label>
-                    {bankIdConfig.hideFlexBankPicker ? (
-                      <input
-                        type="text"
-                        placeholder={
-                          bankIdConfig.lookup === "ifsc"
-                            ? "Filled from IFSC or type manually"
-                            : bankIdConfig.lookup === "aba"
-                              ? "Filled from routing number or type manually"
-                              : "Bank name"
-                        }
-                        value={formData.bankName}
-                        onChange={(e) =>
-                          handleChange("bankName", e.target.value)
-                        }
-                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                          errors.bankName
-                            ? "border-red-400"
-                            : "border-slate-200"
-                        }`}
-                      />
-                    ) : (
-                      <div className="relative" data-bank-dropdown>
-                        <button
-                          type="button"
-                          disabled={
-                            !formData.country ||
-                            banksLoading ||
-                            flexBanks.length === 0
-                          }
-                          onClick={() => {
-                            if (
-                              !formData.country ||
-                              banksLoading ||
-                              flexBanks.length === 0
-                            )
-                              return;
-                            setBankOpen((v) => !v);
-                            setBankSearch("");
-                            setCountryOpen(false);
-                          }}
-                          className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
-                            errors.bankName
-                              ? "border-red-400"
-                              : "border-slate-200"
-                          } ${formData.bankName ? "text-slate-900" : "text-slate-400"}`}
-                        >
-                          {banksLoading ? (
-                            <span>Loading banks…</span>
-                          ) : flexBanks.length === 0 && formData.country ? (
-                            <span>No banks for this country</span>
-                          ) : formData.bankName ? (
-                            <span className="truncate">{formData.bankName}</span>
-                          ) : (
-                            <span>Select bank…</span>
-                          )}
-                          <svg
-                            className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </button>
-
-                        {bankOpen && flexBanks.length > 0 && (
-                          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="p-2 border-b border-slate-100">
-                              <input
-                                autoFocus
-                                placeholder="Search bank…"
-                                value={bankSearch}
-                                onChange={(e) =>
-                                  setBankSearch(e.target.value)
-                                }
-                                className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                              />
-                            </div>
-                            <ul className="max-h-52 overflow-y-auto py-1">
-                              {filteredFlexBanks.map((b, idx) => (
-                                <li key={`${b.bankCode}-${b.bankName}-${idx}`}>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleChange("bankName", b.bankName);
-                                      setBankOpen(false);
-                                    }}
-                                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                                      formData.bankName === b.bankName
-                                        ? "bg-teal-50 text-teal-700 font-medium"
-                                        : "text-slate-700"
-                                    }`}
-                                  >
-                                    <span className="truncate">
-                                      {b.bankName}
-                                    </span>
-                                    {formData.bankName === b.bankName && (
-                                      <svg
-                                        className="ml-auto w-4 h-4 shrink-0 text-teal-600"
-                                        viewBox="0 0 20 20"
-                                        fill="currentColor"
-                                      >
-                                        <path
-                                          fillRule="evenodd"
-                                          d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                          clipRule="evenodd"
-                                        />
-                                      </svg>
-                                    )}
-                                  </button>
-                                </li>
-                              ))}
-                              {filteredFlexBanks.length === 0 && (
-                                <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                  No banks match your search
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {errors.bankName && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.bankName}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Branch name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Main Street"
-                      value={formData.branchName}
-                      onChange={(e) =>
-                        handleChange("branchName", e.target.value)
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Account Number / IBAN{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type={isConfirmingAccount ? "password" : "text"}
-                      placeholder="0123456789"
-                      value={formData.accountNumber}
-                      onChange={(e) => {
-                        handleChange("accountNumber", e.target.value);
-                        // Inline validation if confirm field has value
-                        if (
-                          formData.confirmAccountNumber &&
-                          e.target.value !== formData.confirmAccountNumber
-                        ) {
-                          setErrors((prev) => ({
-                            ...prev,
-                            confirmAccountNumber:
-                              "Account numbers do not match",
-                          }));
-                        } else if (
-                          formData.confirmAccountNumber &&
-                          e.target.value === formData.confirmAccountNumber
-                        ) {
-                          setErrors((prev) => ({
-                            ...prev,
-                            confirmAccountNumber: undefined,
-                          }));
-                        }
-                      }}
-                      onFocus={() => setIsConfirmingAccount(false)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.accountNumber
-                          ? "border-red-400"
-                          : "border-slate-200"
-                      }`}
-                    />
-                    {errors.accountNumber && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.accountNumber}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Confirm Account Number / IBAN{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Re-enter account number"
-                      value={formData.confirmAccountNumber}
-                      onPaste={(e) => e.preventDefault()}
-                      onCopy={(e) => e.preventDefault()}
-                      onCut={(e) => e.preventDefault()}
-                      onChange={(e) => {
-                        handleChange("confirmAccountNumber", e.target.value);
-                        // Inline validation
-                        if (
-                          e.target.value &&
-                          formData.accountNumber !== e.target.value
-                        ) {
-                          setErrors((prev) => ({
-                            ...prev,
-                            confirmAccountNumber:
-                              "Account numbers do not match",
-                          }));
-                        } else {
-                          setErrors((prev) => ({
-                            ...prev,
-                            confirmAccountNumber: undefined,
-                          }));
-                        }
-                      }}
-                      onFocus={() => setIsConfirmingAccount(true)}
-                      onBlur={() => setIsConfirmingAccount(false)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.confirmAccountNumber
-                          ? "border-red-400"
-                          : "border-slate-200"
-                      }`}
-                    />
-                    {errors.confirmAccountNumber && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.confirmAccountNumber}
-                      </p>
-                    )}
-                  </div>
-
-                  {!bankIdConfig.showIdentifierBeforeBankDetails && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                        {bankIdConfig.fieldLabel}{" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        autoComplete="off"
-                        placeholder={bankIdConfig.placeholder}
-                        value={formData.swiftBic}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const v =
-                            bankIdConfig.lookup === "ifsc"
-                              ? normalizeIfsc(raw)
-                              : bankIdConfig.lookup === "aba"
-                                ? normalizeAba(raw)
-                                : raw;
-                          handleChange("swiftBic", v);
-                        }}
-                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                          errors.swiftBic
-                            ? "border-red-400"
-                            : "border-slate-200"
-                        }`}
-                      />
-                      <p className="mt-1 text-xs text-slate-500">
-                        {bankIdConfig.hint}
-                      </p>
-                      {errors.swiftBic && (
-                        <p className="mt-1 text-xs text-red-500">
-                          {errors.swiftBic}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Mobile Money Fields */}
-              {formData.deliveryChannel === "MOBILE_MONEY" && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Country <span className="text-red-500">*</span>
-                    </label>
-                    {countryLocked ? (
-                      <>
-                        <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                          {selectedFlexCountry ? (
-                            <>
-                              <FlexCountryFlag
-                                couCode={selectedFlexCountry.couCode}
-                              />
-                              <span className="font-medium">
-                                {selectedFlexCountry.couName}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="font-medium">
-                              {formData.country ||
-                                lockCountry?.couName?.trim() ||
-                                "—"}
-                            </span>
-                          )}
-                          <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
-                            From transfer
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Country matches the recipient you selected for this
-                          transfer.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="relative" data-country-dropdown>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCountryOpen((v) => !v);
-                            setCountrySearch("");
-                            setBankOpen(false);
-                          }}
-                          className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white ${
-                            errors.country
-                              ? "border-red-400"
-                              : "border-slate-200"
-                          } ${formData.country ? "text-slate-900" : "text-slate-400"}`}
-                        >
-                          {formData.country && selectedFlexCountry ? (
-                            <>
-                              <FlexCountryFlag
-                                couCode={selectedFlexCountry.couCode}
-                              />
-                              <span>{formData.country}</span>
-                            </>
-                          ) : formData.country ? (
-                            <span>{formData.country}</span>
-                          ) : (
-                            <span>Select country…</span>
-                          )}
-                          <svg
-                            className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </button>
-
-                        {countryOpen && (
-                          <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="p-2 border-b border-slate-100">
-                              <input
-                                autoFocus
-                                placeholder="Search country…"
-                                value={countrySearch}
-                                onChange={(e) =>
-                                  setCountrySearch(e.target.value)
-                                }
-                                className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                              />
-                            </div>
-                            <ul className="max-h-52 overflow-y-auto py-1">
-                              {flexCountriesLoading && (
-                                <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                  Loading countries…
-                                </li>
-                              )}
-                              {!flexCountriesLoading &&
-                                filteredFlexCountries.map((c, idx) => (
-                                  <li
-                                    key={`mm-${c.couCode}-${c.couName}-${idx}`}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleChange("country", c.couName);
-                                        setCountryOpen(false);
-                                        setLocalMobileNumber("");
-                                      }}
-                                      className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                                        formData.country === c.couName
-                                          ? "bg-teal-50 text-teal-700 font-medium"
-                                          : "text-slate-700"
-                                      }`}
-                                    >
-                                      <FlexCountryFlag couCode={c.couCode} />
-                                      <span>{c.couName}</span>
-                                      {formData.country === c.couName && (
-                                        <svg
-                                          className="ml-auto w-4 h-4 text-teal-600"
-                                          viewBox="0 0 20 20"
-                                          fill="currentColor"
-                                        >
-                                          <path
-                                            fillRule="evenodd"
-                                            d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                            clipRule="evenodd"
-                                          />
-                                        </svg>
-                                      )}
-                                    </button>
-                                  </li>
-                                ))}
-                              {!flexCountriesLoading &&
-                                filteredFlexCountries.length === 0 && (
-                                  <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                                    {flexCountriesError
-                                      ? flexCountriesError
-                                      : "No countries found"}
-                                  </li>
-                                )}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {errors.country && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.country}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Mobile Money Provider{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.mobileMoneyProvider}
-                      onChange={(e) =>
-                        handleChange("mobileMoneyProvider", e.target.value)
-                      }
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.mobileMoneyProvider
-                          ? "border-red-400"
-                          : "border-slate-200"
-                      } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"}`}
-                    >
-                      <option value="">Select provider</option>
-                      <option value="M-Pesa">M-Pesa</option>
-                      <option value="Wallet Money">Wallet Money</option>
-                    </select>
-                    {errors.mobileMoneyProvider && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.mobileMoneyProvider}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                      Mobile Number <span className="text-red-500">*</span>
-                    </label>
-                    <div
-                      className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
-                        errors.mobileNumber
-                          ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
-                          : "border-slate-200"
-                      }`}
-                    >
-                      <div className="flex-shrink-0">
-                        <div className="flex items-center gap-1.5 px-3 h-10 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
-                          {formData.country && selectedFlexCountry ? (
-                            <>
-                              <FlexCountryFlag
-                                couCode={selectedFlexCountry.couCode}
-                              />
-                              {dialCodeFromCouCode(
-                                selectedFlexCountry.couCode,
-                              ) ? (
-                                <span className="text-slate-700 font-medium">
-                                  +
-                                  {dialCodeFromCouCode(
-                                    selectedFlexCountry.couCode,
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-slate-500 text-xs">
-                                  —
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-slate-400">
-                              Select country
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        placeholder={
-                          formData.country && selectedFlexCountry
-                            ? "National mobile number (7–15 digits)"
-                            : "Select country first"
-                        }
-                        value={localMobileNumber}
-                        onChange={(e) => {
-                          if (!selectedFlexCountry) return;
-                          const digits = e.target.value
-                            .replace(/\D/g, "")
-                            .slice(0, 15);
-                          setLocalMobileNumber(digits);
-                          setErrors((prev) => ({
-                            ...prev,
-                            mobileNumber: undefined,
-                          }));
-                        }}
-                        disabled={!formData.country}
-                        className="flex-1 h-10 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
-                      />
-                    </div>
-                    {errors.mobileNumber && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.mobileNumber}
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* Error */}
-              {saveError && !onSubmitError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                  {saveError}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={isSaving}
-                  className="flex-1 h-10 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="flex-1 h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      {isEditMode ? "Saving…" : "Adding…"}
-                    </>
-                  ) : isEditMode ? (
-                    "Save changes"
-                  ) : (
-                    "Add Beneficiary"
-                  )}
-                </button>
-              </div>
-            </form>
-            )}
-          </div>
-        </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }

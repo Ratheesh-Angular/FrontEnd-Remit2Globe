@@ -190,6 +190,14 @@ export function ViewBeneficiaryModal({
                 <Detail label="First name" value={row.firstName} />
                 <Detail label="Last name" value={row.lastName} />
                 <Detail label="Country" value={row.country} />
+                <Detail
+                  label="Send money"
+                  value={
+                    row.active === false
+                      ? "Inactive (hidden in Send money)"
+                      : "Active"
+                  }
+                />
                 {isBank ? (
                   <>
                     <Detail label="Bank name" value={row.bankName} />
@@ -230,7 +238,7 @@ export function ViewBeneficiaryModal({
             >
               Close
             </button>
-            <button
+            {/* <button
               type="button"
               disabled={!row || !!error}
               onClick={() => {
@@ -252,7 +260,7 @@ export function ViewBeneficiaryModal({
             >
               <Trash2 className="w-4 h-4" />
               Delete
-            </button>
+            </button> */}
           </div>
         </div>
       </div>

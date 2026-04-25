@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
 import Flag from "react-world-flags";
 import { signIn } from "next-auth/react";
-import { ALL_COUNTRIES, type Country } from "@/lib/phone-countries";
+import type { Country } from "@/lib/phone-countries";
+import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
+import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useFlexCountries } from "@/hooks/useFlexCountries";
+import countriesIso from "i18n-iso-countries";
 
 function oauthErrorMessage(code: string) {
   switch (code) {
@@ -52,10 +56,10 @@ export default function RegisterPage() {
   const [agreed, setAgreed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Country selector
+  const { countries: flexCountries, loading: flexCountriesLoading } =
+    useFlexCountries(true);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
-  const [countrySearchOpen, setCountrySearchOpen] = useState(false);
-  const [countrySearch, setCountrySearch] = useState("");
+  const countryDetectDone = useRef(false);
 
   const [localPhone, setLocalPhone] = useState("");
   const [oauthErrorCode, setOauthErrorCode] = useState<string | null>(null);
@@ -73,48 +77,43 @@ export default function RegisterPage() {
     window.history.replaceState({}, "", `${url.pathname}${qs ? `?${qs}` : ""}`);
   }, []);
 
-  // Detect user's country by IP on mount
+  // Detect sender country (Flex list) from IP once countries are loaded
   useEffect(() => {
-    async function detectCountry() {
+    if (flexCountriesLoading || flexCountries.length === 0) return;
+    if (countryDetectDone.current) return;
+    countryDetectDone.current = true;
+
+    let cancelled = false;
+    (async () => {
       try {
         const response = await fetch("https://ipapi.co/json/");
         const data = await response.json();
-        const countryCode = data.country_code;
-        const country = ALL_COUNTRIES.find((c) => c.code === countryCode);
-        if (country) {
-          setSelectedCountry(country);
-          setFormData((prev) => ({ ...prev, country: country.name }));
-        } else {
-          // Default to India if detection fails
-          const defaultCountry = ALL_COUNTRIES.find((c) => c.code === "IN");
-          if (defaultCountry) {
-            setSelectedCountry(defaultCountry);
-            setFormData((prev) => ({ ...prev, country: defaultCountry.name }));
-          }
+        const a2 =
+          typeof data.country_code === "string"
+            ? data.country_code.toUpperCase()
+            : "";
+        const match =
+          a2 &&
+          flexCountries.find(
+            (c) => countriesIso.alpha3ToAlpha2(c.couCode) === a2,
+          );
+        const pick = match ?? flexCountries[0];
+        if (pick && !cancelled) {
+          setSelectedCountry(phoneCountryFromCouCode(pick.couCode));
+          setFormData((prev) => ({ ...prev, country: pick.couName }));
         }
-      } catch (error) {
-        // Default to India on error
-        const defaultCountry = ALL_COUNTRIES.find((c) => c.code === "IN");
-        if (defaultCountry) {
-          setSelectedCountry(defaultCountry);
-          setFormData((prev) => ({ ...prev, country: defaultCountry.name }));
+      } catch {
+        const pick = flexCountries[0];
+        if (pick && !cancelled) {
+          setSelectedCountry(phoneCountryFromCouCode(pick.couCode));
+          setFormData((prev) => ({ ...prev, country: pick.couName }));
         }
       }
-    }
-    detectCountry();
-  }, []);
-
-  // Close country dropdown on outside click
-  useEffect(() => {
-    if (!countrySearchOpen) return;
-    const close = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-country-dropdown]"))
-        setCountrySearchOpen(false);
+    })();
+    return () => {
+      cancelled = true;
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [countrySearchOpen]);
+  }, [flexCountriesLoading, flexCountries]);
 
   function validate(): FormErrors {
     const errs: FormErrors = {};
@@ -130,14 +129,18 @@ export default function RegisterPage() {
       errs.phone = "Please select a country first.";
     } else if (!localPhone) {
       errs.phone = "Phone number is required.";
-    } else if (
-      localPhone.length < selectedCountry.minDigits ||
-      localPhone.length > selectedCountry.maxDigits
-    ) {
-      errs.phone =
-        selectedCountry.minDigits === selectedCountry.maxDigits
-          ? `Enter exactly ${selectedCountry.minDigits} digits for ${selectedCountry.name} (+${selectedCountry.dialCode}).`
-          : `Enter ${selectedCountry.minDigits}–${selectedCountry.maxDigits} digits for ${selectedCountry.name} (+${selectedCountry.dialCode}).`;
+    } else {
+      const min = selectedCountry?.minDigits ?? 7;
+      const max = selectedCountry?.maxDigits ?? 15;
+      if (localPhone.length < min || localPhone.length > max) {
+        const label = selectedCountry?.name ?? "this country";
+        const dial = selectedCountry?.dialCode ?? "";
+        const dialPart = dial ? ` (+${dial})` : "";
+        errs.phone =
+          min === max
+            ? `Enter exactly ${min} digits for ${label}${dialPart}.`
+            : `Enter ${min}–${max} digits for ${label}${dialPart}.`;
+      }
     }
     // if (!agreed) {
     //   errs.agreed = "You must agree to the Terms of Service.";
@@ -265,7 +268,7 @@ export default function RegisterPage() {
           </select>
         </div>
 
-        {/* Country Selector */}
+        {/* Country Selector (Flex API list, same as remittance) */}
         <div className="mb-6">
           <label
             htmlFor="country"
@@ -273,118 +276,27 @@ export default function RegisterPage() {
           >
             Country
           </label>
-          <div className="relative" data-country-dropdown>
-            <button
-              type="button"
-              onClick={() => {
-                setCountrySearchOpen((v) => !v);
-                setCountrySearch("");
-              }}
-              disabled={isLoading}
-              className={`${inputBase} ${errors.country ? inputError : ""} cursor-pointer flex items-center justify-between text-left`}
-            >
-              {selectedCountry ? (
-                <div className="flex items-center gap-2.5">
-                  <Flag
-                    code={selectedCountry.code}
-                    style={{
-                      width: 20,
-                      height: 14,
-                      borderRadius: 2,
-                      objectFit: "cover",
-                    }}
-                  />
-                  <span className="text-slate-900">{selectedCountry.name}</span>
-                </div>
-              ) : (
-                <span className="text-slate-400">Select your country</span>
-              )}
-              <svg
-                className="w-4 h-4 text-slate-400 shrink-0"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-
-            {/* Country Dropdown */}
-            {countrySearchOpen && (
-              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                <div className="p-2 border-b border-slate-100">
-                  <input
-                    autoFocus
-                    placeholder="Search country…"
-                    value={countrySearch}
-                    onChange={(e) => setCountrySearch(e.target.value)}
-                    className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                  />
-                </div>
-                <ul className="max-h-60 overflow-y-auto py-1">
-                  {ALL_COUNTRIES.filter((c) =>
-                    c.name.toLowerCase().includes(countrySearch.toLowerCase()),
-                  ).map((c) => (
-                    <li key={c.code}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCountry(c);
-                          setFormData((prev) => ({ ...prev, country: c.name }));
-                          setCountrySearchOpen(false);
-                          setLocalPhone("");
-                          setErrors((prev) => ({
-                            ...prev,
-                            country: undefined,
-                            phone: undefined,
-                          }));
-                        }}
-                        className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                          selectedCountry?.code === c.code
-                            ? "bg-teal-50 text-teal-700 font-medium"
-                            : "text-slate-700"
-                        }`}
-                      >
-                        <Flag
-                          code={c.code}
-                          style={{
-                            width: 20,
-                            height: 14,
-                            borderRadius: 2,
-                            objectFit: "cover",
-                          }}
-                        />
-                        <span>{c.name}</span>
-                        {selectedCountry?.code === c.code && (
-                          <svg
-                            className="w-4 h-4 text-teal-600 ml-auto"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                  {ALL_COUNTRIES.filter((c) =>
-                    c.name.toLowerCase().includes(countrySearch.toLowerCase()),
-                  ).length === 0 && (
-                    <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                      No countries found
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
+          <FlexCountrySelect
+            value={formData.country}
+            onChange={(couName) => {
+              const fc = flexCountries.find((c) => c.couName === couName);
+              setFormData((prev) => ({ ...prev, country: couName }));
+              setSelectedCountry(
+                fc ? phoneCountryFromCouCode(fc.couCode) : null,
+              );
+              setLocalPhone("");
+              setErrors((prev) => ({
+                ...prev,
+                country: undefined,
+                phone: undefined,
+              }));
+            }}
+            error={Boolean(errors.country)}
+            disabled={isLoading}
+            placeholder="Select your country"
+            countries={flexCountries}
+            countriesLoading={flexCountriesLoading}
+          />
           {errors.country && (
             <p className="mt-1.5 text-xs text-red-500">{errors.country}</p>
           )}

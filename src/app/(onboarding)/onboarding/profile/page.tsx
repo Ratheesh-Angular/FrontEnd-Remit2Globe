@@ -1,21 +1,20 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import api from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
-import Flag from "react-world-flags";
+import { StateSearchSelect } from "@/components/address/StateSearchSelect";
+import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
+import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useFlexCountries } from "@/hooks/useFlexCountries";
 import {
   VerificationDocuments,
   type KycDocumentRow,
 } from "./VerificationDocuments";
 import { KycSubmittedPanel } from "./KycSubmittedPanel";
+import { AppDialog } from "@/components/ui/AppDialog";
 
-type Section =
-  | "personal"
-  | "identity"
-  | "address"
-  | "documents"
-  | "submitted";
+type Section = "personal" | "identity" | "address" | "documents" | "submitted";
 
 /** Citizen: primary ID type. Empty when resident or not chosen yet. */
 type CitizenDocType = "" | "PASSPORT" | "NATIONAL_ID";
@@ -26,6 +25,8 @@ interface ResidenceAddressForm {
   city: string;
   state: string;
   postalCode: string;
+  /** Same as country of residence at signup; stored in address JSON and synced from Personal Info. */
+  country: string;
 }
 
 const emptyResidenceAddress: ResidenceAddressForm = {
@@ -34,6 +35,7 @@ const emptyResidenceAddress: ResidenceAddressForm = {
   city: "",
   state: "",
   postalCode: "",
+  country: "",
 };
 
 interface IndividualForm {
@@ -125,68 +127,6 @@ const sections: { key: Section; label: string; description: string }[] = [
   },
 ];
 
-// ─── Country helpers (module-level constants, not inside the component) ────────
-
-const COUNTRIES: { code: string; name: string }[] = [
-  { code: "AF", name: "Afghanistan" },
-  { code: "AL", name: "Albania" },
-  { code: "DZ", name: "Algeria" },
-  { code: "AR", name: "Argentina" },
-  { code: "AU", name: "Australia" },
-  { code: "AT", name: "Austria" },
-  { code: "BD", name: "Bangladesh" },
-  { code: "BE", name: "Belgium" },
-  { code: "BR", name: "Brazil" },
-  { code: "CA", name: "Canada" },
-  { code: "CN", name: "China" },
-  { code: "CO", name: "Colombia" },
-  { code: "EG", name: "Egypt" },
-  { code: "FR", name: "France" },
-  { code: "DE", name: "Germany" },
-  { code: "GH", name: "Ghana" },
-  { code: "GR", name: "Greece" },
-  { code: "HK", name: "Hong Kong" },
-  { code: "IN", name: "India" },
-  { code: "ID", name: "Indonesia" },
-  { code: "IE", name: "Ireland" },
-  { code: "IT", name: "Italy" },
-  { code: "JP", name: "Japan" },
-  { code: "KE", name: "Kenya" },
-  { code: "KW", name: "Kuwait" },
-  { code: "LB", name: "Lebanon" },
-  { code: "LY", name: "Libya" },
-  { code: "MY", name: "Malaysia" },
-  { code: "MX", name: "Mexico" },
-  { code: "MA", name: "Morocco" },
-  { code: "NL", name: "Netherlands" },
-  { code: "NZ", name: "New Zealand" },
-  { code: "NG", name: "Nigeria" },
-  { code: "NO", name: "Norway" },
-  { code: "PK", name: "Pakistan" },
-  { code: "PH", name: "Philippines" },
-  { code: "PL", name: "Poland" },
-  { code: "PT", name: "Portugal" },
-  { code: "QA", name: "Qatar" },
-  { code: "RO", name: "Romania" },
-  { code: "RU", name: "Russia" },
-  { code: "SA", name: "Saudi Arabia" },
-  { code: "SG", name: "Singapore" },
-  { code: "ZA", name: "South Africa" },
-  { code: "KR", name: "South Korea" },
-  { code: "ES", name: "Spain" },
-  { code: "LK", name: "Sri Lanka" },
-  { code: "SE", name: "Sweden" },
-  { code: "CH", name: "Switzerland" },
-  { code: "TW", name: "Taiwan" },
-  { code: "TH", name: "Thailand" },
-  { code: "TR", name: "Turkey" },
-  { code: "AE", name: "United Arab Emirates" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "US", name: "United States" },
-  { code: "VN", name: "Vietnam" },
-  { code: "ZW", name: "Zimbabwe" },
-];
-
 function buildSanitizedKycPayload(form: IndividualForm): IndividualForm {
   const out: IndividualForm = {
     ...form,
@@ -196,6 +136,7 @@ function buildSanitizedKycPayload(form: IndividualForm): IndividualForm {
       city: form.residenceAddress.city.trim(),
       state: form.residenceAddress.state.trim(),
       postalCode: form.residenceAddress.postalCode.trim(),
+      country: form.country.trim(),
     },
   };
   if (!form.isNational) {
@@ -241,6 +182,7 @@ function parseResidenceFromProfile(
       city: String(o.city ?? "").trim(),
       state: String(o.state ?? "").trim(),
       postalCode: String(o.postalCode ?? "").trim(),
+      country: String(o.country ?? "").trim(),
     };
   }
   const legacy = String(p.residentialAddress ?? "").trim();
@@ -387,130 +329,6 @@ type FormErrors = Partial<
   residenceAddress?: Partial<Record<keyof ResidenceAddressForm, string>>;
 };
 
-function CountrySelectDropdown({
-  value,
-  onChange,
-  error,
-  placeholder = "Select country…",
-}: {
-  value: string;
-  onChange: (countryName: string) => void;
-  error?: boolean;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (!rootRef.current?.contains(t)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const filtered = COUNTRIES.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  return (
-    <div className="relative" ref={rootRef}>
-      <button
-        type="button"
-        onClick={() => {
-          setOpen((v) => !v);
-          setSearch("");
-        }}
-        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left
-          focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white
-          ${error ? "border-red-400" : "border-slate-200"}
-          ${value ? "text-slate-900" : "text-slate-400"}`}
-      >
-        {value ? (
-          <>
-            <span className="text-base leading-none shrink-0">
-              <Flag
-                code={COUNTRIES.find((c) => c.name === value)?.code ?? ""}
-                style={{
-                  width: 20,
-                  height: 14,
-                  borderRadius: 2,
-                  objectFit: "cover",
-                }}
-              />
-            </span>
-            <span className="truncate">{value}</span>
-          </>
-        ) : (
-          <span>{placeholder}</span>
-        )}
-        <svg
-          className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-slate-100">
-            <input
-              autoFocus
-              placeholder="Search country…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-            />
-          </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
-            {filtered.map((c) => (
-              <li key={c.code}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(c.name);
-                    setOpen(false);
-                  }}
-                  className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                    value === c.name
-                      ? "bg-teal-50 text-teal-700 font-medium"
-                      : "text-slate-700"
-                  }`}
-                >
-                  <Flag
-                    code={c.code}
-                    style={{
-                      width: 20,
-                      height: 14,
-                      borderRadius: 2,
-                      objectFit: "cover",
-                    }}
-                  />
-                  <span>{c.name}</span>
-                </button>
-              </li>
-            ))}
-            {filtered.length === 0 && (
-              <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                No countries found
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function KycProfilePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -529,6 +347,31 @@ export default function KycProfilePage() {
     string | undefined
   >(undefined);
   const [kycSubmittedAt, setKycSubmittedAt] = useState<Date | null>(null);
+  /** When set, user tried to switch step with unsaved edits — `AppDialog` confirms discard. */
+  const [pendingSectionAfterUnsaved, setPendingSectionAfterUnsaved] =
+    useState<Section | null>(null);
+
+  const {
+    countries: flexCountryList,
+    loading: flexCountriesLoading,
+    error: flexCountriesError,
+  } = useFlexCountries(true);
+
+  useEffect(() => {
+    setForm((prev) => {
+      const c = prev.country.trim();
+      if (prev.residenceAddress.country === c) return prev;
+      return {
+        ...prev,
+        residenceAddress: { ...prev.residenceAddress, country: c },
+      };
+    });
+  }, [form.country]);
+
+  const residenceFlexCountry = useMemo(
+    () => flexCountryList.find((c) => c.couName === form.country),
+    [flexCountryList, form.country],
+  );
 
   const syncDocumentsFromServer = useCallback(async () => {
     try {
@@ -602,6 +445,14 @@ export default function KycProfilePage() {
           const isoDate = (v: unknown) =>
             v ? new Date(v as string).toISOString().split("T")[0] : "";
 
+          const raParsed = parseResidenceFromProfile(p);
+          const countryLine =
+            countryFromRegistration || String(p.country ?? "").trim();
+          const residenceAddress: ResidenceAddressForm = {
+            ...raParsed,
+            country: raParsed.country || countryLine,
+          };
+
           nextForm = {
             firstName,
             middleName,
@@ -621,9 +472,9 @@ export default function KycProfilePage() {
             nationalIdIssue: isoDate(p.nationalIdIssue),
             nationalIdExpiry: isoDate(p.nationalIdExpiry),
 
-            residenceAddress: parseResidenceFromProfile(p),
+            residenceAddress,
 
-            country: countryFromRegistration || String(p.country ?? ""),
+            country: countryLine,
             contactEmail: String(p.contactEmail ?? ""),
             contactPhone: String(p.contactPhone ?? ""),
             occupation: String(p.occupation ?? ""),
@@ -633,7 +484,10 @@ export default function KycProfilePage() {
           nextForm = {
             ...empty,
             country: countryFromRegistration,
-            residenceAddress: { ...emptyResidenceAddress },
+            residenceAddress: {
+              ...emptyResidenceAddress,
+              country: countryFromRegistration,
+            },
           };
         } else {
           nextForm = {
@@ -792,7 +646,11 @@ export default function KycProfilePage() {
       const raErr: Partial<Record<keyof ResidenceAddressForm, string>> = {};
       if (!ra.line1.trim()) raErr.line1 = "Address line 1 is required";
       if (!ra.city.trim()) raErr.city = "City is required";
-      if (!ra.state.trim()) raErr.state = "State is required";
+      if (!ra.state.trim()) raErr.state = "State or region is required";
+      if (!form.country.trim() || !ra.country.trim()) {
+        raErr.country =
+          "Country of residence is not set. It should match the country you selected at registration—refresh the page or contact support.";
+      }
       if (Object.keys(raErr).length) newErrors.residenceAddress = raErr;
 
       // if (!form.country.trim()) newErrors.country = "Country is required";
@@ -876,14 +734,19 @@ export default function KycProfilePage() {
     if (flowComplete && target !== "submitted") return;
     if (!canAccessSection(target)) return;
     if (isDirty) {
-      const leave = window.confirm(
-        "You have unsaved changes on this step. Save before leaving or your edits will be lost.\n\nPress OK to leave without saving, or Cancel to stay.",
-      );
-      if (!leave) return;
-      setForm(formFromSignature(persistedSignature));
-      setErrors({});
-      setSaveError(null);
+      setPendingSectionAfterUnsaved(target);
+      return;
     }
+    setActiveSection(target);
+  };
+
+  const confirmLeaveUnsaved = () => {
+    const target = pendingSectionAfterUnsaved;
+    if (!target) return;
+    setPendingSectionAfterUnsaved(null);
+    setForm(formFromSignature(persistedSignature));
+    setErrors({});
+    setSaveError(null);
     setActiveSection(target);
   };
 
@@ -918,16 +781,6 @@ export default function KycProfilePage() {
           Complete all sections to submit your KYC application
         </p>
       </div>
-
-      {isDirty && activeSection !== "submitted" && (
-        <div
-          role="status"
-          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-        >
-          You have unsaved changes. Save this step before you refresh, close the
-          tab, or switch to another step—or your edits will be lost.
-        </div>
-      )}
 
       {/* Progress steps */}
       <div className="flex items-center gap-2">
@@ -993,9 +846,7 @@ export default function KycProfilePage() {
         )}
 
         {activeSection === "submitted" && (
-          <KycSubmittedPanel
-            submittedAt={kycSubmittedAt ?? new Date()}
-          />
+          <KycSubmittedPanel submittedAt={kycSubmittedAt ?? new Date()} />
         )}
 
         {/* PERSONAL */}
@@ -1058,18 +909,13 @@ export default function KycProfilePage() {
                 {form.country ? (
                   <>
                     <span className="text-base leading-none shrink-0 opacity-90">
-                      <Flag
-                        code={
-                          COUNTRIES.find((c) => c.name === form.country)
-                            ?.code ?? ""
-                        }
-                        style={{
-                          width: 20,
-                          height: 14,
-                          borderRadius: 2,
-                          objectFit: "cover",
-                        }}
-                      />
+                      {residenceFlexCountry ? (
+                        <FlexCountryFlag
+                          couCode={residenceFlexCountry.couCode}
+                        />
+                      ) : (
+                        <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
+                      )}
                     </span>
                     <span className="font-medium">{form.country}</span>
                   </>
@@ -1167,13 +1013,16 @@ export default function KycProfilePage() {
                     required
                     error={errors.passportIssuingCountry}
                   >
-                    <CountrySelectDropdown
+                    <FlexCountrySelect
                       value={form.passportIssuingCountry}
                       onChange={(name) =>
                         setField("passportIssuingCountry", name)
                       }
                       error={Boolean(errors.passportIssuingCountry)}
                       placeholder="Select issuing country…"
+                      countries={flexCountryList}
+                      countriesLoading={flexCountriesLoading}
+                      countriesError={flexCountriesError}
                     />
                   </Field>
                 </div>
@@ -1297,13 +1146,16 @@ export default function KycProfilePage() {
                         required
                         error={errors.passportIssuingCountry}
                       >
-                        <CountrySelectDropdown
+                        <FlexCountrySelect
                           value={form.passportIssuingCountry}
                           onChange={(name) =>
                             setField("passportIssuingCountry", name)
                           }
                           error={Boolean(errors.passportIssuingCountry)}
                           placeholder="Select issuing country…"
+                          countries={flexCountryList}
+                          countriesLoading={flexCountriesLoading}
+                          countriesError={flexCountriesError}
                         />
                       </Field>
                     </div>
@@ -1363,13 +1215,16 @@ export default function KycProfilePage() {
                         required
                         error={errors.nationalIdIssuingCountry}
                       >
-                        <CountrySelectDropdown
+                        <FlexCountrySelect
                           value={form.nationalIdIssuingCountry}
                           onChange={(name) =>
                             setField("nationalIdIssuingCountry", name)
                           }
                           error={Boolean(errors.nationalIdIssuingCountry)}
                           placeholder="Select issuing country…"
+                          countries={flexCountryList}
+                          countriesLoading={flexCountriesLoading}
+                          countriesError={flexCountriesError}
                         />
                       </Field>
                     </div>
@@ -1439,15 +1294,16 @@ export default function KycProfilePage() {
                   />
                 </Field>
                 <Field
-                  label="State"
+                  label="State / region"
                   required
                   error={errors.residenceAddress?.state}
                 >
-                  <input
-                    className={addrInputClass("state")}
-                    placeholder="State / province"
+                  <StateSearchSelect
+                    countryName={form.country}
                     value={form.residenceAddress.state}
-                    onChange={(e) => setResidenceField("state", e.target.value)}
+                    onChange={(v) => setResidenceField("state", v)}
+                    error={Boolean(errors.residenceAddress?.state)}
+                    placeholder="State / region"
                   />
                 </Field>
               </div>
@@ -1463,6 +1319,39 @@ export default function KycProfilePage() {
                     setResidenceField("postalCode", e.target.value)
                   }
                 />
+              </Field>
+              <Field label="Country" error={errors.residenceAddress?.country}>
+                <div
+                  className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-slate-50 text-slate-700 cursor-not-allowed select-none border-slate-200 ${
+                    errors.residenceAddress?.country
+                      ? "border-red-400"
+                      : "border-slate-200"
+                  }`}
+                  title="Same as the country you selected at registration."
+                >
+                  {form.residenceAddress.country || form.country ? (
+                    <>
+                      <span className="text-base leading-none shrink-0 opacity-90">
+                        {residenceFlexCountry ? (
+                          <FlexCountryFlag
+                            couCode={residenceFlexCountry.couCode}
+                          />
+                        ) : (
+                          <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
+                        )}
+                      </span>
+                      <span className="font-medium">
+                        {form.residenceAddress.country || form.country}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">Loading…</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Taken from your registration. Shown for your address record;
+                  it is saved with your profile.
+                </p>
               </Field>
             </div>
 
@@ -1557,6 +1446,18 @@ export default function KycProfilePage() {
           </div>
         )}
       </div>
+
+      <AppDialog
+        open={pendingSectionAfterUnsaved !== null}
+        onClose={() => setPendingSectionAfterUnsaved(null)}
+        variant="confirm"
+        title="Unsaved changes"
+        message="You have unsaved changes on this step. Save before leaving or your edits will be lost."
+        cancelLabel="Keep editing"
+        confirmLabel="Leave without saving"
+        destructive
+        onConfirm={confirmLeaveUnsaved}
+      />
     </div>
   );
 }

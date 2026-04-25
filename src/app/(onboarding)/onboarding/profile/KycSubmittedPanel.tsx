@@ -96,7 +96,7 @@ export function KycSubmittedPanel({ submittedAt }: Props) {
         </h3>
         <p className="mx-auto mt-3 max-w-md text-sm text-slate-500">
           Your KYC application has been submitted. Our compliance team will
-          review your documents within 1 to 2 business days.
+          review your documents within 24 hours.
         </p>
       </div>
 
