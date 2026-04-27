@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { flexApiUrl } from "@/lib/flex-api";
 
 export default function FlexTestPage() {
   const [response, setResponse] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const BASE_URL = "http://localhost:5000/api/flex";
-
   const callAPI = async (endpoint: string) => {
     try {
       setLoading(true);
 
-      const res = await fetch(`${BASE_URL}${endpoint}`);
+      const res = await fetch(flexApiUrl(endpoint), { credentials: "include" });
       const data = await res.json();
 
       setResponse(data);
@@ -26,7 +25,9 @@ export default function FlexTestPage() {
 
   const getBanks = async (couCode: string) => {
     try {
-      const res = await fetch(`${BASE_URL}/banks/${couCode}`);
+      const res = await fetch(flexApiUrl(`/banks/${couCode}`), {
+        credentials: "include",
+      });
       const data = await res.json();
       setResponse(data);
     } catch (err) {
