@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
+import { getBackendApiBase } from "@/lib/backend-api-base";
 import DashboardClient from "./DashboardClient";
 
 type DashboardUser = {
@@ -19,9 +20,7 @@ async function loadUserFromBackendMe(): Promise<DashboardUser | null> {
   const cookieHeader = h.get("cookie") ?? "";
   if (!cookieHeader.includes("token=")) return null;
 
-  const base = (
-    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api"
-  ).replace(/\/$/, "");
+  const base = getBackendApiBase();
   const res = await fetch(`${base}/auth/me`, {
     headers: { cookie: cookieHeader },
     cache: "no-store",

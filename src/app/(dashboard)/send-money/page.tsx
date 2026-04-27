@@ -39,12 +39,7 @@ import {
   Copy,
 } from "lucide-react";
 import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
-
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-function flexUrl(path: string) {
-  return `${API_ROOT.replace(/\/$/, "")}/flex${path}`;
-}
+import { flexApiUrl } from "@/lib/flex-api";
 
 interface FlexCountry {
   couCode: string;
@@ -515,7 +510,7 @@ function SendMoneyPageContent() {
         api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries", {
           params: { activeOnly: "true" },
         }),
-        fetch(flexUrl("/countries"), { credentials: "include" }).then((r) =>
+        fetch(flexApiUrl("/countries"), { credentials: "include" }).then((r) =>
           r.json(),
         ),
       ]);

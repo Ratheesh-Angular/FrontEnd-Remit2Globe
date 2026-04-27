@@ -18,12 +18,7 @@ import {
   parsePhoneNumberFromString,
   type CountryCode,
 } from "libphonenumber-js";
-
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-function flexApiUrl(path: string) {
-  return `${API_ROOT.replace(/\/$/, "")}/flex${path}`;
-}
+import { flexApiUrl } from "@/lib/flex-api";
 
 interface FlexBank {
   serviceType?: string;

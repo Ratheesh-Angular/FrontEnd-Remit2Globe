@@ -1,8 +1,7 @@
 import type { FlexCountry } from "@/types/flex-country";
+import { getBackendApiBase } from "@/lib/backend-api-base";
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-).replace(/\/$/, "");
+const API_BASE = getBackendApiBase();
 
 /**
  * Base URL for backend `/api/flex/*` (token, countries, banks, etc.).

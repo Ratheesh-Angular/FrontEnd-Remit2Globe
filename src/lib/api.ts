@@ -1,8 +1,9 @@
 import axios from "axios";
+import { getBackendApiBase } from "@/lib/backend-api-base";
 //testing git main 08.04.2026
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
+  baseURL: getBackendApiBase(),
   headers: {
     "Content-Type": "application/json",
   },
