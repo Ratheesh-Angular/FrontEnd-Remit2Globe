@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
+import { StateSearchSelect } from "@/components/address/StateSearchSelect";
+import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
+import { useFlexCountries } from "@/hooks/useFlexCountries";
 import type { KycDocumentRow } from "./VerificationDocuments";
 import { CorporateVerificationDocuments } from "./CorporateVerificationDocuments";
 import { KycSubmittedPanel } from "./KycSubmittedPanel";
 import { AppDialog } from "@/components/ui/AppDialog";
 import { Field, SectionLabel } from "./KycFormPrimitives";
+import { Plus, Trash2 } from "lucide-react";
 
 type CorporateSection =
   | "business"
@@ -34,10 +38,69 @@ interface KeyPersonnelRow {
   passportOrNationalId: string;
 }
 
+interface BusinessPremisesAddressForm {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  /** Mirrors registration country (same as individual flow). */
+  country: string;
+}
+
+const emptyBusinessPremises = (): BusinessPremisesAddressForm => ({
+  line1: "",
+  line2: "",
+  city: "",
+  state: "",
+  postalCode: "",
+  country: "",
+});
+
+/** DB column is a string: JSON for structured saves; legacy plain text loads into line1. */
+function parseStoredBusinessAddress(raw: unknown): BusinessPremisesAddressForm {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return emptyBusinessPremises();
+  try {
+    const j = JSON.parse(s) as unknown;
+    if (j && typeof j === "object" && "line1" in (j as object)) {
+      const o = j as Record<string, unknown>;
+      return {
+        line1: String(o.line1 ?? "").trim(),
+        line2: String(o.line2 ?? "").trim(),
+        city: String(o.city ?? "").trim(),
+        state: String(o.state ?? "").trim(),
+        postalCode: String(o.postalCode ?? "").trim(),
+        country: String(o.country ?? "").trim(),
+      };
+    }
+  } catch {
+    /* legacy single-field textarea */
+  }
+  return { ...emptyBusinessPremises(), line1: s };
+}
+
+function serializeBusinessPremises(p: BusinessPremisesAddressForm): string {
+  return JSON.stringify({
+    line1: p.line1.trim(),
+    line2: p.line2.trim(),
+    city: p.city.trim(),
+    state: p.state.trim(),
+    postalCode: p.postalCode.trim(),
+    country: p.country.trim(),
+  });
+}
+
+function businessPremisesComplete(p: BusinessPremisesAddressForm): boolean {
+  return Boolean(
+    p.line1.trim() && p.city.trim() && p.state.trim() && p.country.trim(),
+  );
+}
+
 interface CorporateForm {
   businessName: string;
   natureOfBusiness: string;
-  businessAddress: string;
+  businessPremises: BusinessPremisesAddressForm;
   registrationNumber: string;
   incorporationDate: string;
   tradingLicenseNumber: string;
@@ -65,7 +128,7 @@ const emptyKeyPerson = (): KeyPersonnelRow => ({
 const emptyForm: CorporateForm = {
   businessName: "",
   natureOfBusiness: "",
-  businessAddress: "",
+  businessPremises: emptyBusinessPremises(),
   registrationNumber: "",
   incorporationDate: "",
   tradingLicenseNumber: "",
@@ -97,12 +160,14 @@ const corpSections: {
   {
     key: "ownership",
     label: "Key people & shareholders",
-    description: "Personnel and ownership structure",
+    description:
+      "Add directors, officers, key decision-makers, and shareholders so your ownership structure is complete on the KYC record.",
   },
   {
     key: "documents",
     label: "Verification documents",
-    description: "Upload supporting documents",
+    description:
+      "Upload proof so we can verify your business and complete compliance review.",
   },
   {
     key: "submitted",
@@ -144,7 +209,9 @@ function parseShareholders(raw: unknown): ShareholderFormRow[] {
         kind: "CORPORATE",
         entityName: String(o.entityName ?? o.businessName ?? "").trim(),
         registrationNumber: String(o.registrationNumber ?? "").trim(),
-        registeredAddress: String(o.registeredAddress ?? o.address ?? "").trim(),
+        registeredAddress: String(
+          o.registeredAddress ?? o.address ?? "",
+        ).trim(),
       });
     } else {
       rows.push({
@@ -161,9 +228,7 @@ function parseShareholders(raw: unknown): ShareholderFormRow[] {
 
 function buildCorporatePayload(form: CorporateForm): Record<string, unknown> {
   const keyPersonnel = form.keyPersonnel
-    .filter(
-      (r) => r.fullName.trim() && r.passportOrNationalId.trim(),
-    )
+    .filter((r) => r.fullName.trim() && r.passportOrNationalId.trim())
     .map((r) => ({
       fullName: r.fullName.trim(),
       passportOrNationalId: r.passportOrNationalId.trim(),
@@ -188,7 +253,7 @@ function buildCorporatePayload(form: CorporateForm): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     businessName: form.businessName.trim(),
     natureOfBusiness: form.natureOfBusiness.trim(),
-    businessAddress: form.businessAddress.trim(),
+    businessAddress: serializeBusinessPremises(form.businessPremises),
     registrationNumber: form.registrationNumber.trim(),
     incorporationDate: form.incorporationDate || null,
     tradingLicenseNumber: form.tradingLicenseNumber.trim(),
@@ -203,7 +268,8 @@ function buildCorporatePayload(form: CorporateForm): Record<string, unknown> {
     payload.regulatoryLicenseIssue = null;
     payload.regulatoryLicenseExpiry = null;
   } else {
-    payload.regulatoryLicenseNumber = form.regulatoryLicenseNumber.trim() || null;
+    payload.regulatoryLicenseNumber =
+      form.regulatoryLicenseNumber.trim() || null;
     payload.regulatoryLicenseIssue = form.regulatoryLicenseIssue || null;
     payload.regulatoryLicenseExpiry = form.regulatoryLicenseExpiry || null;
   }
@@ -243,7 +309,7 @@ function inferSavedSectionsFromForm(f: CorporateForm): CorporateSection[] {
   const businessDone =
     f.businessName.trim() &&
     f.natureOfBusiness.trim() &&
-    f.businessAddress.trim() &&
+    businessPremisesComplete(f.businessPremises) &&
     f.registrationNumber.trim() &&
     f.incorporationDate;
 
@@ -305,23 +371,28 @@ function mergeCorporateSavedWithStatus(
 
 type FormErrors = Partial<
   Record<
-    keyof CorporateForm | "keyPersonnel" | "shareholders",
+    | Exclude<
+        keyof CorporateForm,
+        "businessPremises" | "keyPersonnel" | "shareholders"
+      >
+    | "keyPersonnel"
+    | "shareholders",
     string | undefined
   >
->;
+> & {
+  businessPremises?: Partial<Record<keyof BusinessPremisesAddressForm, string>>;
+};
 
 function corporateFormFromPersisted(sig: string): CorporateForm {
   try {
     const raw = JSON.parse(sig) as Record<string, unknown>;
     const regNum = raw.regulatoryLicenseNumber;
-    const hasReg = Boolean(
-      regNum != null && String(regNum).trim().length > 0,
-    );
+    const hasReg = Boolean(regNum != null && String(regNum).trim().length > 0);
     return {
       ...emptyForm,
       businessName: String(raw.businessName ?? ""),
       natureOfBusiness: String(raw.natureOfBusiness ?? ""),
-      businessAddress: String(raw.businessAddress ?? ""),
+      businessPremises: parseStoredBusinessAddress(raw.businessAddress),
       registrationNumber: String(raw.registrationNumber ?? ""),
       incorporationDate: raw.incorporationDate
         ? String(raw.incorporationDate).slice(0, 10)
@@ -371,6 +442,27 @@ export function CorporateKycWizard() {
   const [kycSubmittedAt, setKycSubmittedAt] = useState<Date | null>(null);
   const [pendingSectionAfterUnsaved, setPendingSectionAfterUnsaved] =
     useState<CorporateSection | null>(null);
+  const [registrationCountry, setRegistrationCountry] = useState("");
+
+  const { countries: flexCountryList } = useFlexCountries(true);
+
+  const businessPremisesFlexCountry = useMemo(
+    () =>
+      flexCountryList.find((c) => c.couName === form.businessPremises.country),
+    [flexCountryList, form.businessPremises.country],
+  );
+
+  useEffect(() => {
+    const c = registrationCountry.trim();
+    if (!c) return;
+    setForm((prev) => {
+      if (prev.businessPremises.country === c) return prev;
+      return {
+        ...prev,
+        businessPremises: { ...prev.businessPremises, country: c },
+      };
+    });
+  }, [registrationCountry]);
 
   const syncDocumentsFromServer = useCallback(async () => {
     try {
@@ -416,20 +508,33 @@ export function CorporateKycWizard() {
         setIsLoading(true);
         const res = await api.get("/kyc/profile");
         const userRow = res.data.data as {
+          country?: string | null;
           corporateProfile?: Record<string, unknown> | null;
           documents?: KycDocumentRow[];
           kycStatus?: string;
           updatedAt?: string;
         };
+        const countryFromRegistration = userRow?.country?.trim() || "";
+        setRegistrationCountry(countryFromRegistration);
         const cp = userRow?.corporateProfile;
-        let next: CorporateForm = { ...emptyForm };
+        let next: CorporateForm = {
+          ...emptyForm,
+          businessPremises: {
+            ...emptyBusinessPremises(),
+            country: countryFromRegistration,
+          },
+        };
 
         if (cp) {
+          const bp = parseStoredBusinessAddress(cp.businessAddress);
           next = {
             ...emptyForm,
             businessName: String(cp.businessName ?? ""),
             natureOfBusiness: String(cp.natureOfBusiness ?? ""),
-            businessAddress: String(cp.businessAddress ?? ""),
+            businessPremises: {
+              ...bp,
+              country: bp.country || countryFromRegistration,
+            },
             registrationNumber: String(cp.registrationNumber ?? ""),
             incorporationDate: isoDate(cp.incorporationDate),
             tradingLicenseNumber: String(cp.tradingLicenseNumber ?? ""),
@@ -451,11 +556,7 @@ export function CorporateKycWizard() {
         const docRows = (userRow?.documents ?? []) as KycDocumentRow[];
         setKycDocuments(docRows);
         setSavedSections(
-          mergeCorporateSavedWithStatus(
-            next,
-            docRows,
-            userRow?.kycStatus,
-          ),
+          mergeCorporateSavedWithStatus(next, docRows, userRow?.kycStatus),
         );
         setPersistedSignature(formSignature(next));
         if (
@@ -510,8 +611,19 @@ export function CorporateKycWizard() {
         newErrors.businessName = "Business name is required";
       if (!form.natureOfBusiness.trim())
         newErrors.natureOfBusiness = "Nature of business is required";
-      if (!form.businessAddress.trim())
-        newErrors.businessAddress = "Business address is required";
+
+      const bp = form.businessPremises;
+      const bpErr: Partial<Record<keyof BusinessPremisesAddressForm, string>> =
+        {};
+      if (!bp.line1.trim()) bpErr.line1 = "Address line 1 is required";
+      if (!bp.city.trim()) bpErr.city = "City is required";
+      if (!bp.state.trim()) bpErr.state = "State or region is required";
+      if (!registrationCountry.trim() || !bp.country.trim()) {
+        bpErr.country =
+          "Country is not set from registration—refresh the page or contact support.";
+      }
+      if (Object.keys(bpErr).length) newErrors.businessPremises = bpErr;
+
       if (!form.registrationNumber.trim())
         newErrors.registrationNumber = "Registration number is required";
       if (!form.incorporationDate)
@@ -522,7 +634,8 @@ export function CorporateKycWizard() {
       if (!form.tradingLicenseNumber.trim())
         newErrors.tradingLicenseNumber = "Trading license number is required";
       if (!form.tradingLicenseIssue)
-        newErrors.tradingLicenseIssue = "Trading license issue date is required";
+        newErrors.tradingLicenseIssue =
+          "Trading license issue date is required";
       if (!form.tradingLicenseExpiry)
         newErrors.tradingLicenseExpiry = "Trading license expiry is required";
       if (!form.regulatoryNotApplicable) {
@@ -609,7 +722,8 @@ export function CorporateKycWizard() {
         error.response.data &&
         typeof error.response.data === "object" &&
         "message" in error.response.data &&
-        typeof (error.response.data as { message: unknown }).message === "string"
+        typeof (error.response.data as { message: unknown }).message ===
+          "string"
           ? (error.response.data as { message: string }).message
           : "Save failed. Please try again.";
       setSaveError(msg);
@@ -654,9 +768,47 @@ export function CorporateKycWizard() {
     setActiveSection(target);
   };
 
-  const inputClass = (field: keyof CorporateForm) =>
+  const inputClass = (
+    field: Exclude<
+      keyof CorporateForm,
+      "businessPremises" | "keyPersonnel" | "shareholders"
+    >,
+  ) =>
     `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
       errors[field] ? "border-red-400" : "border-slate-200"
+    }`;
+
+  const setPremisesField = (
+    sub: keyof BusinessPremisesAddressForm,
+    value: string,
+  ) => {
+    setSaveError(null);
+    setForm((prev) => ({
+      ...prev,
+      businessPremises: { ...prev.businessPremises, [sub]: value },
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      businessPremises: {
+        ...prev.businessPremises,
+        [sub]: "",
+      },
+    }));
+  };
+
+  const premisesAddrInputClass = (sub: keyof BusinessPremisesAddressForm) =>
+    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+      errors.businessPremises?.[sub] ? "border-red-400" : "border-slate-200"
+    }`;
+
+  const ownershipInputClass = (section: "keyPersonnel" | "shareholders") =>
+    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+      errors[section] ? "border-red-400" : "border-slate-200"
+    }`;
+
+  const ownershipTextareaClass = (section: "shareholders") =>
+    `border rounded-lg px-3 py-2 min-h-[72px] w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 resize-y transition-colors ${
+      errors[section] ? "border-red-400" : "border-slate-200"
     }`;
 
   const regulatoryRequired = !form.regulatoryNotApplicable;
@@ -750,71 +902,175 @@ export function CorporateKycWizard() {
 
         {activeSection === "business" && (
           <div className="space-y-4">
-            <Field label="Business name" required error={errors.businessName}>
-              <input
-                className={inputClass("businessName")}
-                value={form.businessName}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, businessName: e.target.value }))
-                }
-              />
-            </Field>
-            <Field
-              label="Nature of business"
-              required
-              error={errors.natureOfBusiness}
-            >
-              <textarea
-                className={`${inputClass("natureOfBusiness")} min-h-[88px] py-2`}
-                value={form.natureOfBusiness}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, natureOfBusiness: e.target.value }))
-                }
-              />
-            </Field>
-            <Field
-              label="Full business address"
-              required
-              error={errors.businessAddress}
-            >
-              <textarea
-                className={`${inputClass("businessAddress")} min-h-[88px] py-2`}
-                value={form.businessAddress}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, businessAddress: e.target.value }))
-                }
-              />
-            </Field>
-            <Field
-              label="Business registration number"
-              required
-              error={errors.registrationNumber}
-            >
-              <input
-                className={inputClass("registrationNumber")}
-                value={form.registrationNumber}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    registrationNumber: e.target.value,
-                  }))
-                }
-              />
-            </Field>
-            <Field
-              label="Date of incorporation"
-              required
-              error={errors.incorporationDate}
-            >
-              <input
-                type="date"
-                className={inputClass("incorporationDate")}
-                value={form.incorporationDate}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, incorporationDate: e.target.value }))
-                }
-              />
-            </Field>
+            <div className="space-y-4">
+              <Field label="Business name" required error={errors.businessName}>
+                <input
+                  className={inputClass("businessName")}
+                  value={form.businessName}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, businessName: e.target.value }))
+                  }
+                />
+              </Field>
+              <Field
+                label="Nature of business"
+                required
+                error={errors.natureOfBusiness}
+              >
+                <input
+                  type="text"
+                  className={inputClass("natureOfBusiness")}
+                  value={form.natureOfBusiness}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      natureOfBusiness: e.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="Business registration number"
+                  required
+                  error={errors.registrationNumber}
+                >
+                  <input
+                    className={inputClass("registrationNumber")}
+                    value={form.registrationNumber}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        registrationNumber: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Date of incorporation"
+                  required
+                  error={errors.incorporationDate}
+                >
+                  <input
+                    type="date"
+                    className={inputClass("incorporationDate")}
+                    value={form.incorporationDate}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        incorporationDate: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="space-y-4 bg-slate-50/40 p-4 sm:p-5">
+              <SectionLabel>Business address</SectionLabel>
+              <div className="space-y-4">
+                <Field
+                  label="Address line 1"
+                  required
+                  error={errors.businessPremises?.line1}
+                >
+                  <input
+                    className={premisesAddrInputClass("line1")}
+                    placeholder="Street address, P.O. box"
+                    value={form.businessPremises.line1}
+                    onChange={(e) => setPremisesField("line1", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Address line 2"
+                  error={errors.businessPremises?.line2}
+                >
+                  <input
+                    className={premisesAddrInputClass("line2")}
+                    placeholder="Suite, unit, building (optional)"
+                    value={form.businessPremises.line2}
+                    onChange={(e) => setPremisesField("line2", e.target.value)}
+                  />
+                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field
+                    label="City"
+                    required
+                    error={errors.businessPremises?.city}
+                  >
+                    <input
+                      className={premisesAddrInputClass("city")}
+                      placeholder="City"
+                      value={form.businessPremises.city}
+                      onChange={(e) => setPremisesField("city", e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="State / region"
+                    required
+                    error={errors.businessPremises?.state}
+                  >
+                    <StateSearchSelect
+                      countryName={
+                        registrationCountry || form.businessPremises.country
+                      }
+                      value={form.businessPremises.state}
+                      onChange={(v) => setPremisesField("state", v)}
+                      error={Boolean(errors.businessPremises?.state)}
+                      placeholder="State / region"
+                    />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <Field
+                    label="Postal code"
+                    error={errors.businessPremises?.postalCode}
+                  >
+                    <input
+                      className={premisesAddrInputClass("postalCode")}
+                      placeholder="Postal or ZIP code (optional)"
+                      value={form.businessPremises.postalCode}
+                      onChange={(e) =>
+                        setPremisesField("postalCode", e.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Country"
+                    error={errors.businessPremises?.country}
+                  >
+                    <div
+                      className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-white text-slate-700 cursor-not-allowed select-none border-slate-200 ${
+                        errors.businessPremises?.country
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      }`}
+                      title="Same as the country you selected at registration."
+                    >
+                      {form.businessPremises.country || registrationCountry ? (
+                        <>
+                          <span className="text-base leading-none shrink-0 opacity-90">
+                            {businessPremisesFlexCountry ? (
+                              <FlexCountryFlag
+                                couCode={businessPremisesFlexCountry.couCode}
+                              />
+                            ) : (
+                              <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
+                            )}
+                          </span>
+                          <span className="font-medium truncate">
+                            {form.businessPremises.country ||
+                              registrationCountry}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">Loading…</span>
+                      )}
+                    </div>
+                  </Field>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -950,57 +1206,108 @@ export function CorporateKycWizard() {
         )}
 
         {activeSection === "ownership" && (
-          <div className="space-y-6">
+          <div className="space-y-10">
+            <p className="text-xs text-slate-600 -mt-1">
+              You&apos;re listing{" "}
+              <span className="font-medium text-slate-800">
+                {form.keyPersonnel.length} key{" "}
+                {form.keyPersonnel.length === 1 ? "person" : "people"}
+              </span>
+              {" · "}
+              <span className="font-medium text-slate-800">
+                {form.shareholders.length}{" "}
+                {form.shareholders.length === 1
+                  ? "shareholder"
+                  : "shareholders"}
+              </span>
+              .
+            </p>
+
             <div>
-              <SectionLabel>Key personnel</SectionLabel>
-              <p className="text-xs text-slate-500 mb-3">
-                Names and passport or national ID numbers for directors,
-                officers, or key decision-makers.
+              <SectionLabel>Key people</SectionLabel>
+              <p className="text-xs text-slate-500 mb-3 mt-2">
+                Full name and passport or national ID for each director,
+                officer, or key decision-maker on your KYC record.
               </p>
               {errors.keyPersonnel && (
-                <p className="text-xs text-red-500 mb-2">{errors.keyPersonnel}</p>
+                <p className="text-xs text-red-500 mb-3">
+                  {errors.keyPersonnel}
+                </p>
               )}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {form.keyPersonnel.map((row, i) => (
                   <div
                     key={i}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50"
+                    className="rounded-lg border border-slate-200 border-l-[3px] border-l-teal-500 bg-slate-50/40 p-4 shadow-sm"
                   >
-                    <Field label="Full name">
-                      <input
-                        className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
-                        value={row.fullName}
-                        onChange={(e) =>
-                          setForm((p) => {
-                            const kp = [...p.keyPersonnel];
-                            kp[i] = { ...kp[i], fullName: e.target.value };
-                            return { ...p, keyPersonnel: kp };
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label="Passport / National ID">
-                      <input
-                        className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
-                        value={row.passportOrNationalId}
-                        onChange={(e) =>
-                          setForm((p) => {
-                            const kp = [...p.keyPersonnel];
-                            kp[i] = {
-                              ...kp[i],
-                              passportOrNationalId: e.target.value,
-                            };
-                            return { ...p, keyPersonnel: kp };
-                          })
-                        }
-                      />
-                    </Field>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-teal-100 px-2 text-xs font-semibold text-teal-800 tabular-nums"
+                          aria-hidden
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800 truncate">
+                          Key person {i + 1}
+                        </span>
+                      </div>
+                      {form.keyPersonnel.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Remove key person ${i + 1}`}
+                          title="Remove"
+                          className="shrink-0 p-2 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors -mr-2 -mt-1"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              keyPersonnel: p.keyPersonnel.filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                        >
+                          <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Full name">
+                        <input
+                          className={ownershipInputClass("keyPersonnel")}
+                          value={row.fullName}
+                          onChange={(e) =>
+                            setForm((p) => {
+                              const kp = [...p.keyPersonnel];
+                              kp[i] = { ...kp[i], fullName: e.target.value };
+                              return { ...p, keyPersonnel: kp };
+                            })
+                          }
+                        />
+                      </Field>
+                      <Field label="Passport / National ID">
+                        <input
+                          className={ownershipInputClass("keyPersonnel")}
+                          value={row.passportOrNationalId}
+                          onChange={(e) =>
+                            setForm((p) => {
+                              const kp = [...p.keyPersonnel];
+                              kp[i] = {
+                                ...kp[i],
+                                passportOrNationalId: e.target.value,
+                              };
+                              return { ...p, keyPersonnel: kp };
+                            })
+                          }
+                        />
+                      </Field>
+                    </div>
                   </div>
                 ))}
               </div>
               <button
                 type="button"
-                className="mt-2 text-sm font-medium text-teal-600 hover:text-teal-700"
+                className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-teal-600 bg-white px-4 py-2.5 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
                 onClick={() =>
                   setForm((p) => ({
                     ...p,
@@ -1008,33 +1315,86 @@ export function CorporateKycWizard() {
                   }))
                 }
               >
-                + Add key person
+                <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
+                Add key person
               </button>
             </div>
 
             <div>
               <SectionLabel>Shareholders</SectionLabel>
-              <p className="text-xs text-slate-500 mb-3">
-                Individual shareholders: name and ID. Corporate shareholders:
-                legal entity details (supporting docs can be merged in the
-                shareholder upload slot).
+              <p className="text-xs text-slate-500 mb-3 mt-2">
+                Individuals need name and ID. Corporate shareholders need legal
+                entity details (you can attach supporting documents in the
+                shareholder upload slot later).
               </p>
               {errors.shareholders && (
-                <p className="text-xs text-red-500 mb-2">{errors.shareholders}</p>
+                <p className="text-xs text-red-500 mb-3">
+                  {errors.shareholders}
+                </p>
               )}
               <div className="space-y-4">
                 {form.shareholders.map((row, i) => (
                   <div
                     key={i}
-                    className="p-3 rounded-lg border border-slate-200 space-y-3"
+                    className="rounded-lg border border-slate-200 border-l-[3px] border-l-teal-500 bg-slate-50/40 p-4 shadow-sm"
                   >
-                    <div className="flex gap-4 text-sm">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`sh-kind-${i}`}
-                          checked={row.kind === "INDIVIDUAL"}
-                          onChange={() =>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-teal-100 px-2 text-xs font-semibold text-teal-800 tabular-nums"
+                          aria-hidden
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800 truncate">
+                          Shareholder {i + 1}
+                        </span>
+                      </div>
+                      {form.shareholders.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Remove shareholder ${i + 1}`}
+                          title="Remove"
+                          className="shrink-0 p-2 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors -mr-2 -mt-1"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              shareholders: p.shareholders.filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                        >
+                          <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mb-4 min-w-0">
+                      <p
+                        id={`shareholder-type-label-${i}`}
+                        className="text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Shareholder type
+                      </p>
+                      <div
+                        role="radiogroup"
+                        aria-labelledby={`shareholder-type-label-${i}`}
+                        className="flex w-full flex-col gap-2 sm:inline-flex sm:w-auto sm:flex-row rounded-lg border border-slate-200 bg-slate-100/90 p-1"
+                      >
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={row.kind === "INDIVIDUAL"}
+                          data-state={
+                            row.kind === "INDIVIDUAL" ? "checked" : "unchecked"
+                          }
+                          className={`w-full sm:w-auto rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 ${
+                            row.kind === "INDIVIDUAL"
+                              ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                          onClick={() =>
                             setForm((p) => {
                               const sh = [...p.shareholders];
                               sh[i] = {
@@ -1045,15 +1405,22 @@ export function CorporateKycWizard() {
                               return { ...p, shareholders: sh };
                             })
                           }
-                        />
-                        Individual
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`sh-kind-${i}`}
-                          checked={row.kind === "CORPORATE"}
-                          onChange={() =>
+                        >
+                          Individual
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={row.kind === "CORPORATE"}
+                          data-state={
+                            row.kind === "CORPORATE" ? "checked" : "unchecked"
+                          }
+                          className={`w-full sm:w-auto rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 ${
+                            row.kind === "CORPORATE"
+                              ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                          onClick={() =>
                             setForm((p) => {
                               const sh = [...p.shareholders];
                               sh[i] = {
@@ -1065,15 +1432,17 @@ export function CorporateKycWizard() {
                               return { ...p, shareholders: sh };
                             })
                           }
-                        />
-                        Corporate entity
-                      </label>
+                        >
+                          Corporate entity
+                        </button>
+                      </div>
                     </div>
+
                     {row.kind === "INDIVIDUAL" ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Field label="Full name">
                           <input
-                            className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
+                            className={ownershipInputClass("shareholders")}
                             value={row.fullName}
                             onChange={(e) =>
                               setForm((p) => {
@@ -1090,7 +1459,7 @@ export function CorporateKycWizard() {
                         </Field>
                         <Field label="Passport / National ID">
                           <input
-                            className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
+                            className={ownershipInputClass("shareholders")}
                             value={row.idDocumentNumber}
                             onChange={(e) =>
                               setForm((p) => {
@@ -1108,43 +1477,45 @@ export function CorporateKycWizard() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <Field label="Legal entity name">
-                          <input
-                            className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
-                            value={row.entityName}
-                            onChange={(e) =>
-                              setForm((p) => {
-                                const sh = [...p.shareholders];
-                                if (sh[i].kind !== "CORPORATE") return p;
-                                sh[i] = {
-                                  ...sh[i],
-                                  entityName: e.target.value,
-                                };
-                                return { ...p, shareholders: sh };
-                              })
-                            }
-                          />
-                        </Field>
-                        <Field label="Registration number">
-                          <input
-                            className="border rounded-lg px-3 h-10 w-full text-sm border-slate-200"
-                            value={row.registrationNumber}
-                            onChange={(e) =>
-                              setForm((p) => {
-                                const sh = [...p.shareholders];
-                                if (sh[i].kind !== "CORPORATE") return p;
-                                sh[i] = {
-                                  ...sh[i],
-                                  registrationNumber: e.target.value,
-                                };
-                                return { ...p, shareholders: sh };
-                              })
-                            }
-                          />
-                        </Field>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Field label="Legal entity name">
+                            <input
+                              className={ownershipInputClass("shareholders")}
+                              value={row.entityName}
+                              onChange={(e) =>
+                                setForm((p) => {
+                                  const sh = [...p.shareholders];
+                                  if (sh[i].kind !== "CORPORATE") return p;
+                                  sh[i] = {
+                                    ...sh[i],
+                                    entityName: e.target.value,
+                                  };
+                                  return { ...p, shareholders: sh };
+                                })
+                              }
+                            />
+                          </Field>
+                          <Field label="Registration number">
+                            <input
+                              className={ownershipInputClass("shareholders")}
+                              value={row.registrationNumber}
+                              onChange={(e) =>
+                                setForm((p) => {
+                                  const sh = [...p.shareholders];
+                                  if (sh[i].kind !== "CORPORATE") return p;
+                                  sh[i] = {
+                                    ...sh[i],
+                                    registrationNumber: e.target.value,
+                                  };
+                                  return { ...p, shareholders: sh };
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
                         <Field label="Registered address">
                           <textarea
-                            className="border rounded-lg px-3 py-2 min-h-[72px] w-full text-sm border-slate-200"
+                            className={ownershipTextareaClass("shareholders")}
                             value={row.registeredAddress}
                             onChange={(e) =>
                               setForm((p) => {
@@ -1166,7 +1537,7 @@ export function CorporateKycWizard() {
               </div>
               <button
                 type="button"
-                className="mt-2 text-sm font-medium text-teal-600 hover:text-teal-700"
+                className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-teal-600 bg-white px-4 py-2.5 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
                 onClick={() =>
                   setForm((p) => ({
                     ...p,
@@ -1174,7 +1545,8 @@ export function CorporateKycWizard() {
                   }))
                 }
               >
-                + Add shareholder
+                <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
+                Add shareholder
               </button>
             </div>
           </div>
@@ -1190,7 +1562,9 @@ export function CorporateKycWizard() {
         )}
 
         {saveError && activeSection !== "submitted" && (
-          <p className="text-sm text-red-600 whitespace-pre-wrap">{saveError}</p>
+          <p className="text-sm text-red-600 whitespace-pre-wrap">
+            {saveError}
+          </p>
         )}
 
         {activeSection !== "documents" && activeSection !== "submitted" && (

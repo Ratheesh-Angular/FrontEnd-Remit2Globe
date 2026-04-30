@@ -3,6 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
+import {
+  isAllowedKycUpload,
+  KYC_FILE_INPUT_ACCEPT,
+  KYC_UPLOAD_MAX_BYTES,
+  kycUploadMaxSizeLabelMb,
+  parseKycUploadErrorMessage,
+} from "./kycUploadAllowed";
 
 type DocumentType =
   | "PASSPORT_FRONT"
@@ -26,6 +33,7 @@ interface UploadedDoc {
   fileName: string;
   fileUrl: string;
   status: "uploading" | "done" | "error";
+  errorDetail?: string;
 }
 
 export type KycDocumentRow = {
@@ -161,17 +169,7 @@ export function VerificationDocuments({
   );
 
   const handleFileSelect = async (docType: DocumentType, file: File) => {
-    const allowed = [
-      "application/pdf",
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-      "image/bmp",
-      "image/tiff",
-    ];
-    if (!allowed.includes(file.type)) {
+    if (file.size > KYC_UPLOAD_MAX_BYTES) {
       setUploads((prev) => ({
         ...prev,
         [docType]: {
@@ -179,12 +177,13 @@ export function VerificationDocuments({
           fileName: file.name,
           fileUrl: "",
           status: "error",
+          errorDetail: `This file is too large (max ${kycUploadMaxSizeLabelMb()} MB).`,
         },
       }));
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (!isAllowedKycUpload(file)) {
       setUploads((prev) => ({
         ...prev,
         [docType]: {
@@ -192,6 +191,8 @@ export function VerificationDocuments({
           fileName: file.name,
           fileUrl: "",
           status: "error",
+          errorDetail:
+            "This file type is not accepted. Use any common image, PDF, Word/Excel/PowerPoint, CSV, or text.",
         },
       }));
       return;
@@ -224,7 +225,8 @@ export function VerificationDocuments({
         },
       }));
       onDocumentsSynced();
-    } catch {
+    } catch (err) {
+      const serverMsg = parseKycUploadErrorMessage(err);
       setUploads((prev) => ({
         ...prev,
         [docType]: {
@@ -232,6 +234,8 @@ export function VerificationDocuments({
           fileName: file.name,
           fileUrl: "",
           status: "error",
+          errorDetail:
+            serverMsg ?? "Upload failed. Check your connection and try again.",
         },
       }));
     }
@@ -270,8 +274,9 @@ export function VerificationDocuments({
         />
       )}
       <p className="text-sm text-slate-500">
-        Upload clear copies of your identity documents. Accepted formats: PDF,
-        JPEG, PNG, GIF, WebP. Max size: 10MB per file.
+        Upload clear copies of your identity documents. Common images, PDF,
+        Word/Excel/PowerPoint, CSV, or text — max {kycUploadMaxSizeLabelMb()} MB per
+        file.
       </p>
 
       <div
@@ -362,7 +367,8 @@ export function VerificationDocuments({
                           `Uploading ${upload.fileName}...`}
                         {upload.status === "done" && upload.fileName}
                         {upload.status === "error" &&
-                          "Invalid file. Use PDF, JPEG, PNG, GIF, or WebP under 10MB."}
+                          (upload.errorDetail ??
+                            "Upload failed. Try a different file or format.")}
                       </span>
                     </div>
                   )}
@@ -371,7 +377,7 @@ export function VerificationDocuments({
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <input
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
+                    accept={KYC_FILE_INPUT_ACCEPT}
                     className="hidden"
                     ref={(el) => {
                       fileInputRefs.current[doc.type] = el;

@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react";
 import type { Session } from "next-auth";
 import { getSession } from "next-auth/react";
-import { isAxiosError } from "axios";
+import Link from "next/link";
 import { useAuthStore, type AuthUser } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
-import Link from "next/link";
+import {
+  extractAuthMeUser,
+  getErrorMessage,
+  getHttpErrorStatus,
+  safeGetSession,
+} from "@/lib/load-session-client";
 
 function applySessionUser(
   su: NonNullable<Session["user"]> & { id?: string },
@@ -41,31 +46,56 @@ export default function OnboardingLayoutClient({
           return;
         }
 
-        const session = await getSession();
+        const session = await safeGetSession();
         if (session?.user && applySessionUser(session.user, setUser)) {
           return;
         }
 
         const res = await api.get("/auth/me");
-        const u = res.data?.data?.user;
-        if (!u?.id) throw new Error("Invalid /auth/me payload");
-        setUser(u as AuthUser);
+        const u = extractAuthMeUser(res.data);
+        if (!u) {
+          console.error(
+            "[OnboardingLayoutClient] unexpected /auth/me shape",
+            res.data,
+          );
+          setSessionBanner(
+            "Could not read your account data. Try refreshing the page.",
+          );
+          return;
+        }
+        setUser(u);
       } catch (e) {
-        const retry = await getSession();
+        const retry = await safeGetSession();
         if (retry?.user && applySessionUser(retry.user, setUser)) {
           return;
         }
-        if (isAxiosError(e)) {
-          const status = e.response?.status;
+        const status = getHttpErrorStatus(e);
+        if (status !== undefined) {
           if (status === 401 || status === 403) {
             window.location.assign("/login");
             return;
           }
-          console.error("[OnboardingLayoutClient] /auth/me failed", status, e.message);
+          console.error(
+            "[OnboardingLayoutClient] /auth/me failed",
+            status,
+            getErrorMessage(e),
+          );
           setSessionBanner(
-            status
-              ? `Could not verify your session (HTTP ${status}). Try refreshing the page.`
-              : "Could not reach the server. Check your connection, then refresh.",
+            `Could not verify your session (HTTP ${status}). Try refreshing the page.`,
+          );
+          return;
+        }
+        const msg = getErrorMessage(e);
+        const code =
+          e && typeof e === "object" && "code" in e
+            ? String((e as { code?: unknown }).code ?? "")
+            : "";
+        if (
+          code === "ERR_NETWORK" ||
+          (typeof msg === "string" && msg.includes("Network Error"))
+        ) {
+          setSessionBanner(
+            "Could not reach the server. Check your connection, then refresh.",
           );
           return;
         }
