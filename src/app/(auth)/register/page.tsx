@@ -29,6 +29,12 @@ function oauthErrorMessage(code: string) {
 
 type AccountType = "individual" | "corporate";
 
+const ACCOUNT_TYPE_TO_API_ROLE: Record<AccountType, "INDIVIDUAL" | "CORPORATE"> =
+  {
+    individual: "INDIVIDUAL",
+    corporate: "CORPORATE",
+  };
+
 interface FormData {
   email: string;
   phone: string;
@@ -169,7 +175,7 @@ export default function RegisterPage() {
         email: formData.email,
         phone: `+${selectedCountry!.dialCode}${localPhone}`,
         country: formData.country,
-        role: accountType.toUpperCase(),
+        role: ACCOUNT_TYPE_TO_API_ROLE[accountType],
       });
 
       if (response.data.success) {
@@ -263,8 +269,8 @@ export default function RegisterPage() {
             disabled={isLoading}
             className={`${inputBase} cursor-pointer`}
           >
-            <option value="personal">Personal</option>
-            <option value="business">Business </option>
+            <option value="individual">Personal</option>
+            <option value="corporate">Business </option>
           </select>
         </div>
 

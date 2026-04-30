@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 
 type Props = {
   submittedAt: Date;
+  /** Extra compliance copy for business onboarding */
+  variant?: "individual" | "business";
 };
 
 function TimelineStep({
@@ -70,7 +72,10 @@ function TimelineStep({
   );
 }
 
-export function KycSubmittedPanel({ submittedAt }: Props) {
+export function KycSubmittedPanel({
+  submittedAt,
+  variant = "individual",
+}: Props) {
   const router = useRouter();
 
   return (
@@ -97,6 +102,13 @@ export function KycSubmittedPanel({ submittedAt }: Props) {
         <p className="mx-auto mt-3 max-w-md text-sm text-slate-500">
           Your KYC application has been submitted. Our compliance team will
           review your documents within 24 hours.
+          {variant === "business" ? (
+            <>
+              {" "}
+              Automated and manual checks may include AML, sanctions screening,
+              and business authenticity validation before approval or rejection.
+            </>
+          ) : null}
         </p>
       </div>
 
@@ -119,8 +131,16 @@ export function KycSubmittedPanel({ submittedAt }: Props) {
           />
           <TimelineStep
             number={3}
-            label="Identity Verification"
-            description="Final compliance checks"
+            label={
+              variant === "business"
+                ? "Compliance review"
+                : "Identity Verification"
+            }
+            description={
+              variant === "business"
+                ? "AML, PEP/sanctions and business checks"
+                : "Final compliance checks"
+            }
           />
           <TimelineStep
             number={4}

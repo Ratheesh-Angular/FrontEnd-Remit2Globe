@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "next-auth";
 import { getSession, signOut as nextAuthSignOut } from "next-auth/react";
 import { useAuthStore, type AuthUser } from "@/store/auth.store";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {

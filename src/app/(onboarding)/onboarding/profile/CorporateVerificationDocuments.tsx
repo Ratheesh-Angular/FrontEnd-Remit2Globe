@@ -3,111 +3,115 @@
 import { useState, useEffect, useRef } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
+import type { KycDocumentRow } from "./VerificationDocuments";
 
-type DocumentType =
-  | "PASSPORT_FRONT"
-  | "PASSPORT_BACK"
-  | "WORK_PERMIT_FRONT"
-  | "WORK_PERMIT_BACK"
-  | "NATIONAL_ID_FRONT"
-  | "NATIONAL_ID_BACK"
-  | "OTHER_GOVT_ID";
+type CorporateDocType =
+  | "CERTIFICATE_OF_INCORPORATION"
+  | "TRADING_LICENSE"
+  | "CR12"
+  | "REGULATORY_LICENSE"
+  | "PROOF_OF_ADDRESS"
+  | "REPRESENTATIVE_ID"
+  | "DIRECTOR_ID"
+  | "SHAREHOLDER_ID";
 
 interface DocConfig {
-  type: DocumentType;
+  type: CorporateDocType;
   label: string;
   description: string;
   required: boolean;
-  requiredFor: "all" | "national" | "foreigner";
 }
 
 interface UploadedDoc {
-  type: DocumentType;
+  type: CorporateDocType;
   fileName: string;
   fileUrl: string;
   status: "uploading" | "done" | "error";
 }
 
-export type KycDocumentRow = {
-  documentType: string;
-  fileName: string;
-  fileUrl: string;
-};
-
-const DOC_CONFIG: DocConfig[] = [
+const BASE_DOC_CONFIG: DocConfig[] = [
   {
-    type: "PASSPORT_FRONT",
-    label: "Passport (Front)",
-    description: "Upload the front side of your valid passport",
+    type: "CERTIFICATE_OF_INCORPORATION",
+    label: "Certificate of Incorporation",
+    description: "Official certificate from the registrar of companies.",
     required: true,
-    requiredFor: "foreigner",
   },
   {
-    type: "PASSPORT_BACK",
-    label: "Passport (Back)",
-    description: "Upload the back side of your valid passport",
+    type: "TRADING_LICENSE",
+    label: "Trading License",
+    description: "Current trading or business license.",
     required: true,
-    requiredFor: "foreigner",
   },
   {
-    type: "WORK_PERMIT_FRONT",
-    label: "Work Permit (Front)",
-    description: "Upload front side of your valid work permit ",
+    type: "CR12",
+    label: "Company Registration (e.g. CR12)",
+    description: "Detailed company registration extract or equivalent.",
     required: true,
-    requiredFor: "foreigner",
   },
   {
-    type: "WORK_PERMIT_BACK",
-    label: "Work Permit (Back)",
-    description: "Upload back side of your valid work permit",
+    type: "PROOF_OF_ADDRESS",
+    label: "Proof of Business Address",
+    description: "Utility bill, lease, or bank statement showing business address.",
     required: true,
-    requiredFor: "foreigner",
   },
   {
-    type: "NATIONAL_ID_FRONT",
-    label: "National ID (Front)",
-    description: "Upload front of your national identity card",
+    type: "REPRESENTATIVE_ID",
+    label: "Representative ID",
+    description:
+      "Passport or national ID for the authorized representative. Use one PDF if multiple pages.",
     required: true,
-    requiredFor: "national",
   },
   {
-    type: "NATIONAL_ID_BACK",
-    label: "National ID (Back)",
-    description: "Upload back of your national identity card",
+    type: "DIRECTOR_ID",
+    label: "Director ID",
+    description:
+      "Passport or national ID for a director. Combine multiple directors into one PDF if needed.",
     required: true,
-    requiredFor: "national",
+  },
+  {
+    type: "SHAREHOLDER_ID",
+    label: "Shareholder ID / corporate shareholder docs",
+    description:
+      "ID for individual shareholders or corporate registration docs for corporate shareholders (single PDF).",
+    required: true,
   },
 ];
 
-const emptyUploads = (): Record<DocumentType, UploadedDoc | null> => ({
-  PASSPORT_FRONT: null,
-  PASSPORT_BACK: null,
-  WORK_PERMIT_FRONT: null,
-  WORK_PERMIT_BACK: null,
-  NATIONAL_ID_FRONT: null,
-  NATIONAL_ID_BACK: null,
-  OTHER_GOVT_ID: null,
-});
+const REGULATORY_CONFIG: DocConfig = {
+  type: "REGULATORY_LICENSE",
+  label: "Regulatory License",
+  description: "Sector-specific regulatory license (if applicable).",
+  required: true,
+};
 
-type CitizenDocType = "" | "PASSPORT" | "NATIONAL_ID";
+function emptyUploads(): Record<CorporateDocType, UploadedDoc | null> {
+  return {
+    CERTIFICATE_OF_INCORPORATION: null,
+    TRADING_LICENSE: null,
+    CR12: null,
+    REGULATORY_LICENSE: null,
+    PROOF_OF_ADDRESS: null,
+    REPRESENTATIVE_ID: null,
+    DIRECTOR_ID: null,
+    SHAREHOLDER_ID: null,
+  };
+}
 
 type Props = {
-  isNational: boolean;
-  citizenDocType: CitizenDocType;
+  regulatoryLicenseRequired: boolean;
   documents: KycDocumentRow[];
   onDocumentsSynced: () => void;
   onKycSubmitted: () => void;
 };
 
-export function VerificationDocuments({
-  isNational,
-  citizenDocType,
+export function CorporateVerificationDocuments({
+  regulatoryLicenseRequired,
   documents,
   onDocumentsSynced,
   onKycSubmitted,
 }: Props) {
   const [uploads, setUploads] =
-    useState<Record<DocumentType, UploadedDoc | null>>(emptyUploads);
+    useState<Record<CorporateDocType, UploadedDoc | null>>(emptyUploads);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -117,12 +121,23 @@ export function VerificationDocuments({
     title: string;
   } | null>(null);
 
+  const docConfig = regulatoryLicenseRequired
+    ? [
+        BASE_DOC_CONFIG[0],
+        BASE_DOC_CONFIG[1],
+        BASE_DOC_CONFIG[2],
+        REGULATORY_CONFIG,
+        ...BASE_DOC_CONFIG.slice(3),
+      ]
+    : BASE_DOC_CONFIG;
+
   useEffect(() => {
     const uploadedMap = emptyUploads();
     documents.forEach((doc) => {
-      if (doc.documentType in uploadedMap) {
-        uploadedMap[doc.documentType as DocumentType] = {
-          type: doc.documentType as DocumentType,
+      const t = doc.documentType as CorporateDocType;
+      if (t in uploadedMap) {
+        uploadedMap[t] = {
+          type: t,
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
           status: "done",
@@ -132,35 +147,12 @@ export function VerificationDocuments({
     setUploads(uploadedMap);
   }, [documents]);
 
-  const visibleDocs = DOC_CONFIG.filter((doc) => {
-    if (doc.requiredFor === "all") return true;
-
-    const isPassportSlot =
-      doc.type === "PASSPORT_FRONT" || doc.type === "PASSPORT_BACK";
-    const isWorkPermit =
-      doc.type === "WORK_PERMIT_FRONT" || doc.type === "WORK_PERMIT_BACK";
-
-    if (isPassportSlot) {
-      if (!isNational) return true;
-      if (isNational && citizenDocType === "PASSPORT") return true;
-      return false;
-    }
-
-    if (isWorkPermit) return !isNational;
-
-    if (doc.requiredFor === "national") {
-      return isNational && citizenDocType === "NATIONAL_ID";
-    }
-
-    return false;
-  });
-
-  const requiredDocs = visibleDocs.filter((d) => d.required);
+  const requiredDocs = docConfig.filter((d) => d.required);
   const allRequiredUploaded = requiredDocs.every(
     (d) => uploads[d.type]?.status === "done",
   );
 
-  const handleFileSelect = async (docType: DocumentType, file: File) => {
+  const handleFileSelect = async (docType: CorporateDocType, file: File) => {
     const allowed = [
       "application/pdf",
       "image/jpeg",
@@ -251,7 +243,9 @@ export function VerificationDocuments({
         (error as { response?: { data?: { message?: string } } }).response
           ?.data?.message;
       setSubmitError(
-        typeof msg === "string" ? msg : "Something went wrong. Please try again.",
+        typeof msg === "string"
+          ? msg
+          : "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -270,27 +264,13 @@ export function VerificationDocuments({
         />
       )}
       <p className="text-sm text-slate-500">
-        Upload clear copies of your identity documents. Accepted formats: PDF,
-        JPEG, PNG, GIF, WebP. Max size: 10MB per file.
+        Upload clear copies of your business documents. Accepted formats: PDF,
+        JPEG, PNG, GIF, WebP. Max size: 10MB per file. For multiple people or
+        pages, combine into a single PDF where only one upload slot exists.
       </p>
 
-      <div
-        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
-          isNational
-            ? "bg-blue-50 text-blue-700"
-            : "bg-purple-50 text-purple-700"
-        }`}
-      >
-        <div
-          className={`w-1.5 h-1.5 rounded-full ${
-            isNational ? "bg-blue-500" : "bg-purple-500"
-          }`}
-        />
-        {isNational ? "National Citizen" : "Foreign National"}
-      </div>
-
       <div className="space-y-4">
-        {visibleDocs.map((doc) => {
+        {docConfig.map((doc) => {
           const upload = uploads[doc.type];
           return (
             <div
@@ -311,9 +291,6 @@ export function VerificationDocuments({
                       <span className="text-xs text-red-500 font-medium">
                         Required
                       </span>
-                    )}
-                    {!doc.required && (
-                      <span className="text-xs text-slate-400">Optional</span>
                     )}
                   </div>
                   <p className="text-xs text-slate-500">{doc.description}</p>
@@ -362,7 +339,7 @@ export function VerificationDocuments({
                           `Uploading ${upload.fileName}...`}
                         {upload.status === "done" && upload.fileName}
                         {upload.status === "error" &&
-                          "Invalid file. Use PDF, JPEG, PNG, GIF, or WebP under 10MB."}
+                          "Invalid file. Use PDF or image under 10MB."}
                       </span>
                     </div>
                   )}
@@ -434,8 +411,8 @@ export function VerificationDocuments({
             </p>
             <p className="text-sm text-slate-500 mt-0.5">
               {allRequiredUploaded
-                ? "All required documents uploaded. You can now submit your application."
-                : `Upload all required documents to continue.`}
+                ? "All required documents uploaded. Your application will enter compliance review (KYC/AML)."
+                : "Upload all required documents to continue."}
             </p>
           </div>
           <button

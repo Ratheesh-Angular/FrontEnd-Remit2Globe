@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import {
   formatBeneficiaryName,
   maskAccountLast4,

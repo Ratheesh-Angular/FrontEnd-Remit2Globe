@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
 import { ViewTransactionModal } from "@/components/transactions/ViewTransactionModal";
 import { Loader } from "@/components/ui/Loader";

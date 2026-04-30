@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
 import type { CreatedBeneficiaryPayload } from "./AddBeneficiaryModal";
 import { AppDialog } from "@/components/ui/AppDialog";

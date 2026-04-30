@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import type { Session } from "next-auth";
 import { getSession } from "next-auth/react";
 import { useAuthStore, type AuthUser } from "@/store/auth.store";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import Link from "next/link";
 
 function applySessionUser(

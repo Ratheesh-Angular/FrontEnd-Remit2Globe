@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 import {
   normalizeAba,
   normalizeIfsc,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import api from "@/lib/api";
+import { sessionApi as api } from "@/lib/api";
 
 type BeneficiaryActiveToggleProps = {
   beneficiaryId: string;
