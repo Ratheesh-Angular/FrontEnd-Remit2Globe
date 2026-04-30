@@ -2,7 +2,7 @@ import { cookies, headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
-import { getBackendApiBase } from "@/lib/backend-api-base";
+import { getBackendApiBaseServer } from "@/lib/backend-api-base";
 import DashboardClient from "./DashboardClient";
 
 type DashboardUser = {
@@ -20,7 +20,7 @@ async function loadUserFromBackendMe(): Promise<DashboardUser | null> {
   const cookieHeader = h.get("cookie") ?? "";
   if (!cookieHeader.includes("token=")) return null;
 
-  const base = getBackendApiBase();
+  const base = getBackendApiBaseServer();
   const res = await fetch(`${base}/auth/me`, {
     headers: { cookie: cookieHeader },
     cache: "no-store",

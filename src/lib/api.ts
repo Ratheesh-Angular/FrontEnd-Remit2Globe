@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getBackendApiBase } from "@/lib/backend-api-base";
+import { getBackendApiBase, getBackendApiBaseServer } from "@/lib/backend-api-base";
 
 /**
  * Direct backend — browser calls that must hit the API origin (login/register/OTP,
@@ -19,7 +19,7 @@ export const publicApi = axios.create({
  */
 export const sessionApi = axios.create({
   baseURL:
-    typeof window === "undefined" ? getBackendApiBase() : "/api/backend",
+    typeof window === "undefined" ? getBackendApiBaseServer() : "/api/backend",
   headers: {
     "Content-Type": "application/json",
   },

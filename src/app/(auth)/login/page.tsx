@@ -49,7 +49,11 @@ export default function LoginPage() {
           setError("Could not save your session. Please try again.");
           return;
         }
-        window.location.href = "/dashboard";
+        await sessRes.json().catch(() => undefined);
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => setTimeout(resolve, 0));
+        });
+        window.location.assign("/dashboard");
       }
     } catch (error: any) {
       setError(error.response?.data?.message || "Something went wrong");

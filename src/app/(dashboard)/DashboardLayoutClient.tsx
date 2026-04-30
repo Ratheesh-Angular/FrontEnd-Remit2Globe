@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "next-auth";
 import { getSession, signOut as nextAuthSignOut } from "next-auth/react";
+import { isAxiosError } from "axios";
 import { useAuthStore, type AuthUser } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 import Link from "next/link";
@@ -80,6 +81,7 @@ export default function DashboardLayoutClient({
 }) {
   const { user, setUser, setLoading } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionBanner, setSessionBanner] = useState<string | null>(null);
   const pathname = usePathname();
   const isKycApproved = user?.kycStatus === "APPROVED";
 
@@ -99,13 +101,32 @@ export default function DashboardLayoutClient({
         }
 
         const res = await api.get("/auth/me");
-        setUser(res.data.data.user);
-      } catch {
+        const u = res.data?.data?.user;
+        if (!u?.id) throw new Error("Invalid /auth/me payload");
+        setUser(u as AuthUser);
+      } catch (e) {
         const retry = await getSession();
         if (retry?.user && applySessionUser(retry.user, setUser)) {
           return;
         }
-        window.location.href = "/login";
+        if (isAxiosError(e)) {
+          const status = e.response?.status;
+          if (status === 401 || status === 403) {
+            window.location.assign("/login");
+            return;
+          }
+          console.error("[DashboardLayoutClient] /auth/me failed", status, e.message);
+          setSessionBanner(
+            status
+              ? `Could not verify your session (HTTP ${status}). Try refreshing the page.`
+              : "Could not reach the server. Check your connection, then refresh.",
+          );
+          return;
+        }
+        console.error("[DashboardLayoutClient] session load error", e);
+        setSessionBanner(
+          "Something went wrong loading your account. Try refreshing.",
+        );
       } finally {
         setLoading(false);
       }
@@ -250,6 +271,22 @@ export default function DashboardLayoutClient({
             </span>
           </div>
         </header>
+
+        {sessionBanner && (
+          <div
+            role="alert"
+            className="mx-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          >
+            {sessionBanner}{" "}
+            <button
+              type="button"
+              className="underline font-medium text-teal-800 hover:text-teal-900"
+              onClick={() => window.location.reload()}
+            >
+              Refresh
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 p-6">{children}</main>
       </div>

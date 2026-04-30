@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getBackendApiBase } from "@/lib/backend-api-base";
+import { getBackendApiBaseServer } from "@/lib/backend-api-base";
 
 const TOKEN_COOKIE = "token";
 
@@ -30,7 +30,7 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     );
   }
 
-  const base = getBackendApiBase().replace(/\/+$/, "");
+  const base = getBackendApiBaseServer().replace(/\/+$/, "");
   const target = new URL(`${base}/${pathSegments.join("/")}`);
   req.nextUrl.searchParams.forEach((value, key) => {
     target.searchParams.append(key, value);
@@ -53,12 +53,25 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     if (buf.byteLength > 0) body = buf;
   }
 
-  const upstream = await fetch(target.toString(), {
-    method,
-    headers: forwardHeaders,
-    body,
-    cache: "no-store",
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(target.toString(), {
+      method,
+      headers: forwardHeaders,
+      body,
+      cache: "no-store",
+    });
+  } catch (err) {
+    console.error("[api/backend] upstream fetch failed:", target.origin, err);
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Could not reach the API server. Set BACKEND_API_URL or NEXT_PUBLIC_API_URL on the host.",
+      },
+      { status: 502 },
+    );
+  }
 
   const out = new Headers();
   upstream.headers.forEach((value, key) => {

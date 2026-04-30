@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 const TOKEN = "token";
@@ -35,16 +34,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const store = await cookies();
-  store.set(TOKEN, token, {
+  const res = NextResponse.json({ success: true });
+  res.cookies.set(TOKEN, token, {
     ...cookieBase(),
     maxAge: 7 * 24 * 60 * 60,
   });
-  return NextResponse.json({ success: true });
+  return res;
 }
 
 export async function DELETE() {
-  const store = await cookies();
-  store.delete(TOKEN);
-  return NextResponse.json({ success: true });
+  const res = NextResponse.json({ success: true });
+  res.cookies.set(TOKEN, "", {
+    ...cookieBase(),
+    maxAge: 0,
+  });
+  return res;
 }
