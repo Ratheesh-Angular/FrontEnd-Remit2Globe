@@ -23,7 +23,7 @@ function hasNextAuthSessionCookie(request: NextRequest) {
     );
 }
 
-export function proxy(request: NextRequest) {
+export default function middleware(request: NextRequest) {
   const backendToken = request.cookies.get("token")?.value;
   const hasNa = hasNextAuthSessionCookie(request);
   const authed = Boolean(backendToken) || hasNa;

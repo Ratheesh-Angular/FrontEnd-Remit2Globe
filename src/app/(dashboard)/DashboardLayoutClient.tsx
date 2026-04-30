@@ -123,6 +123,14 @@ export default function DashboardLayoutClient({
     } catch {
       /* cookie may already be gone */
     }
+    try {
+      await fetch("/api/auth/backend-session", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+    } catch {
+      /* ignore */
+    }
     window.location.href = "/login";
   };
 

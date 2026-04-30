@@ -32,7 +32,23 @@ export default function LoginPage() {
       });
 
       if (response.data.success) {
-        // Redirect to dashboard after login
+        const token = response.data.data?.token as string | undefined;
+        if (!token) {
+          setError(
+            "Login succeeded but session setup failed. Deploy the latest API or contact support.",
+          );
+          return;
+        }
+        const sessRes = await fetch("/api/auth/backend-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ token }),
+        });
+        if (!sessRes.ok) {
+          setError("Could not save your session. Please try again.");
+          return;
+        }
         window.location.href = "/dashboard";
       }
     } catch (error: any) {
