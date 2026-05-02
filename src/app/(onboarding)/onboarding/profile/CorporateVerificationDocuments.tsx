@@ -60,7 +60,8 @@ const BASE_DOC_CONFIG: DocConfig[] = [
   {
     type: "PROOF_OF_ADDRESS",
     label: "Proof of Business Address",
-    description: "Utility bill, lease, or bank statement showing business address.",
+    description:
+      "Utility bill, lease, or bank statement showing business address.",
     required: true,
   },
   {
@@ -141,7 +142,10 @@ function docSectionsForConfig(docConfig: DocConfig[]) {
   return sections;
 }
 
-function sectionCompletion(items: DocConfig[], uploads: Record<string, UploadedDoc | null>) {
+function sectionCompletion(
+  items: DocConfig[],
+  uploads: Record<string, UploadedDoc | null>,
+) {
   const req = items.filter((i) => i.required);
   const done = req.filter((i) => uploads[i.type]?.status === "done").length;
   return { done, total: req.length };
@@ -308,8 +312,8 @@ export function CorporateVerificationDocuments({
         error &&
         typeof error === "object" &&
         "response" in error &&
-        (error as { response?: { data?: { message?: string } } }).response
-          ?.data?.message;
+        (error as { response?: { data?: { message?: string } } }).response?.data
+          ?.message;
       setSubmitError(
         typeof msg === "string"
           ? msg
@@ -321,7 +325,9 @@ export function CorporateVerificationDocuments({
   };
 
   const progressPct =
-    requiredTotal > 0 ? Math.round((uploadedRequiredCount / requiredTotal) * 100) : 0;
+    requiredTotal > 0
+      ? Math.round((uploadedRequiredCount / requiredTotal) * 100)
+      : 0;
 
   return (
     <div className="space-y-5">
@@ -340,7 +346,10 @@ export function CorporateVerificationDocuments({
           <p className="text-sm font-semibold text-slate-900">
             {uploadedRequiredCount} of {requiredTotal} required uploads complete
           </p>
-          <nav aria-label="Skip to document sections" className="flex flex-wrap gap-x-2 gap-y-1">
+          <nav
+            aria-label="Skip to document sections"
+            className="flex flex-wrap gap-x-2 gap-y-1"
+          >
             {groupedSections.map((s) => (
               <a
                 key={s.id}
@@ -365,7 +374,7 @@ export function CorporateVerificationDocuments({
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        {missingLabels.length > 0 ? (
+        {/* {missingLabels.length > 0 ? (
           <p className="text-xs text-slate-600 leading-snug">
             <span className="font-medium text-slate-700">Still needed:</span>{" "}
             {missingLabels.join(" · ")}
@@ -374,14 +383,8 @@ export function CorporateVerificationDocuments({
           <p className="text-xs font-medium text-teal-800">
             All required documents uploaded—you can submit below.
           </p>
-        )}
+        )} */}
       </div>
-
-      <p className="text-sm text-slate-500">
-        Images (any common format), PDF, Word/Excel/PowerPoint, CSV, and text
-        files — max {kycUploadMaxSizeLabelMb()} MB each. Combine multiple pages
-        into one file when a slot covers several items.
-      </p>
 
       <div className="space-y-8">
         {groupedSections.map((section) => {
@@ -411,7 +414,9 @@ export function CorporateVerificationDocuments({
                     <li
                       key={doc.type}
                       className={`rounded-lg border px-3 py-3 sm:px-4 transition-colors ${
-                        doneRow ? "border-teal-200 bg-teal-50/25" : "border-slate-200 bg-white"
+                        doneRow
+                          ? "border-teal-200 bg-teal-50/25"
+                          : "border-slate-200 bg-white"
                       }`}
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -455,7 +460,10 @@ export function CorporateVerificationDocuments({
                             )}
                           </div>
                           {upload?.status === "done" && (
-                            <p className="truncate text-xs text-teal-800/90" title={upload.fileName}>
+                            <p
+                              className="truncate text-xs text-teal-800/90"
+                              title={upload.fileName}
+                            >
                               {upload.fileName}
                             </p>
                           )}
@@ -508,7 +516,9 @@ export function CorporateVerificationDocuments({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => fileInputRefs.current[doc.type]?.click()}
+                            onClick={() =>
+                              fileInputRefs.current[doc.type]?.click()
+                            }
                             disabled={upload?.status === "uploading"}
                             className={`inline-flex min-h-[44px] items-center justify-center rounded-lg border px-4 text-xs font-medium transition-colors disabled:opacity-50 sm:min-h-0 sm:h-9 ${
                               upload?.status === "done"
@@ -542,7 +552,9 @@ export function CorporateVerificationDocuments({
       <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900">Ready to submit?</p>
+            <p className="text-sm font-semibold text-slate-900">
+              Ready to submit?
+            </p>
             <p className="mt-0.5 text-sm text-slate-500">
               {allRequiredUploaded
                 ? "Your application will go to compliance review (KYC/AML)."

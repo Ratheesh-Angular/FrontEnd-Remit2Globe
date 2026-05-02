@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
 import { getBackendApiBase, getBackendApiBaseServer } from "@/lib/backend-api-base";
 
 /**
@@ -24,6 +24,23 @@ export const sessionApi = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true,
+});
+
+/**
+ * Default JSON Content-Type breaks multipart: boundary is dropped and Express
+ * multer sees no file. Let the runtime set multipart boundaries for FormData.
+ */
+sessionApi.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (config.data instanceof FormData) {
+    const h = config.headers;
+    if (h && typeof h.delete === "function") {
+      h.delete("Content-Type");
+    } else if (h && typeof h === "object") {
+      delete (h as Record<string, unknown>)["Content-Type"];
+      delete (h as Record<string, unknown>)["content-type"];
+    }
+  }
+  return config;
 });
 
 export default publicApi;

@@ -159,9 +159,9 @@ const corpSections: {
   },
   {
     key: "ownership",
-    label: "Key people & shareholders",
+    label: "Authorised personnel & shareholders",
     description:
-      "Add directors, officers, key decision-makers, and shareholders so your ownership structure is complete on the KYC record.",
+      "Directors, officers, decision-makers, and shareholders on your KYC record.",
   },
   {
     key: "documents",
@@ -657,7 +657,7 @@ export function CorporateKycWizard() {
       );
       if (!kpOk)
         newErrors.keyPersonnel =
-          "Add at least one key person with full name and passport or national ID";
+          "Add at least one authorised person with full name and passport or national ID";
 
       const badSh = form.shareholders.find((row) => {
         if (row.kind === "CORPORATE") {
@@ -807,7 +807,7 @@ export function CorporateKycWizard() {
     }`;
 
   const ownershipTextareaClass = (section: "shareholders") =>
-    `border rounded-lg px-3 py-2 min-h-[72px] w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 resize-y transition-colors ${
+    `border rounded-lg px-3 py-2 min-h-[64px] w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 resize-y transition-colors ${
       errors[section] ? "border-red-400" : "border-slate-200"
     }`;
 
@@ -1206,72 +1206,25 @@ export function CorporateKycWizard() {
         )}
 
         {activeSection === "ownership" && (
-          <div className="space-y-10">
-            <p className="text-xs text-slate-600 -mt-1">
-              You&apos;re listing{" "}
-              <span className="font-medium text-slate-800">
-                {form.keyPersonnel.length} key{" "}
-                {form.keyPersonnel.length === 1 ? "person" : "people"}
-              </span>
-              {" · "}
-              <span className="font-medium text-slate-800">
-                {form.shareholders.length}{" "}
-                {form.shareholders.length === 1
-                  ? "shareholder"
-                  : "shareholders"}
-              </span>
-              .
-            </p>
-
+          <div className="space-y-6">
             <div>
-              <SectionLabel>Key people</SectionLabel>
-              <p className="text-xs text-slate-500 mb-3 mt-2">
-                Full name and passport or national ID for each director,
-                officer, or key decision-maker on your KYC record.
+              <p className="text-sm font-semibold text-slate-900 mb-2">
+                Authorised personnels
               </p>
               {errors.keyPersonnel && (
-                <p className="text-xs text-red-500 mb-3">
+                <p className="text-xs text-red-500 mb-2">
                   {errors.keyPersonnel}
                 </p>
               )}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {form.keyPersonnel.map((row, i) => (
                   <div
                     key={i}
-                    className="rounded-lg border border-slate-200 border-l-[3px] border-l-teal-500 bg-slate-50/40 p-4 shadow-sm"
+                    role="group"
+                    aria-label={`Authorised personnel ${i + 1}`}
+                    className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-3"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-teal-100 px-2 text-xs font-semibold text-teal-800 tabular-nums"
-                          aria-hidden
-                        >
-                          {i + 1}
-                        </span>
-                        <span className="text-sm font-medium text-slate-800 truncate">
-                          Key person {i + 1}
-                        </span>
-                      </div>
-                      {form.keyPersonnel.length > 1 && (
-                        <button
-                          type="button"
-                          aria-label={`Remove key person ${i + 1}`}
-                          title="Remove"
-                          className="shrink-0 p-2 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors -mr-2 -mt-1"
-                          onClick={() =>
-                            setForm((p) => ({
-                              ...p,
-                              keyPersonnel: p.keyPersonnel.filter(
-                                (_, idx) => idx !== i,
-                              ),
-                            }))
-                          }
-                        >
-                          <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
                       <Field label="Full name">
                         <input
                           className={ownershipInputClass("keyPersonnel")}
@@ -1285,7 +1238,7 @@ export function CorporateKycWizard() {
                           }
                         />
                       </Field>
-                      <Field label="Passport / National ID">
+                      <Field label="Passport / national ID">
                         <input
                           className={ownershipInputClass("keyPersonnel")}
                           value={row.passportOrNationalId}
@@ -1307,7 +1260,7 @@ export function CorporateKycWizard() {
               </div>
               <button
                 type="button"
-                className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-teal-600 bg-white px-4 py-2.5 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
+                className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
                 onClick={() =>
                   setForm((p) => ({
                     ...p,
@@ -1315,72 +1268,36 @@ export function CorporateKycWizard() {
                   }))
                 }
               >
-                <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
-                Add key person
+                <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
+                Add authorised person
               </button>
             </div>
 
             <div>
-              <SectionLabel>Shareholders</SectionLabel>
-              <p className="text-xs text-slate-500 mb-3 mt-2">
-                Individuals need name and ID. Corporate shareholders need legal
-                entity details (you can attach supporting documents in the
-                shareholder upload slot later).
+              <p className="text-sm font-semibold text-slate-900 mb-2">
+                Shareholders
               </p>
               {errors.shareholders && (
-                <p className="text-xs text-red-500 mb-3">
+                <p className="text-xs text-red-500 mb-2">
                   {errors.shareholders}
                 </p>
               )}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {form.shareholders.map((row, i) => (
                   <div
                     key={i}
-                    className="rounded-lg border border-slate-200 border-l-[3px] border-l-teal-500 bg-slate-50/40 p-4 shadow-sm"
+                    role="group"
+                    aria-label={`Shareholder ${i + 1}`}
+                    className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-3"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-teal-100 px-2 text-xs font-semibold text-teal-800 tabular-nums"
-                          aria-hidden
-                        >
-                          {i + 1}
-                        </span>
-                        <span className="text-sm font-medium text-slate-800 truncate">
-                          Shareholder {i + 1}
-                        </span>
-                      </div>
-                      {form.shareholders.length > 1 && (
-                        <button
-                          type="button"
-                          aria-label={`Remove shareholder ${i + 1}`}
-                          title="Remove"
-                          className="shrink-0 p-2 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors -mr-2 -mt-1"
-                          onClick={() =>
-                            setForm((p) => ({
-                              ...p,
-                              shareholders: p.shareholders.filter(
-                                (_, idx) => idx !== i,
-                              ),
-                            }))
-                          }
-                        >
-                          <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="mb-4 min-w-0">
-                      <p
-                        id={`shareholder-type-label-${i}`}
-                        className="text-sm font-medium text-slate-700 mb-2"
-                      >
-                        Shareholder type
+                    <div className="mb-2 min-w-0">
+                      <p id={`shareholder-type-label-${i}`} className="sr-only">
+                        Shareholder {i + 1} type
                       </p>
                       <div
                         role="radiogroup"
                         aria-labelledby={`shareholder-type-label-${i}`}
-                        className="flex w-full flex-col gap-2 sm:inline-flex sm:w-auto sm:flex-row rounded-lg border border-slate-200 bg-slate-100/90 p-1"
+                        className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 sm:inline-flex sm:w-auto sm:flex-row"
                       >
                         <button
                           type="button"
@@ -1389,7 +1306,7 @@ export function CorporateKycWizard() {
                           data-state={
                             row.kind === "INDIVIDUAL" ? "checked" : "unchecked"
                           }
-                          className={`w-full sm:w-auto rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 ${
+                          className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
                             row.kind === "INDIVIDUAL"
                               ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
                               : "text-slate-600 hover:text-slate-900"
@@ -1415,7 +1332,7 @@ export function CorporateKycWizard() {
                           data-state={
                             row.kind === "CORPORATE" ? "checked" : "unchecked"
                           }
-                          className={`w-full sm:w-auto rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 ${
+                          className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
                             row.kind === "CORPORATE"
                               ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
                               : "text-slate-600 hover:text-slate-900"
@@ -1433,13 +1350,13 @@ export function CorporateKycWizard() {
                             })
                           }
                         >
-                          Corporate entity
+                          Corporate
                         </button>
                       </div>
                     </div>
 
                     {row.kind === "INDIVIDUAL" ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
                         <Field label="Full name">
                           <input
                             className={ownershipInputClass("shareholders")}
@@ -1457,7 +1374,7 @@ export function CorporateKycWizard() {
                             }
                           />
                         </Field>
-                        <Field label="Passport / National ID">
+                        <Field label="Passport / national ID">
                           <input
                             className={ownershipInputClass("shareholders")}
                             value={row.idDocumentNumber}
@@ -1476,9 +1393,9 @@ export function CorporateKycWizard() {
                         </Field>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <Field label="Legal entity name">
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+                          <Field label="Entity name">
                             <input
                               className={ownershipInputClass("shareholders")}
                               value={row.entityName}
@@ -1495,7 +1412,7 @@ export function CorporateKycWizard() {
                               }
                             />
                           </Field>
-                          <Field label="Registration number">
+                          <Field label="Registration No">
                             <input
                               className={ownershipInputClass("shareholders")}
                               value={row.registrationNumber}
@@ -1537,7 +1454,7 @@ export function CorporateKycWizard() {
               </div>
               <button
                 type="button"
-                className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-teal-600 bg-white px-4 py-2.5 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
+                className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
                 onClick={() =>
                   setForm((p) => ({
                     ...p,
@@ -1545,7 +1462,7 @@ export function CorporateKycWizard() {
                   }))
                 }
               >
-                <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
+                <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
                 Add shareholder
               </button>
             </div>
