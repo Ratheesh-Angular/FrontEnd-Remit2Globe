@@ -8,6 +8,7 @@ import {
   BACKEND_FETCH_TIMEOUT_MS,
   resolveBackendFetchBase,
 } from "@/lib/backend-api-base";
+import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 
 export const runtime = "nodejs";
 
@@ -72,14 +73,13 @@ export async function POST(req: NextRequest) {
   const url = `${base}/auth/internal/trusted-session`;
   let upstream: Response;
   try {
-    upstream = await fetch(url, {
+    upstream = await backendOutboundFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Internal-Auth": secret,
       },
       body: JSON.stringify({ userId }),
-      cache: "no-store",
       signal: AbortSignal.timeout(BACKEND_FETCH_TIMEOUT_MS),
     });
   } catch (err) {

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { resolveBackendFetchBase } from "@/lib/backend-api-base";
+import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 import DashboardClient from "./DashboardClient";
 
 type DashboardUser = {
@@ -24,9 +25,8 @@ async function loadUserFromBackendMe(): Promise<DashboardUser | null> {
   if (!resolved.ok) return null;
 
   const base = resolved.baseUrl;
-  const res = await fetch(`${base}/auth/me`, {
+  const res = await backendOutboundFetch(`${base}/auth/me`, {
     headers: { cookie: cookieHeader },
-    cache: "no-store",
   });
   if (!res.ok) return null;
 

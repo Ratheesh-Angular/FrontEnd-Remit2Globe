@@ -6,6 +6,7 @@ import {
   BACKEND_FETCH_TIMEOUT_MS,
   resolveBackendFetchBase,
 } from "@/lib/backend-api-base";
+import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 
 export const runtime = "nodejs";
 
@@ -80,27 +81,34 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(target.toString(), {
+    upstream = await backendOutboundFetch(target.toString(), {
       method,
       headers: forwardHeaders,
       body,
-      cache: "no-store",
       signal: AbortSignal.timeout(BACKEND_FETCH_TIMEOUT_MS),
     });
   } catch (err) {
     const hint =
       err instanceof Error ? err.message : typeof err === "string" ? err : "unknown_error";
-    console.error("[api/backend] upstream fetch failed:", target.hostname, hint);
+    const errno =
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      typeof (err as { code?: unknown }).code === "string"
+        ? String((err as { code: string }).code)
+        : undefined;
+    console.error("[api/backend] upstream fetch failed:", target.hostname, errno ?? hint, err);
+    const errnoHint = errno ? ` (${errno})` : "";
     const extra =
       process.env.NODE_ENV === "production"
-        ? ` Check BACKEND_INTERNAL_API_URL or BACKEND_API_URL (Reachability to host ${target.hostname}).`
+        ? ` Set BACKEND_INTERNAL_API_URL or BACKEND_API_URL to your Express API /api root, not this site’s URL.${errnoHint}`
         : "";
     return NextResponse.json(
       {
         success: false,
         message:
           `Could not reach the API server at ${target.hostname}.${extra} ` +
-          "On Render use the API service internal URL + `/api` for server-side outbound calls.",
+          "On Render open the API service → Connect → copy Internal URL and append `/api` as BACKEND_INTERNAL_API_URL on this web service.",
       },
       { status: 502 },
     );
