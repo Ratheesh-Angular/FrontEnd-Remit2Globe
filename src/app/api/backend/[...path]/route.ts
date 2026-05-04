@@ -9,8 +9,17 @@ import {
 import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 
 export const runtime = "nodejs";
+/** Ensures proxied handlers always run dynamically (avoid caching / ISR surprises at the edge). */
+export const dynamic = "force-dynamic";
 
 const TOKEN_COOKIE = "token";
+
+const BFF_NO_STORE =
+  "private, no-store, max-age=0" as const;
+
+const BFF_JSON_HEADERS = {
+  "Cache-Control": BFF_NO_STORE,
+} as const;
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -25,7 +34,10 @@ const HOP_BY_HOP = new Set([
 
 async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
   if (pathSegments.length === 0) {
-    return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+    return NextResponse.json(
+      { success: false, message: "Not found" },
+      { status: 404, headers: BFF_JSON_HEADERS },
+    );
   }
 
   const jar = await cookies();
@@ -33,7 +45,7 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
   if (!token) {
     return NextResponse.json(
       { success: false, message: "Not authenticated. Please login." },
-      { status: 401 },
+      { status: 401, headers: BFF_JSON_HEADERS },
     );
   }
 
@@ -42,7 +54,7 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     console.error("[api/backend] misconfigured:", resolved.reason);
     return NextResponse.json(
       { success: false, message: backendFetchResolutionMessage(resolved) },
-      { status: 503 },
+      { status: 503, headers: BFF_JSON_HEADERS },
     );
   }
 
@@ -54,7 +66,7 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     console.error("[api/backend] invalid target URL:", base, pathSegments, e);
     return NextResponse.json(
       { success: false, message: "Invalid backend proxy target URL." },
-      { status: 503 },
+      { status: 503, headers: BFF_JSON_HEADERS },
     );
   }
 
@@ -110,7 +122,7 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
           `Could not reach the API server at ${target.hostname}.${extra} ` +
           "On Render open the API service → Connect → copy Internal URL and append `/api` as BACKEND_INTERNAL_API_URL on this web service.",
       },
-      { status: 502 },
+      { status: 502, headers: BFF_JSON_HEADERS },
     );
   }
 
@@ -119,10 +131,30 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     const lower = key.toLowerCase();
     if (HOP_BY_HOP.has(lower)) return;
     if (lower === "set-cookie") return;
+    /** `arrayBuffer()` is already decompressed; forwarding these confuses downstream caches. */
+    if (lower === "content-encoding") return;
+    if (lower === "content-length") return;
     out.append(key, value);
   });
+  out.set("Cache-Control", BFF_NO_STORE);
 
-  return new NextResponse(upstream.body, {
+  /** Buffer upstream body — streamed passthrough is brittle behind some CDNs (Cloudflare 502 HTML). */
+  let bodyBuf: ArrayBuffer;
+  try {
+    bodyBuf = await upstream.arrayBuffer();
+  } catch (e) {
+    console.error("[api/backend] failed to read upstream body:", e);
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "The API responded but its body could not be read through the gateway. Retry or contact support.",
+      },
+      { status: 502, headers: BFF_JSON_HEADERS },
+    );
+  }
+
+  return new NextResponse(bodyBuf, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: out,
