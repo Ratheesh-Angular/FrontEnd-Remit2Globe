@@ -93,15 +93,19 @@ export default function DashboardLayoutClient({
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        if (
-          initialSession?.user &&
-          applySessionUser(initialSession.user, setUser)
-        ) {
-          return;
+        const naSession =
+          initialSession ?? (await safeGetSession());
+        if (naSession?.user) {
+          await fetch("/api/auth/sync-backend-session", {
+            method: "POST",
+            credentials: "same-origin",
+          });
         }
 
-        const session = await safeGetSession();
-        if (session?.user && applySessionUser(session.user, setUser)) {
+        if (
+          naSession?.user &&
+          applySessionUser(naSession.user, setUser)
+        ) {
           return;
         }
 
@@ -113,7 +117,8 @@ export default function DashboardLayoutClient({
             res.data,
           );
           setSessionBanner(
-            "Could not read your account data. Try refreshing the page.",
+            // "Could not read your account data. Try refreshing the page.",
+            "",
           );
           return;
         }

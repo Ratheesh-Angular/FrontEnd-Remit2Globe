@@ -43,4 +43,39 @@ sessionApi.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+type SessionApiRequestConfig = InternalAxiosRequestConfig & {
+  _bffSyncRetried?: boolean;
+};
+
+/**
+ * NextAuth-only users lack the mirrored httpOnly `token`; BFF returns 401 once.
+ * Re-issue JWT via `/api/auth/sync-backend-session`, then retry once.
+ */
+sessionApi.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (typeof window === "undefined") throw error;
+    const err = error as {
+      response?: { status?: number };
+      config?: SessionApiRequestConfig;
+    };
+    const cfg = err.config;
+    const status = err.response?.status;
+    if (!cfg || cfg._bffSyncRetried || status !== 401) {
+      throw error;
+    }
+    try {
+      const syncRes = await fetch("/api/auth/sync-backend-session?force=1", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!syncRes.ok) throw error;
+      cfg._bffSyncRetried = true;
+      return sessionApi.request(cfg);
+    } catch {
+      throw error;
+    }
+  },
+);
+
 export default publicApi;
