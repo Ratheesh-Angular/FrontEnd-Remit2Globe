@@ -3,7 +3,13 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getBackendApiBaseServer } from "@/lib/backend-api-base";
+import {
+  backendFetchResolutionMessage,
+  BACKEND_FETCH_TIMEOUT_MS,
+  resolveBackendFetchBase,
+} from "@/lib/backend-api-base";
+
+export const runtime = "nodejs";
 
 const TOKEN = "token";
 
@@ -50,7 +56,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const base = getBackendApiBaseServer().replace(/\/+$/, "");
+  const resolved = resolveBackendFetchBase();
+  if (!resolved.ok) {
+    console.error("[sync-backend-session] misconfigured:", resolved.reason);
+    return NextResponse.json(
+      {
+        success: false,
+        message: backendFetchResolutionMessage(resolved),
+      },
+      { status: 503 },
+    );
+  }
+
+  const base = resolved.baseUrl.replace(/\/+$/, "");
   const url = `${base}/auth/internal/trusted-session`;
   let upstream: Response;
   try {
@@ -62,6 +80,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({ userId }),
       cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_FETCH_TIMEOUT_MS),
     });
   } catch (err) {
     console.error("[sync-backend-session] upstream fetch failed:", url, err);

@@ -1,7 +1,13 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getBackendApiBaseServer } from "@/lib/backend-api-base";
+import {
+  backendFetchResolutionMessage,
+  BACKEND_FETCH_TIMEOUT_MS,
+  resolveBackendFetchBase,
+} from "@/lib/backend-api-base";
+
+export const runtime = "nodejs";
 
 const TOKEN_COOKIE = "token";
 
@@ -30,8 +36,27 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
     );
   }
 
-  const base = getBackendApiBaseServer().replace(/\/+$/, "");
-  const target = new URL(`${base}/${pathSegments.join("/")}`);
+  const resolved = resolveBackendFetchBase();
+  if (!resolved.ok) {
+    console.error("[api/backend] misconfigured:", resolved.reason);
+    return NextResponse.json(
+      { success: false, message: backendFetchResolutionMessage(resolved) },
+      { status: 503 },
+    );
+  }
+
+  const base = resolved.baseUrl.replace(/\/+$/, "");
+  let target: URL;
+  try {
+    target = new URL(`${base}/${pathSegments.join("/")}`);
+  } catch (e) {
+    console.error("[api/backend] invalid target URL:", base, pathSegments, e);
+    return NextResponse.json(
+      { success: false, message: "Invalid backend proxy target URL." },
+      { status: 503 },
+    );
+  }
+
   req.nextUrl.searchParams.forEach((value, key) => {
     target.searchParams.append(key, value);
   });
@@ -60,14 +85,22 @@ async function proxyToBackend(req: NextRequest, pathSegments: string[]) {
       headers: forwardHeaders,
       body,
       cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_FETCH_TIMEOUT_MS),
     });
   } catch (err) {
-    console.error("[api/backend] upstream fetch failed:", target.origin, err);
+    const hint =
+      err instanceof Error ? err.message : typeof err === "string" ? err : "unknown_error";
+    console.error("[api/backend] upstream fetch failed:", target.hostname, hint);
+    const extra =
+      process.env.NODE_ENV === "production"
+        ? ` Check BACKEND_INTERNAL_API_URL or BACKEND_API_URL (Reachability to host ${target.hostname}).`
+        : "";
     return NextResponse.json(
       {
         success: false,
         message:
-          "Could not reach the API server. Set BACKEND_API_URL or NEXT_PUBLIC_API_URL on the host.",
+          `Could not reach the API server at ${target.hostname}.${extra} ` +
+          "On Render use the API service internal URL + `/api` for server-side outbound calls.",
       },
       { status: 502 },
     );
