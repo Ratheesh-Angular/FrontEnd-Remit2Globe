@@ -192,6 +192,13 @@ export function AddBeneficiaryModal({
     [selectedFlexCountry?.couCode],
   );
 
+  /** When false (e.g. production without Flex IP allowlisting), bank name is a plain text field. */
+  const useFlexBankListUi = useMemo(() => {
+    const flexBankListFromApiEnabled =
+      process.env.NEXT_PUBLIC_ENABLE_FLEX_BANK_LIST !== "false";
+    return !bankIdConfig.hideFlexBankPicker && flexBankListFromApiEnabled;
+  }, [bankIdConfig.hideFlexBankPicker]);
+
   useEffect(() => {
     if (!bankOpen) return;
     const close = (e: MouseEvent) => {
@@ -300,7 +307,7 @@ export function AddBeneficiaryModal({
       setBanksLoading(false);
       return;
     }
-    if (bankIdConfig.hideFlexBankPicker) {
+    if (!useFlexBankListUi) {
       setFlexBanks([]);
       setBanksLoading(false);
       setBankOpen(false);
@@ -341,7 +348,7 @@ export function AddBeneficiaryModal({
     formData.deliveryChannel,
     formData.country,
     selectedFlexCountry?.couCode,
-    bankIdConfig.hideFlexBankPicker,
+    useFlexBankListUi,
   ]);
 
   useEffect(() => {
@@ -811,7 +818,7 @@ export function AddBeneficiaryModal({
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">
                     Bank name <span className="text-red-500">*</span>
                   </label>
-                  {bankIdConfig.hideFlexBankPicker ? (
+                  {!useFlexBankListUi ? (
                     <input
                       type="text"
                       placeholder={

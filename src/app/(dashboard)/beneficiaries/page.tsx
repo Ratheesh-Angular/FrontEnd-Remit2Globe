@@ -14,6 +14,10 @@ import { ViewBeneficiaryModal } from "@/components/beneficiaries/ViewBeneficiary
 import { AppDialog } from "@/components/ui/AppDialog";
 import type { AppDialogProps } from "@/components/ui/AppDialog";
 import { Loader } from "@/components/ui/Loader";
+import {
+  userFacingApiErrorMessage,
+  userFacingApiMessageText,
+} from "@/lib/user-facing-api-error";
 import Link from "next/link";
 import { Eye, Pencil, Plus, SendHorizontal, Trash2, Users } from "lucide-react";
 
@@ -47,12 +51,8 @@ type DialogFields = Pick<
   | "onConfirm"
 >;
 
-function apiErrorMessage(error: unknown, fallback: string): string {
-  return (
-    (error as { response?: { data?: { message?: string } } })?.response?.data
-      ?.message ?? fallback
-  );
-}
+const LIST_FAIL_FALLBACK =
+  "Could not load beneficiaries. Please try again in a moment.";
 
 export default function BeneficiariesPage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
@@ -64,6 +64,7 @@ export default function BeneficiariesPage() {
 
   const [dialog, setDialog] = useState<DialogFields | null>(null);
   const [dialogLoading, setDialogLoading] = useState(false);
+  const [listLoadError, setListLoadError] = useState<string | null>(null);
 
   const formModalOpen = showAddModal || editId !== null;
 
@@ -78,15 +79,14 @@ export default function BeneficiariesPage() {
       else setIsLoading(true);
       const res = await api.get("/beneficiaries");
       setBeneficiaries(res.data.data.beneficiaries);
+      setListLoadError(null);
     } catch (e) {
       console.error(e);
-      setDialog({
-        variant: "error",
-        title: "Could not load beneficiaries",
-        message:
-          apiErrorMessage(e, "Check your connection and try again.") +
-          " You can refresh the page to retry.",
-      });
+      if (!quiet) {
+        setListLoadError(
+          userFacingApiErrorMessage(e, LIST_FAIL_FALLBACK),
+        );
+      }
     } finally {
       if (quiet) setListRefreshing(false);
       else setIsLoading(false);
@@ -120,7 +120,7 @@ export default function BeneficiariesPage() {
           setDialog({
             variant: "error",
             title: "Could not remove beneficiary",
-            message: apiErrorMessage(error, "Please try again."),
+            message: userFacingApiErrorMessage(error, "Please try again."),
           });
         } finally {
           setDialogLoading(false);
@@ -153,6 +153,31 @@ export default function BeneficiariesPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-10 relative">
+      {listLoadError ? (
+        <div
+          className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <p className="text-sm text-amber-950">{listLoadError}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => void loadBeneficiaries()}
+              className="h-9 px-3 rounded-lg text-sm font-medium bg-amber-800 text-white hover:bg-amber-900 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => setListLoadError(null)}
+              className="h-9 px-3 rounded-lg text-sm font-medium text-amber-900 bg-amber-100 hover:bg-amber-200/80 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {listRefreshing && (
         <div className="absolute top-0 right-0 z-10">
           <Loader variant="inline" size="sm" label="Updating…" />
@@ -304,7 +329,10 @@ export default function BeneficiariesPage() {
                               setDialog({
                                 variant: "error",
                                 title: "Could not update status",
-                                message,
+                                message: userFacingApiMessageText(
+                                  message,
+                                  "Please try again.",
+                                ),
                               });
                             }}
                           />
@@ -355,7 +383,10 @@ export default function BeneficiariesPage() {
             title: editId
               ? "Could not save changes"
               : "Could not add beneficiary",
-            message,
+            message: userFacingApiMessageText(
+              message,
+              "Something went wrong. Please try again.",
+            ),
           });
         }}
       />
