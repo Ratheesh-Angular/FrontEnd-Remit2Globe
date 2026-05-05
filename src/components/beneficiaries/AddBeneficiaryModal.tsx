@@ -199,6 +199,22 @@ export function AddBeneficiaryModal({
     return !bankIdConfig.hideFlexBankPicker && flexBankListFromApiEnabled;
   }, [bankIdConfig.hideFlexBankPicker]);
 
+  /** Dropdown only while loading or when we have banks; otherwise allow manual entry so users are not blocked. */
+  const showFlexBankDropdown = useMemo(
+    () =>
+      Boolean(
+        useFlexBankListUi &&
+          formData.country?.trim() &&
+          (banksLoading || flexBanks.length > 0),
+      ),
+    [
+      useFlexBankListUi,
+      formData.country,
+      banksLoading,
+      flexBanks.length,
+    ],
+  );
+
   useEffect(() => {
     if (!bankOpen) return;
     const close = (e: MouseEvent) => {
@@ -818,19 +834,29 @@ export function AddBeneficiaryModal({
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">
                     Bank name <span className="text-red-500">*</span>
                   </label>
-                  {!useFlexBankListUi ? (
+                  {!showFlexBankDropdown ? (
                     <input
                       type="text"
+                      disabled={
+                        Boolean(useFlexBankListUi && !formData.country?.trim())
+                      }
                       placeholder={
-                        bankIdConfig.lookup === "ifsc"
-                          ? "Filled from IFSC or type manually"
-                          : bankIdConfig.lookup === "aba"
-                            ? "Filled from routing number or type manually"
-                            : "Bank name"
+                        useFlexBankListUi && !formData.country?.trim()
+                          ? "Select country first"
+                          : useFlexBankListUi &&
+                              formData.country?.trim() &&
+                              !banksLoading &&
+                              flexBanks.length === 0
+                            ? "Type bank name (no list available for this country)"
+                            : bankIdConfig.lookup === "ifsc"
+                              ? "Filled from IFSC or type manually"
+                              : bankIdConfig.lookup === "aba"
+                                ? "Filled from routing number or type manually"
+                                : "Bank name"
                       }
                       value={formData.bankName}
                       onChange={(e) => handleChange("bankName", e.target.value)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
                         errors.bankName ? "border-red-400" : "border-slate-200"
                       }`}
                     />
@@ -838,18 +864,9 @@ export function AddBeneficiaryModal({
                     <div className="relative" data-bank-dropdown>
                       <button
                         type="button"
-                        disabled={
-                          !formData.country ||
-                          banksLoading ||
-                          flexBanks.length === 0
-                        }
+                        disabled={!formData.country || banksLoading}
                         onClick={() => {
-                          if (
-                            !formData.country ||
-                            banksLoading ||
-                            flexBanks.length === 0
-                          )
-                            return;
+                          if (!formData.country || banksLoading) return;
                           setBankOpen((v) => !v);
                           setBankSearch("");
                         }}
@@ -861,8 +878,6 @@ export function AddBeneficiaryModal({
                       >
                         {banksLoading ? (
                           <span>Loading banks…</span>
-                        ) : flexBanks.length === 0 && formData.country ? (
-                          <span>No banks for this country</span>
                         ) : formData.bankName ? (
                           <span className="truncate">{formData.bankName}</span>
                         ) : (
