@@ -192,7 +192,7 @@ export function VerificationDocuments({
           fileUrl: "",
           status: "error",
           errorDetail:
-            "This file type is not accepted. Use any common image, PDF, Word/Excel/PowerPoint, CSV, or text.",
+            "This file type is not accepted. Use documents or media (executables and scripts are blocked).",
         },
       }));
       return;
@@ -274,8 +274,8 @@ export function VerificationDocuments({
         />
       )}
       <p className="text-sm text-slate-500">
-        Upload clear copies of your identity documents. Common images, PDF,
-        Word/Excel/PowerPoint, CSV, or text — max {kycUploadMaxSizeLabelMb()} MB per
+        Upload clear copies of your identity documents. Most file types are
+        accepted (executables blocked) — max {kycUploadMaxSizeLabelMb()} MB per
         file.
       </p>
 

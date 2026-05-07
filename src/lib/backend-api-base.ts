@@ -21,7 +21,9 @@ function pickBackendEnvRaw(): string {
 
 /** Browser + inlined `NEXT_PUBLIC_*` — login/register and direct client→API calls. */
 export function getBackendApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").trim();
+  const raw = (
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+  ).trim();
   return normalizeApiBase(raw);
 }
 
@@ -71,7 +73,7 @@ export function resolveBackendFetchBase(): BackendFetchResolution {
 
   let baseUrl: string;
   try {
-    baseUrl = normalizeApiBase(raw || "http://localhost:5000/api");
+    baseUrl = normalizeApiBase(raw || "http://localhost:8000/api");
     const u = new URL(baseUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") {
       return { ok: false, reason: "INVALID_URL" };
@@ -100,9 +102,10 @@ export function resolveBackendFetchBase(): BackendFetchResolution {
 
   for (const hint of webHints) {
     try {
-      const webUrl = hint.startsWith("http://") || hint.startsWith("https://")
-        ? hint
-        : `https://${hint}`;
+      const webUrl =
+        hint.startsWith("http://") || hint.startsWith("https://")
+          ? hint
+          : `https://${hint}`;
       const webHost = new URL(webUrl).hostname.toLowerCase();
       if (webHost && webHost === apiHostname) {
         return { ok: false, reason: "BACKEND_POINTS_AT_THIS_WEB_SERVICE" };
@@ -127,7 +130,7 @@ export function getBackendApiBaseServer(): string {
     r.reason,
     "— set BACKEND_INTERNAL_API_URL or BACKEND_API_URL on the web service.",
   );
-  return normalizeApiBase("http://localhost:5000/api");
+  return normalizeApiBase("http://localhost:8000/api");
 }
 
 /** Upstream cold starts / TLS handshakes (e.g. Render free tier). */

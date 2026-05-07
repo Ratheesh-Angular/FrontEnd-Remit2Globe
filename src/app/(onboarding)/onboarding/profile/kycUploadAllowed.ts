@@ -16,35 +16,38 @@ const SPECIFIC_ALLOWED_MIMES = new Set([
   "application/vnd.oasis.opendocument.spreadsheet",
 ]);
 
-/** When the browser sends no type or octet-stream, allow these extensions. */
-export const KYC_ALLOWED_EXTENSIONS = new Set([
-  ".pdf",
-  ".jpg",
-  ".jpeg",
-  ".jpe",
-  ".jfif",
-  ".png",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".tif",
-  ".tiff",
-  ".heic",
-  ".heif",
-  ".avif",
-  ".svg",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".txt",
-  ".csv",
-  ".rtf",
-  ".odt",
-  ".ods",
+/** Block obvious installers/scripts (must match `upload.middleware.ts`). */
+export const KYC_BLOCKED_EXTENSIONS = new Set([
+  ".exe",
+  ".msi",
+  ".bat",
+  ".cmd",
+  ".com",
+  ".scr",
+  ".pif",
+  ".dll",
+  ".sys",
+  ".vbs",
+  ".vbe",
+  ".ps1",
+  ".psm1",
+  ".app",
+  ".deb",
+  ".rpm",
 ]);
+
+function mimeBlocked(t: string): boolean {
+  const m = t.trim().toLowerCase();
+  return (
+    m === "application/x-msdownload" ||
+    m === "application/x-msdos-program" ||
+    m === "application/x-executable" ||
+    m === "application/x-sharedlib" ||
+    m === "application/javascript" ||
+    m === "application/ecmascript" ||
+    m === "text/javascript"
+  );
+}
 
 export function kycUploadFileExtension(fileName: string): string {
   const i = fileName.lastIndexOf(".");
@@ -52,26 +55,31 @@ export function kycUploadFileExtension(fileName: string): string {
 }
 
 export function isAllowedKycUpload(file: File): boolean {
+  const ext = kycUploadFileExtension(file.name);
+  if (KYC_BLOCKED_EXTENSIONS.has(ext)) return false;
+
   const t = file.type.trim().toLowerCase();
-  if (t.startsWith("image/")) return true;
-  if (t.startsWith("text/")) return true;
+  if (mimeBlocked(t)) return false;
+  if (t.startsWith("image/") || t.startsWith("text/")) return true;
+  if (t.startsWith("video/") || t.startsWith("audio/")) return true;
   if (SPECIFIC_ALLOWED_MIMES.has(t)) return true;
+  if (
+    t.startsWith("application/") &&
+    !mimeBlocked(t) &&
+    !KYC_BLOCKED_EXTENSIONS.has(ext)
+  ) {
+    return true;
+  }
 
   if (!t || t === "application/octet-stream") {
-    const ext = kycUploadFileExtension(file.name);
-    return ext !== "" && KYC_ALLOWED_EXTENSIONS.has(ext);
+    return ext !== "" && !KYC_BLOCKED_EXTENSIONS.has(ext);
   }
 
   return false;
 }
 
-/** Broad picker hint; validation uses `isAllowedKycUpload`. */
-export const KYC_FILE_INPUT_ACCEPT = [
-  ...Array.from(KYC_ALLOWED_EXTENSIONS),
-  "image/*",
-  "text/*",
-  "application/pdf",
-].join(",");
+/** Let the system file picker show all types; `isAllowedKycUpload` still validates. */
+export const KYC_FILE_INPUT_ACCEPT = "*/*";
 
 export function kycUploadMaxSizeLabelMb(): number {
   return Math.round(KYC_UPLOAD_MAX_BYTES / (1024 * 1024));

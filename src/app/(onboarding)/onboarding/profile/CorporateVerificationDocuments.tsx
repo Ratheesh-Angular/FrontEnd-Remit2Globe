@@ -252,7 +252,7 @@ export function CorporateVerificationDocuments({
           fileUrl: "",
           status: "error",
           errorDetail:
-            "This file type is not accepted. Use any common image, PDF, Word/Excel/PowerPoint, CSV, or text.",
+            "This file type is not accepted. Use documents or media (executables and scripts are blocked).",
         },
       }));
       return;
