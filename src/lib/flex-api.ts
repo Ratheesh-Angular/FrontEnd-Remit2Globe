@@ -1,23 +1,28 @@
 import type { FlexCountry } from "@/types/flex-country";
 import { getBackendApiBase, getBackendApiBaseServer } from "@/lib/backend-api-base";
+import { isPublicFlexBrowserPath } from "@/lib/flex-public-paths";
 
-/**
- * Unauthenticated flex reads allowed through `/api/public-flex/*` in the browser so they
- * use server env (`BACKEND_*_URL`) instead of build-time `NEXT_PUBLIC_API_URL`.
- */
-export function isPublicFlexBrowserPath(path: string): boolean {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  if (p === "/countries") return true;
-  return /^\/banks\/[A-Za-z0-9_-]{2,12}$/.test(p);
+function nextPublicApiPointsAtLocalhost(): boolean {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").trim();
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(raw);
 }
 
 /**
  * Base URL for backend `/api/flex/*` (token, countries, banks, etc.).
- * Browser: public list endpoints go through same-origin `GET /api/public-flex/*`.
+ *
+ * Browser + public paths (`/countries`, `/banks/…`):
+ * - If `NEXT_PUBLIC_API_URL` is localhost (typical dev / missing prod embed), use same-origin
+ *   `GET /api/public-flex/*` so the server can apply `BACKEND_*_URL`.
+ * - Otherwise call the API host embedded at build time (production EC2 builds should set
+ *   `NEXT_PUBLIC_API_URL` to the real `/api` root so this works even before the proxy route is deployed).
  */
 export function flexApiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
-  if (typeof window !== "undefined" && isPublicFlexBrowserPath(p)) {
+  if (
+    typeof window !== "undefined" &&
+    isPublicFlexBrowserPath(p) &&
+    nextPublicApiPointsAtLocalhost()
+  ) {
     return `/api/public-flex${p}`;
   }
   const base =

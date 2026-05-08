@@ -6,7 +6,7 @@ import {
   resolveBackendFetchBase,
 } from "@/lib/backend-api-base";
 import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
-import { isPublicFlexBrowserPath } from "@/lib/flex-api";
+import { isPublicFlexBrowserPath } from "@/lib/flex-public-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
