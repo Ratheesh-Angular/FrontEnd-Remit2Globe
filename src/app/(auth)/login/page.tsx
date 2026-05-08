@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("test-auto-deploy");
     e.preventDefault();
     setError("");
 
