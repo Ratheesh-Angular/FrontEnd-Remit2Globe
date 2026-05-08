@@ -1,14 +1,31 @@
 import type { FlexCountry } from "@/types/flex-country";
-import { getBackendApiBase } from "@/lib/backend-api-base";
+import { getBackendApiBase, getBackendApiBaseServer } from "@/lib/backend-api-base";
 
-const API_BASE = getBackendApiBase();
+/**
+ * Unauthenticated flex reads allowed through `/api/public-flex/*` in the browser so they
+ * use server env (`BACKEND_*_URL`) instead of build-time `NEXT_PUBLIC_API_URL`.
+ */
+export function isPublicFlexBrowserPath(path: string): boolean {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (p === "/countries") return true;
+  return /^\/banks\/[A-Za-z0-9_-]{2,12}$/.test(p);
+}
 
 /**
  * Base URL for backend `/api/flex/*` (token, countries, banks, etc.).
+ * Browser: public list endpoints go through same-origin `GET /api/public-flex/*`.
  */
 export function flexApiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE}/flex${p}`;
+  if (typeof window !== "undefined" && isPublicFlexBrowserPath(p)) {
+    return `/api/public-flex${p}`;
+  }
+  const base =
+    typeof window === "undefined"
+      ? getBackendApiBaseServer()
+      : getBackendApiBase();
+  const root = base.replace(/\/+$/, "");
+  return `${root}/flex${p}`;
 }
 
 /** Match backend `extractCountryRows` on the raw Flex country payload. */
