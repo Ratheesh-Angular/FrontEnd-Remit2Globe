@@ -93,9 +93,9 @@ export function resolveBackendFetchBase(): BackendFetchResolution {
     process.env.NEXTAUTH_URL?.trim(),
   ].filter(Boolean) as string[];
 
-  let apiHostname: string;
+  let apiHost: string;
   try {
-    apiHostname = new URL(baseUrl).hostname.toLowerCase();
+    apiHost = new URL(baseUrl).host.toLowerCase();
   } catch {
     return { ok: false, reason: "INVALID_URL" };
   }
@@ -106,8 +106,8 @@ export function resolveBackendFetchBase(): BackendFetchResolution {
         hint.startsWith("http://") || hint.startsWith("https://")
           ? hint
           : `https://${hint}`;
-      const webHost = new URL(webUrl).hostname.toLowerCase();
-      if (webHost && webHost === apiHostname) {
+      const webHost = new URL(webUrl).host.toLowerCase();
+      if (webHost && webHost === apiHost) {
         return { ok: false, reason: "BACKEND_POINTS_AT_THIS_WEB_SERVICE" };
       }
     } catch {

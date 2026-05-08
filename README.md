@@ -16,6 +16,18 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+Copy [`.env.example`](./.env.example) to **`.env`** and set variables before running in production. Use **`.env`** only (this repo standardizes on `.env` + `.env.example`).
+
+## Production on AWS EC2
+
+1. **Environment:** Set the same variables as `.env.example` on the instance (systemd `EnvironmentFile`, PM2 `env`, or shell). Never commit real `.env`. Use `NODE_ENV=production`.
+2. **Build and start:** `npm ci && npm run build` then `npm run start` (listens on port **3000** by default; override with `PORT` if needed).
+3. **TLS and domain:** Prefer a reverse proxy (nginx, Caddy) or ALB in front with HTTPS. Set **`NEXTAUTH_URL`** and **`NEXT_PUBLIC_SITE_URL`** to the **public** URL users use (scheme + host, no trailing path unless that is your app root).
+4. **`NEXT_PUBLIC_API_URL`:** Must be reachable from the browser (public Express `/api` root). Server-side fetches prefer **`BACKEND_INTERNAL_API_URL`** then **`BACKEND_API_URL`** then **`NEXT_PUBLIC_API_URL`** — avoid pointing the API at the same hostname as the Next app unless they are truly the same service.
+5. **Google OAuth:** In Google Cloud Console, add authorized JavaScript origins and redirect URI `https://<your-domain>/api/auth/callback/google` (or `http://…` for non-TLS dev only).
+6. **Database:** **`DATABASE_URL`** must be reachable from EC2 (security groups / VPC). **`DATABASE_URL`**, **`NEXTAUTH_SECRET`**, and **`INTERNAL_FRONTEND_AUTH_SECRET`** must stay server-only.
+7. **Proxy issues:** If NextAuth reports untrusted host behind a reverse proxy, set **`AUTH_TRUST_HOST=true`** and ensure the proxy forwards `Host` (and `X-Forwarded-Proto` for HTTPS).
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

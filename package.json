@@ -2,6 +2,7 @@
   "name": "cbp-frontend",
   "version": "0.1.0",
   "private": true,
+  "homepage": ".",
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
@@ -20,7 +21,6 @@
     "axios": "^1.14.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "dotenv": "^17.4.2",
     "i18n-iso-countries": "^7.14.0",
     "jspdf": "^4.2.1",
     "libphonenumber-js": "^1.12.41",
