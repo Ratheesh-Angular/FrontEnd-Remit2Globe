@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    console.log("flex-updation");
+    console.log("permissions");
     e.preventDefault();
     setError("");
 
