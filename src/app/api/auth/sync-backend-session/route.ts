@@ -10,19 +10,11 @@ import {
 } from "@/lib/backend-api-base";
 import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 
+import { sessionCookieBase } from "@/lib/session-cookie";
+
 export const runtime = "nodejs";
 
 const TOKEN = "token";
-
-function cookieBase() {
-  const secure = process.env.NODE_ENV === "production";
-  return {
-    httpOnly: true,
-    secure,
-    sameSite: "lax" as const,
-    path: "/",
-  };
-}
 
 /** Issues backend JWT onto the Next origin when NextAuth exists but mirrored `token` is missing or must be refreshed. */
 export async function POST(req: NextRequest) {
@@ -112,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ success: true });
   res.cookies.set(TOKEN, body.data.token, {
-    ...cookieBase(),
+    ...sessionCookieBase(),
     maxAge: 7 * 24 * 60 * 60,
   });
   return res;
