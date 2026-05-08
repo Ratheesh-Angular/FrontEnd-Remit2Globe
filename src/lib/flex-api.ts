@@ -72,34 +72,7 @@ export function parseFlexCountriesResponse(json: unknown): FlexCountry[] {
 }
 
 export async function fetchFlexCountries(): Promise<FlexCountry[]> {
-  const url = flexApiUrl("/countries");
-  const res = await fetch(url, { credentials: "include" });
-  if (typeof window !== "undefined") {
-    // #region agent log
-    fetch("http://127.0.0.1:7383/ingest/6dbe9d87-e044-436d-abf2-95c045aeee0e", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "365919",
-      },
-      body: JSON.stringify({
-        sessionId: "365919",
-        runId: "pre-fix",
-        hypothesisId: "H2",
-        location: "flex-api.ts:fetchFlexCountries",
-        message: "flex countries fetch response",
-        data: {
-          url,
-          usesPublicFlexProxy: url.startsWith("/api/public-flex"),
-          ok: res.ok,
-          status: res.status,
-          contentType: (res.headers.get("content-type") ?? "").slice(0, 48),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }
+  const res = await fetch(flexApiUrl("/countries"), { credentials: "include" });
   if (!res.ok) {
     throw new Error(`Failed to load countries: ${res.status}`);
   }

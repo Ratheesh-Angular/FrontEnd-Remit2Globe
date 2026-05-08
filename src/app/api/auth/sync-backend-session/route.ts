@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ success: true });
   res.cookies.set(TOKEN, body.data.token, {
-    ...sessionCookieBase(),
+    ...sessionCookieBase(req),
     maxAge: 7 * 24 * 60 * 60,
   });
   return res;

@@ -11,7 +11,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    console.log("permissions");
     e.preventDefault();
     setError("");
 
@@ -32,107 +31,30 @@ export default function LoginPage() {
         password,
       });
 
-      if (response.data.success) {
-        const token = response.data.data?.token as string | undefined;
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7383/ingest/6dbe9d87-e044-436d-abf2-95c045aeee0e",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "365919",
-            },
-            body: JSON.stringify({
-              sessionId: "365919",
-              runId: "post-fix",
-              hypothesisId: "H4",
-              location: "login/page.tsx:afterLoginApi",
-              message: "login API returned success",
-              data: { hasToken: Boolean(token && token.length > 0) },
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-        // #endregion
-        if (!token) {
-          setError(
-            "Login succeeded but session setup failed. Deploy the latest API or contact support.",
-          );
-          return;
-        }
-        const sessRes = await fetch("/api/auth/backend-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ token }),
-        });
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7383/ingest/6dbe9d87-e044-436d-abf2-95c045aeee0e",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "365919",
-            },
-            body: JSON.stringify({
-              sessionId: "365919",
-              runId: "post-fix",
-              hypothesisId: "H1",
-              location: "login/page.tsx:backendSession",
-              message: "POST /api/auth/backend-session finished",
-              data: {
-                status: sessRes.status,
-                ok: sessRes.ok,
-              },
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-        // #endregion
-        if (!sessRes.ok) {
-          setError("Could not save your session. Please try again.");
-          return;
-        }
-        await sessRes.json().catch(() => undefined);
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => setTimeout(resolve, 0));
-        });
-        const dashProbe = await fetch(
-          `${window.location.origin}/dashboard`,
-          {
-            credentials: "same-origin",
-            redirect: "manual",
-          },
+      if (!response.data?.success) return;
+
+      const token = response.data.data?.token as string | undefined;
+      if (!token) {
+        setError(
+          "Login succeeded but session setup failed. Deploy the latest API or contact support.",
         );
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7383/ingest/6dbe9d87-e044-436d-abf2-95c045aeee0e",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "365919",
-            },
-            body: JSON.stringify({
-              sessionId: "365919",
-              runId: "post-fix",
-              hypothesisId: "H3",
-              location: "login/page.tsx:dashboardProbe",
-              message: "GET /dashboard with redirect manual after cookie set",
-              data: {
-                status: dashProbe.status,
-                locationSnippet:
-                  (dashProbe.headers.get("location") ?? "").slice(0, 120),
-              },
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-        // #endregion
-        window.location.assign("/dashboard");
+        return;
       }
+
+      /** Mirror backend JWT into an httpOnly cookie on the Next origin so middleware sees `token`. */
+      const sessRes = await fetch("/api/auth/backend-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ token }),
+      });
+      if (!sessRes.ok) {
+        setError("Could not save your session. Please try again.");
+        return;
+      }
+      await sessRes.json().catch(() => undefined);
+
+      window.location.assign("/dashboard");
     } catch (error: any) {
       setError(error.response?.data?.message || "Something went wrong");
     } finally {
