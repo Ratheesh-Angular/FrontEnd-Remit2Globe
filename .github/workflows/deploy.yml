@@ -1,0 +1,44 @@
+name: Deploy Frontend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "🚀 Starting frontend deployment..."
+
+            cd /var/www/payment-frontend/FrontEnd-Remit2Globe
+
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
+            echo "📦 Installing dependencies..."
+            npm install
+
+            echo "🏗️ Building Next.js app..."
+            npm run build
+
+            echo "🔁 Restarting PM2 process..."
+            pm2 restart payment-frontend || pm2 start ecosystem.config.js
+
+            pm2 save
+
+            echo "✅ Deployment completed successfully"
