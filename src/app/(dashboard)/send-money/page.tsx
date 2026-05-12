@@ -46,6 +46,13 @@ interface FlexCountry {
   couName: string;
 }
 
+/** One row per receive currency; maps back to a Flex corridor country for quotes & beneficiaries. */
+interface RecipientReceiveOption {
+  currency: string;
+  couCode: string;
+  couName: string;
+}
+
 interface SenderContext {
   senderCountryIso2: string | null;
   senderCountryName: string | null;
@@ -396,15 +403,45 @@ function SendMoneyPageContent() {
     return [...byCode.values()];
   }, [flexCountries]);
 
-  const filteredRecipientCountries = useMemo(() => {
-    const q = recipientSearch.toLowerCase().trim();
-    if (!q) return dedupedFlexCountries;
-    return dedupedFlexCountries.filter(
-      (c) =>
-        c.couName.toLowerCase().includes(q) ||
-        c.couCode.toLowerCase().includes(q),
+  /** One row per admin-allowed Flex country; label is receive currency ( corridor country drives quotes/beneficiaries ). */
+  const recipientReceiveOptions = useMemo(() => {
+    const sorted = [...dedupedFlexCountries].sort((a, b) =>
+      a.couName.localeCompare(b.couName, undefined, { sensitivity: "base" }),
     );
-  }, [dedupedFlexCountries, recipientSearch]);
+    const opts: RecipientReceiveOption[] = sorted.map((c) => ({
+      currency: receiveCurrencyForCouCode(c.couCode),
+      couCode: c.couCode,
+      couName: c.couName,
+    }));
+    opts.sort(
+      (a, b) =>
+        a.currency.localeCompare(b.currency) ||
+        a.couName.localeCompare(b.couName, undefined, { sensitivity: "base" }),
+    );
+    return opts;
+  }, [dedupedFlexCountries]);
+
+  const filteredRecipientReceiveOptions = useMemo(() => {
+    const q = recipientSearch.toLowerCase().trim();
+    if (!q) return recipientReceiveOptions;
+    return recipientReceiveOptions.filter((opt) => {
+      const countryHit = opt.couName.toLowerCase().includes(q);
+      const curHit = opt.currency.toLowerCase().includes(q);
+      const codeHit = opt.couCode.toLowerCase().includes(q);
+      const a2 = alpha2FromCouCode(opt.couCode);
+      const isoHit = (a2 ?? "").toLowerCase().includes(q);
+      return countryHit || curHit || codeHit || isoHit;
+    });
+  }, [recipientReceiveOptions, recipientSearch]);
+
+  /** Avoid US-flag flash before corridor state is applied (matches first list currency). */
+  const recipientDisplayCurrency = useMemo(
+    () =>
+      receiveCurrency ||
+      recipientReceiveOptions[0]?.currency ||
+      "",
+    [receiveCurrency, recipientReceiveOptions],
+  );
 
   const filteredPayCurrencyOptions = useMemo(() => {
     if (!ctx) return [] as string[];
@@ -564,6 +601,38 @@ function SendMoneyPageContent() {
     setBeneficiaryId(b.id);
     setSelectedBen(b);
   }, [loading, beneficiaryQueryId, beneficiaries, flexCountries]);
+
+  /** Default “What they get” to first allowed corridor currency when none chosen yet. */
+  useEffect(() => {
+    if (loading) return;
+    if (recipientCouCode) return;
+    const opts = recipientReceiveOptions;
+    if (!opts.length) return;
+
+    if (beneficiaryQueryId) {
+      const ready = beneficiaries.length > 0 && flexCountries.length > 0;
+      if (!ready) return;
+      const b = beneficiaries.find((x) => x.id === beneficiaryQueryId);
+      if (b) {
+        const resolved = resolveRecipientFromBeneficiaryCountry(
+          b.country,
+          flexCountries,
+        );
+        if (resolved) return;
+      }
+    }
+
+    const first = opts[0];
+    setRecipientCouCode(first.couCode);
+    setRecipientCouName(first.couName);
+  }, [
+    loading,
+    recipientCouCode,
+    recipientReceiveOptions,
+    beneficiaryQueryId,
+    beneficiaries,
+    flexCountries,
+  ]);
 
   /** Changing recipient country clears a deep-linked beneficiary if it no longer matches. */
   useEffect(() => {
@@ -1214,75 +1283,61 @@ function SendMoneyPageContent() {
                     setRecipientSearch("");
                     setPayCurrencyOpen(false);
                   }}
-                  className="flex items-center gap-2 h-11 sm:h-12 pl-2.5 pr-2 min-w-[10rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
+                  className="flex items-center gap-2 h-11 sm:h-12 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
                 >
-                  {recipientIso2 ? (
-                    <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
+                  <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
+                    {recipientDisplayCurrency ? (
                       <Flag
-                        code={recipientIso2}
+                        code={payCurrencyFlagCode(recipientDisplayCurrency)}
                         className="h-full w-full object-cover"
                       />
-                    </span>
-                  ) : (
-                    <span className="h-8 w-8 rounded-full bg-slate-200 shrink-0 ring-2 ring-white" />
-                  )}
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-base font-bold text-slate-900 leading-tight truncate max-w-[8rem] sm:max-w-[10rem]">
-                      {receiveCurrency || "—"}
-                    </span>
-                    <span className="text-[10px] text-slate-500 truncate max-w-[8rem] sm:max-w-[10rem]">
-                      {recipientCouName || "Country"}
-                    </span>
-                  </div>
+                    ) : (
+                      <span className="h-full w-full bg-slate-200 block" />
+                    )}
+                  </span>
+                  <span className="text-base font-bold text-slate-900">
+                    {recipientDisplayCurrency || "—"}
+                  </span>
                   <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
                 </button>
                 {recipientOpen && (
-                  <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,20rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                  <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,16rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
                     <div className="p-2 border-b border-slate-100">
                       <input
                         autoFocus
-                        placeholder="Search country…"
+                        placeholder="Search currency…"
                         value={recipientSearch}
                         onChange={(e) => setRecipientSearch(e.target.value)}
                         className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                       />
                     </div>
-                    <ul className="max-h-60 overflow-y-auto py-1">
-                      {filteredRecipientCountries.map((c) => {
-                        const a2 = alpha2FromCouCode(c.couCode);
-                        return (
-                          <li key={c.couCode}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRecipientCouCode(c.couCode);
-                                setRecipientCouName(c.couName);
-                                setRecipientOpen(false);
-                              }}
-                              className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 hover:text-teal-800 transition-colors ${
-                                recipientCouCode === c.couCode
-                                  ? "bg-teal-50 text-teal-800 font-medium"
-                                  : "text-slate-700"
-                              }`}
-                            >
-                              {a2 ? (
-                                <Flag
-                                  code={a2}
-                                  className="w-6 h-4 rounded object-cover shrink-0"
-                                />
-                              ) : (
-                                <span className="w-6 h-4 rounded bg-slate-200 text-[8px] flex items-center justify-center font-bold text-slate-500">
-                                  {c.couCode.slice(0, 2)}
-                                </span>
-                              )}
-                              <span className="truncate">{c.couName}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                      {filteredRecipientCountries.length === 0 && (
-                        <li className="px-3 py-4 text-sm text-slate-400 text-center">
-                          No countries found
+                    <ul className="max-h-52 overflow-y-auto py-1">
+                      {filteredRecipientReceiveOptions.map((opt) => (
+                        <li key={opt.couCode}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRecipientCouCode(opt.couCode);
+                              setRecipientCouName(opt.couName);
+                              setRecipientOpen(false);
+                            }}
+                            className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                              recipientCouCode === opt.couCode
+                                ? "bg-teal-50 text-teal-800 font-medium"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            <Flag
+                              code={payCurrencyFlagCode(opt.currency)}
+                              className="w-6 h-4 rounded object-cover"
+                            />
+                            <span className="font-semibold">{opt.currency}</span>
+                          </button>
+                        </li>
+                      ))}
+                      {filteredRecipientReceiveOptions.length === 0 && (
+                        <li className="px-3 py-3 text-sm text-slate-400 text-center">
+                          No currencies found
                         </li>
                       )}
                     </ul>
@@ -1590,9 +1645,9 @@ function SendMoneyPageContent() {
               type="button"
               disabled={
                 submitting ||
-                !sourceOfIncome ||
-                !transferPurpose ||
-                !relationship ||
+                !sourceOfIncome.trim() ||
+                !transferPurpose.trim() ||
+                !relationship.trim() ||
                 !payInMethod ||
                 (payInMethod === "MOBILE_MONEY" &&
                   !isValidE164Phone(payerPhone))

@@ -454,135 +454,127 @@ export function ViewTransactionModal({
                   </div>
                 )}
 
-                <div className="rounded-xl border border-slate-200 p-0 overflow-hidden">
-                  <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700 bg-slate-50 border-b border-slate-200">
-                    Payment proof ({proofs.length})
-                  </p>
-                  {canUploadMoreProof && (
-                    <div className="px-4 py-3 border-b border-slate-100">
-                      <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 text-left">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                          <p className="text-xs text-slate-600 flex-1 min-w-0">
-                            <span className="font-medium text-slate-800">
-                              {proofs.length === 0
-                                ? "Upload payment proof"
-                                : "Add another file"}
-                            </span>
-                            <span className="block text-[11px] text-slate-500 mt-0.5">
-                              Receipts or screenshots help us match your bank
-                              payment. Same formats as in Send money.
-                            </span>
-                          </p>
-                          <div className="shrink-0 flex justify-end">
-                            <input
-                              ref={proofInputRef}
-                              type="file"
-                              className="sr-only"
-                              accept={PAYMENT_PROOF_ACCEPT}
-                              multiple
-                              disabled={uploadBusy}
-                              onChange={(e) => {
-                                void handleProofFiles(e.target.files);
-                              }}
-                            />
-                            <button
-                              type="button"
-                              disabled={uploadBusy}
-                              onClick={() => proofInputRef.current?.click()}
-                              className="h-8 px-3 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
-                            >
-                              {uploadBusy ? (
-                                "Uploading…"
-                              ) : (
-                                <>
-                                  <Upload
-                                    className="w-3.5 h-3.5 shrink-0"
-                                    aria-hidden
-                                  />
-                                  Upload
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        {uploadError ? (
-                          <p className="text-xs text-red-600 mt-2">
-                            {uploadError}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                  {row &&
-                    !canUploadMoreProof &&
-                    row.payInMethod === "MOBILE_MONEY" && (
-                      <p className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100">
-                        Mobile money pay-in does not use bank payment proof
-                        uploads.
-                      </p>
-                    )}
-                  {row &&
-                    !canUploadMoreProof &&
-                    row.payInMethod === "BANK_TRANSFER" &&
-                    row.status !== "PENDING_PAYMENT" && (
-                      <p className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100">
-                        Payment proof can no longer be added for this transfer
-                        status.
-                      </p>
-                    )}
-                  {proofs.length === 0 &&
-                  !canUploadMoreProof &&
-                  row?.payInMethod !== "MOBILE_MONEY" ? (
-                    <p className="px-4 py-6 text-sm text-slate-500 text-center">
-                      No files uploaded for this transfer.
+                {row?.payInMethod === "BANK_TRANSFER" && (
+                  <div className="rounded-xl border border-slate-200 p-0 overflow-hidden">
+                    <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700 bg-slate-50 border-b border-slate-200">
+                      Payment proof ({proofs.length})
                     </p>
-                  ) : proofs.length === 0 ? null : (
-                    <ul className="divide-y divide-slate-100">
-                      {proofs.map((p) => (
-                        <li
-                          key={p.id}
-                          className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/80"
-                        >
-                          <div className="shrink-0 text-slate-400">
-                            {isImageMime(p.mimeType) ? (
-                              <ImageIcon className="w-5 h-5" />
-                            ) : (
-                              <FileText className="w-5 h-5" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-800 truncate">
-                              {p.fileName}
+                    {canUploadMoreProof && (
+                      <div className="px-4 py-3 border-b border-slate-100">
+                        <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 text-left">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                            <p className="text-xs text-slate-600 flex-1 min-w-0">
+                              <span className="font-medium text-slate-800">
+                                {proofs.length === 0
+                                  ? "Upload payment proof"
+                                  : "Add another file"}
+                              </span>
+                              <span className="block text-[11px] text-slate-500 mt-0.5">
+                                Receipts or screenshots help us match your bank
+                                payment. Same formats as in Send money.
+                              </span>
                             </p>
-                            <p className="text-xs text-slate-500">
-                              {fmtDate(p.uploadedAt)}
+                            <div className="shrink-0 flex justify-end">
+                              <input
+                                ref={proofInputRef}
+                                type="file"
+                                className="sr-only"
+                                accept={PAYMENT_PROOF_ACCEPT}
+                                multiple
+                                disabled={uploadBusy}
+                                onChange={(e) => {
+                                  void handleProofFiles(e.target.files);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                disabled={uploadBusy}
+                                onClick={() => proofInputRef.current?.click()}
+                                className="h-8 px-3 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                {uploadBusy ? (
+                                  "Uploading…"
+                                ) : (
+                                  <>
+                                    <Upload
+                                      className="w-3.5 h-3.5 shrink-0"
+                                      aria-hidden
+                                    />
+                                    Upload
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          {uploadError ? (
+                            <p className="text-xs text-red-600 mt-2">
+                              {uploadError}
                             </p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isImageMime(p.mimeType)) {
-                                  setLightboxUrl(p.fileUrl);
-                                } else {
-                                  window.open(
-                                    p.fileUrl,
-                                    "_blank",
-                                    "noopener,noreferrer",
-                                  );
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              View
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                    {row &&
+                      !canUploadMoreProof &&
+                      row.status !== "PENDING_PAYMENT" && (
+                        <p className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100">
+                          Payment proof can no longer be added for this transfer
+                          status.
+                        </p>
+                      )}
+                    {proofs.length === 0 &&
+                    !canUploadMoreProof ? (
+                      <p className="px-4 py-6 text-sm text-slate-500 text-center">
+                        No files uploaded for this transfer.
+                      </p>
+                    ) : proofs.length === 0 ? null : (
+                      <ul className="divide-y divide-slate-100">
+                        {proofs.map((p) => (
+                          <li
+                            key={p.id}
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/80"
+                          >
+                            <div className="shrink-0 text-slate-400">
+                              {isImageMime(p.mimeType) ? (
+                                <ImageIcon className="w-5 h-5" />
+                              ) : (
+                                <FileText className="w-5 h-5" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-slate-800 truncate">
+                                {p.fileName}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {fmtDate(p.uploadedAt)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isImageMime(p.mimeType)) {
+                                    setLightboxUrl(p.fileUrl);
+                                  } else {
+                                    window.open(
+                                      p.fileUrl,
+                                      "_blank",
+                                      "noopener,noreferrer",
+                                    );
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                View
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

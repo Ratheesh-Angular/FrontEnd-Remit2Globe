@@ -14,6 +14,7 @@ interface User {
 }
 
 export default function DashboardClient({ user }: { user: User }) {
+  console.log(user, "user");
   const router = useRouter();
 
   const isKycPending = user?.kycStatus === "PENDING";
@@ -26,9 +27,9 @@ export default function DashboardClient({ user }: { user: User }) {
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
-          Welcome back{user?.name ? `, ${user.name}` : ""} 👋
+          Welcome back{user?.name ? `, ${user.name}` : ""}
         </h1>
-        <p className="text-sm text-slate-500 mt-1">{user?.email}</p>
+        <p className="text-sm text-slate-500 mt-1">{user?.name}</p>
       </div>
 
       {/* KYC Banner — PENDING */}

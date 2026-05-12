@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -62,9 +63,19 @@ export function PhoneCountryInput({
     [selected, local],
   );
 
+  /** Flush composed E.164 to parent in layout so `value` is updated before effects that reset local state on `value === ""`. */
+  useLayoutEffect(() => {
+    const prev = value.trim();
+    const next = composed.trim();
+    if (next === prev) return;
+    onChange(next);
+  }, [composed, value, onChange]);
+
   useEffect(() => {
     const v = value.trim();
     if (!v) {
+      // Parent `value` may lag behind `composed` after typing/layout sync — don't wipe digits.
+      if (composed.trim()) return;
       setLocal("");
       setSelected((prev) => {
         if (prev) return prev;
