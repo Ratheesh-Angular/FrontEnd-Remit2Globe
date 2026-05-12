@@ -64,16 +64,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
-      {/* Logo */}
-      <div className="flex items-center gap-2 mb-8">
-        <div className="w-8 h-8 bg-teal-600 rounded-lg" />
-        <span className="text-xl font-semibold text-slate-900">
-          Remit2Globe
-        </span>
-      </div>
-
-      {/* Card */}
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-8 h-8 bg-teal-600 rounded-lg shrink-0" />
+          <span className="text-xl font-semibold text-slate-900">
+            Remit2Globe
+          </span>
+        </div>
+
         <h1 className="text-xl font-semibold text-slate-900 mb-1">
           Welcome back
         </h1>
@@ -162,16 +160,25 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Bottom link */}
-        <p className="text-center text-sm text-slate-500 mt-6">
-          Don't have an account?{" "}
-          <a
-            href="/register"
-            className="text-teal-600 hover:text-teal-700 font-medium"
-          >
-            Create one
-          </a>
-        </p>
+        <div className="mt-6 space-y-3 text-sm">
+          <p className="text-center text-slate-500">
+            Don&apos;t have an account?{" "}
+            <a
+              href="/register"
+              className="text-teal-600 hover:text-teal-700 font-medium"
+            >
+              Create one
+            </a>
+          </p>
+          <p>
+            <a
+              href="/forgot-password"
+              className="text-teal-600 hover:text-teal-700 font-medium"
+            >
+              Forgot password?
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

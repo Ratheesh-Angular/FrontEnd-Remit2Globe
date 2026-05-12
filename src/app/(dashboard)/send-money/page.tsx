@@ -39,7 +39,7 @@ import {
   Copy,
 } from "lucide-react";
 import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
-import { flexApiUrl } from "@/lib/flex-api";
+import { flexApiUrl, parseFlexCountriesResponse } from "@/lib/flex-api";
 
 interface FlexCountry {
   couCode: string;
@@ -498,7 +498,7 @@ function SendMoneyPageContent() {
     setLoading(true);
     setError("");
     try {
-      const [ctxRes, lookRes, benRes, flexRes] = await Promise.all([
+      const [ctxRes, lookRes, benRes, flexCountriesList] = await Promise.all([
         api.get<{ data: SenderContext }>("/remittance/context"),
         api.get<{
           data: {
@@ -510,8 +510,11 @@ function SendMoneyPageContent() {
         api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries", {
           params: { activeOnly: "true" },
         }),
-        fetch(flexApiUrl("/countries"), { credentials: "include" }).then((r) =>
-          r.json(),
+        fetch(flexApiUrl("/countries"), { credentials: "include" }).then(
+          async (r) => {
+            const json: unknown = await r.json();
+            return parseFlexCountriesResponse(json);
+          },
         ),
       ]);
       const c = ctxRes.data.data;
@@ -519,8 +522,7 @@ function SendMoneyPageContent() {
       setPayCurrency(c.defaultPayCurrency || c.payCurrencies[0] || "USD");
       setLookups(lookRes.data.data);
       setBeneficiaries(benRes.data.data.beneficiaries);
-      const list = flexRes?.data?.data;
-      setFlexCountries(Array.isArray(list) ? list : []);
+      setFlexCountries(flexCountriesList);
     } catch (e: unknown) {
       setError("Could not load send-money data. Try again later.");
       console.error(e);

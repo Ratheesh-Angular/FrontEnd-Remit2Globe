@@ -1,0 +1,147 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import api from "@/lib/api";
+
+export default function ForgotPasswordPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes("@")) {
+      setError("Enter a valid email address");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await api.post<{
+        success: boolean;
+        message?: string;
+        data?: { userId: string | null };
+      }>("/auth/forgot-password", { email: trimmed });
+
+      if (!res.data?.success) {
+        setError(res.data?.message || "Something went wrong");
+        return;
+      }
+
+      const userId = res.data.data?.userId ?? null;
+      if (userId) {
+        const q = new URLSearchParams({
+          email: trimmed,
+          userId,
+        });
+        router.push(`/forgot-password/verify?${q.toString()}`);
+      } else {
+        setInfo(
+          res.data.message ??
+            "If an account with a password exists for that email, check your inbox. Otherwise you may need to register or use another sign-in method.",
+        );
+      }
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string } } };
+      setError(ax.response?.data?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
+      <div className="flex items-center gap-2 mb-8">
+        <div className="w-8 h-8 bg-teal-600 rounded-lg" />
+        <span className="text-xl font-semibold text-slate-900">
+          Remit2Globe
+        </span>
+      </div>
+
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+        <h1 className="text-xl font-semibold text-slate-900 mb-1">
+          Forgot password
+        </h1>
+        <p className="text-sm text-slate-500 mb-6">
+          Enter the email for your account. We&apos;ll send a verification code.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              className="border border-slate-200 rounded-lg px-3 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+            />
+          </div>
+
+          {info && (
+            <div className="bg-slate-50 border border-slate-200 text-slate-700 rounded-lg px-4 py-3 text-sm">
+              {info}
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <svg
+                  className="animate-spin w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                Sending…
+              </>
+            ) : (
+              "Continue"
+            )}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-slate-500 mt-6">
+          <a
+            href="/login"
+            className="text-teal-600 hover:text-teal-700 font-medium"
+          >
+            Back to sign in
+          </a>
+        </p>
+      </div>
+    </div>
+  );
+}

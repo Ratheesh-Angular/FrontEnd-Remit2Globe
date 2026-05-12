@@ -83,9 +83,7 @@ export default function BeneficiariesPage() {
     } catch (e) {
       console.error(e);
       if (!quiet) {
-        setListLoadError(
-          userFacingApiErrorMessage(e, LIST_FAIL_FALLBACK),
-        );
+        setListLoadError(userFacingApiErrorMessage(e, LIST_FAIL_FALLBACK));
       }
     } finally {
       if (quiet) setListRefreshing(false);
@@ -295,7 +293,7 @@ export default function BeneficiariesPage() {
                             </Link>
                           ) : (
                             <p className="text-xs text-slate-500 max-w-[14rem]">
-                              Inactive recipients are hidden in Send money. Turn
+                              You can’t send money to inactive recipients.. Turn
                               on <span className="font-medium">Active</span> to
                               use them.
                             </p>

@@ -60,8 +60,8 @@ export default function DashboardClient({ user }: { user: User }) {
               Your application is under review
             </h2>
             <p className="text-sm text-blue-700 mt-1">
-              We are reviewing your documents. This usually takes 1–2 business
-              days. We will notify you once it is done.
+              We are reviewing your documents. This usually takes 24 Hours. We
+              will notify you once it is done.
             </p>
           </div>
           <span className="shrink-0 inline-flex items-center justify-center h-10 px-5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg">

@@ -5,7 +5,9 @@ import { sessionApi as api } from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
 import { StateSearchSelect } from "@/components/address/StateSearchSelect";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import {
   VerificationDocuments,
@@ -357,6 +359,12 @@ export function IndividualKycWizard() {
     loading: flexCountriesLoading,
     error: flexCountriesError,
   } = useFlexCountries(true);
+
+  const {
+    countries: catalogCountryList,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(true);
 
   useEffect(() => {
     setForm((prev) => {
@@ -1014,16 +1022,16 @@ export function IndividualKycWizard() {
                     required
                     error={errors.passportIssuingCountry}
                   >
-                    <FlexCountrySelect
+                    <CatalogCountrySelect
                       value={form.passportIssuingCountry}
                       onChange={(name) =>
                         setField("passportIssuingCountry", name)
                       }
                       error={Boolean(errors.passportIssuingCountry)}
                       placeholder="Select issuing country…"
-                      countries={flexCountryList}
-                      countriesLoading={flexCountriesLoading}
-                      countriesError={flexCountriesError}
+                      countries={catalogCountryList}
+                      countriesLoading={catalogCountriesLoading}
+                      countriesError={catalogCountriesError}
                     />
                   </Field>
                 </div>
@@ -1147,16 +1155,16 @@ export function IndividualKycWizard() {
                         required
                         error={errors.passportIssuingCountry}
                       >
-                        <FlexCountrySelect
+                        <CatalogCountrySelect
                           value={form.passportIssuingCountry}
                           onChange={(name) =>
                             setField("passportIssuingCountry", name)
                           }
                           error={Boolean(errors.passportIssuingCountry)}
                           placeholder="Select issuing country…"
-                          countries={flexCountryList}
-                          countriesLoading={flexCountriesLoading}
-                          countriesError={flexCountriesError}
+                          countries={catalogCountryList}
+                          countriesLoading={catalogCountriesLoading}
+                          countriesError={catalogCountriesError}
                         />
                       </Field>
                     </div>

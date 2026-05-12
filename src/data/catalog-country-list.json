@@ -1,0 +1,386 @@
+[
+  {
+    "couCode": "AFG",
+    "couName": "Afghanistan"
+  },
+  {
+    "couCode": "DZA",
+    "couName": "Algeria"
+  },
+  {
+    "couCode": "AZE",
+    "couName": "Azerbaijan"
+  },
+  {
+    "couCode": "BHR",
+    "couName": "Bahrain"
+  },
+  {
+    "couCode": "BGD",
+    "couName": "Bangladesh"
+  },
+  {
+    "couCode": "BLR",
+    "couName": "Belarus"
+  },
+  {
+    "couCode": "BRA",
+    "couName": "Brazil"
+  },
+  {
+    "couCode": "BGR",
+    "couName": "Bulgaria"
+  },
+  {
+    "couCode": "KHM",
+    "couName": "Cambodia"
+  },
+  {
+    "couCode": "CMR",
+    "couName": "Cameroon"
+  },
+  {
+    "couCode": "CAN",
+    "couName": "Canada"
+  },
+  {
+    "couCode": "CHN",
+    "couName": "China"
+  },
+  {
+    "couCode": "COD",
+    "couName": "Congo, DRC"
+  },
+  {
+    "couCode": "CZE",
+    "couName": "Czech Republic"
+  },
+  {
+    "couCode": "EGY",
+    "couName": "Egypt"
+  },
+  {
+    "couCode": "EST",
+    "couName": "Estonia"
+  },
+  {
+    "couCode": "ETH",
+    "couName": "Ethiopia"
+  },
+  {
+    "couCode": "FIN",
+    "couName": "Finland"
+  },
+  {
+    "couCode": "FRA",
+    "couName": "France"
+  },
+  {
+    "couCode": "DEU",
+    "couName": "Germany"
+  },
+  {
+    "couCode": "GRC",
+    "couName": "Greece"
+  },
+  {
+    "couCode": "HKG",
+    "couName": "Hong Kong"
+  },
+  {
+    "couCode": "HUN",
+    "couName": "Hungary"
+  },
+  {
+    "couCode": "IND",
+    "couName": "India"
+  },
+  {
+    "couCode": "ITA",
+    "couName": "Italy"
+  },
+  {
+    "couCode": "JPN",
+    "couName": "Japan"
+  },
+  {
+    "couCode": "KEN",
+    "couName": "Kenya"
+  },
+  {
+    "couCode": "KWT",
+    "couName": "Kuwait"
+  },
+  {
+    "couCode": "LVA",
+    "couName": "Latvia"
+  },
+  {
+    "couCode": "LTU",
+    "couName": "Lithuania"
+  },
+  {
+    "couCode": "MDG",
+    "couName": "Madagascar"
+  },
+  {
+    "couCode": "MWI",
+    "couName": "Malawi"
+  },
+  {
+    "couCode": "MDA",
+    "couName": "Moldova"
+  },
+  {
+    "couCode": "MAR",
+    "couName": "Morocco"
+  },
+  {
+    "couCode": "NPL",
+    "couName": "Nepal"
+  },
+  {
+    "couCode": "NLD",
+    "couName": "Netherlands"
+  },
+  {
+    "couCode": "NGA",
+    "couName": "Nigeria"
+  },
+  {
+    "couCode": "PAK",
+    "couName": "Pakistan"
+  },
+  {
+    "couCode": "PHL",
+    "couName": "Philippines"
+  },
+  {
+    "couCode": "POL",
+    "couName": "Poland"
+  },
+  {
+    "couCode": "ROU",
+    "couName": "Romania"
+  },
+  {
+    "couCode": "RUS",
+    "couName": "Russian Federation"
+  },
+  {
+    "couCode": "SEN",
+    "couName": "Senegal"
+  },
+  {
+    "couCode": "SVK",
+    "couName": "Slovakia"
+  },
+  {
+    "couCode": "ZAF",
+    "couName": "South Africa"
+  },
+  {
+    "couCode": "ESP",
+    "couName": "Spain"
+  },
+  {
+    "couCode": "LKA",
+    "couName": "Sri Lanka"
+  },
+  {
+    "couCode": "SWE",
+    "couName": "Sweden"
+  },
+  {
+    "couCode": "CHE",
+    "couName": "Switzerland"
+  },
+  {
+    "couCode": "TZA",
+    "couName": "Tanzania"
+  },
+  {
+    "couCode": "UKR",
+    "couName": "Ukraine"
+  },
+  {
+    "couCode": "ARE",
+    "couName": "United Arab Emirates"
+  },
+  {
+    "couCode": "GBR",
+    "couName": "United Kingdom"
+  },
+  {
+    "couCode": "USA",
+    "couName": "United States"
+  },
+  {
+    "couCode": "ZMB",
+    "couName": "Zambia"
+  },
+  {
+    "couCode": "SSD",
+    "couName": "South Sudan"
+  },
+  {
+    "couCode": "UGA",
+    "couName": "Uganda"
+  },
+  {
+    "couCode": "BEL",
+    "couName": "Belgium"
+  },
+  {
+    "couCode": "CYP",
+    "couName": "Cyprus"
+  },
+  {
+    "couCode": "DNK",
+    "couName": "Denmark"
+  },
+  {
+    "couCode": "IRL",
+    "couName": "Ireland"
+  },
+  {
+    "couCode": "LUX",
+    "couName": "Luxembourg"
+  },
+  {
+    "couCode": "NOR",
+    "couName": "Norway"
+  },
+  {
+    "couCode": "PRT",
+    "couName": "Portugal"
+  },
+  {
+    "couCode": "SOM",
+    "couName": "Somalia"
+  },
+  {
+    "couCode": "LBN",
+    "couName": "Lebanon"
+  },
+  {
+    "couCode": "ERI",
+    "couName": "Eritrea"
+  },
+  {
+    "couCode": "QAR",
+    "couName": "Qatar"
+  },
+  {
+    "couCode": "BEN",
+    "couName": "Benin"
+  },
+  {
+    "couCode": "BMU",
+    "couName": "Bermuda"
+  },
+  {
+    "couCode": "BFA",
+    "couName": "Burkina Faso"
+  },
+  {
+    "couCode": "BDI",
+    "couName": "Burundi"
+  },
+  {
+    "couCode": "COG",
+    "couName": "Congo"
+  },
+  {
+    "couCode": "GEO",
+    "couName": "Georgia"
+  },
+  {
+    "couCode": "GHA",
+    "couName": "Ghana"
+  },
+  {
+    "couCode": "CIV",
+    "couName": "Ivory Coast"
+  },
+  {
+    "couCode": "KAZ",
+    "couName": "Kazakhstan"
+  },
+  {
+    "couCode": "KGZ",
+    "couName": "Kyrgyzstan"
+  },
+  {
+    "couCode": "LBR",
+    "couName": "Liberia"
+  },
+  {
+    "couCode": "MLT",
+    "couName": "Malta"
+  },
+  {
+    "couCode": "MTQ",
+    "couName": "Martinique"
+  },
+  {
+    "couCode": "MDA",
+    "couName": "Moldova, Republic of"
+  },
+  {
+    "couCode": "MCO",
+    "couName": "Monaco"
+  },
+  {
+    "couCode": "NAM",
+    "couName": "Namibia"
+  },
+  {
+    "couCode": "NER",
+    "couName": "Niger"
+  },
+  {
+    "couCode": "NOR",
+    "couName": "Norway_2"
+  },
+  {
+    "couCode": "RWA",
+    "couName": "Rwanda"
+  },
+  {
+    "couCode": "SMR",
+    "couName": "San Marino"
+  },
+  {
+    "couCode": "SLE",
+    "couName": "Sierra Leone"
+  },
+  {
+    "couCode": "SVN",
+    "couName": "Slovenia"
+  },
+  {
+    "couCode": "TJK",
+    "couName": "Tajikistan"
+  },
+  {
+    "couCode": "UZB",
+    "couName": "Uzbekistan"
+  },
+  {
+    "couCode": "ZWE",
+    "couName": "Zimbabwe"
+  },
+  {
+    "couCode": "QAT",
+    "couName": "Qatar_2"
+  },
+  {
+    "couCode": "COG",
+    "couName": "Congo, Republic"
+  },
+  {
+    "couCode": "GBR",
+    "couName": "United Kingdom - UK"
+  }
+]
