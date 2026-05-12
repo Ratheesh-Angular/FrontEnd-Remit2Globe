@@ -130,6 +130,7 @@ function nationalMobileFromStored(mobile: string | null | undefined): string {
   try {
     const p = parsePhoneNumberFromString(raw);
     if (p?.nationalNumber) return String(p.nationalNumber);
+    console.log("final-checking");
   } catch {
     /* ignore */
   }
@@ -204,15 +205,10 @@ export function AddBeneficiaryModal({
     () =>
       Boolean(
         useFlexBankListUi &&
-          formData.country?.trim() &&
-          (banksLoading || flexBanks.length > 0),
+        formData.country?.trim() &&
+        (banksLoading || flexBanks.length > 0),
       ),
-    [
-      useFlexBankListUi,
-      formData.country,
-      banksLoading,
-      flexBanks.length,
-    ],
+    [useFlexBankListUi, formData.country, banksLoading, flexBanks.length],
   );
 
   useEffect(() => {
@@ -837,9 +833,9 @@ export function AddBeneficiaryModal({
                   {!showFlexBankDropdown ? (
                     <input
                       type="text"
-                      disabled={
-                        Boolean(useFlexBankListUi && !formData.country?.trim())
-                      }
+                      disabled={Boolean(
+                        useFlexBankListUi && !formData.country?.trim(),
+                      )}
                       placeholder={
                         useFlexBankListUi && !formData.country?.trim()
                           ? "Select country first"
