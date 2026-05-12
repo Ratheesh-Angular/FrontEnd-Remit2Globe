@@ -21,6 +21,7 @@ export default function KycProfilePage() {
         });
         const res = await api.get("/kyc/profile");
         const r = res.data?.data?.role as string | undefined;
+        console.log(r);
         if (!cancelled) {
           setRole(r === "CORPORATE" ? "CORPORATE" : "INDIVIDUAL");
         }
