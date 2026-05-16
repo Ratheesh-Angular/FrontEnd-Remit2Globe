@@ -58,6 +58,207 @@ function residenceDetailRows(
   return [];
 }
 
+function parseStoredBusinessAddressLines(o: Record<string, unknown>): string {
+  const line1 = String(o.line1 ?? "").trim();
+  const line2 = String(o.line2 ?? "").trim();
+  const city = String(o.city ?? "").trim();
+  const state = String(o.state ?? "").trim();
+  const postal = String(o.postalCode ?? "").trim();
+  const country = String(o.country ?? "").trim();
+  const cityState = [city, state].filter(Boolean).join(", ");
+  return [line1, line2, cityState, postal, country].filter(Boolean).join("\n");
+}
+
+/** Handles JSON column object, JSON string, or legacy plain-text address. */
+function formatCorporateBusinessAddress(raw: unknown): string {
+  if (raw == null) return "";
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    if ("line1" in o || "city" in o || "country" in o || "postalCode" in o) {
+      const formatted = parseStoredBusinessAddressLines(o);
+      if (formatted) return formatted;
+    }
+  }
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return "";
+  try {
+    const j = JSON.parse(s) as unknown;
+    if (j && typeof j === "object" && !Array.isArray(j)) {
+      const formatted = parseStoredBusinessAddressLines(j as Record<string, unknown>);
+      if (formatted) return formatted;
+    }
+  } catch {
+    /* legacy single-line text */
+  }
+  return s;
+}
+
+function normalizeSubmittedProfileArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const j = JSON.parse(value) as unknown;
+      return Array.isArray(j) ? j : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function CorporateKeyPersonnelProfileList({ value }: { value: unknown }) {
+  const items = normalizeSubmittedProfileArray(value);
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500 py-2">Not provided</p>;
+  }
+  return (
+    <ul className="space-y-3 list-none m-0 p-0 pt-1">
+      {items.map((entry, idx) => {
+        if (!entry || typeof entry !== "object") return null;
+        const o = entry as Record<string, unknown>;
+        const fullName =
+          String(o.fullName ?? "").trim() ||
+          String(o.name ?? "").trim() ||
+          `Person ${idx + 1}`;
+        const docUrl = String(
+          o.documentFileUrl ?? o.passportOrNationalIdDocumentUrl ?? "",
+        ).trim();
+        const docName = String(o.documentFileName ?? "").trim();
+        const legacyRef = String(o.passportOrNationalId ?? "").trim();
+        return (
+          <li
+            key={idx}
+            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-teal-600"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-2">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Full name
+                  </p>
+                  <p className="text-sm font-semibold text-slate-900 mt-0.5">
+                    {fullName}
+                  </p>
+                </div>
+                {docName ? (
+                  <p className="text-xs text-slate-600 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate" title={docName}>
+                      Identification document
+                      <span className="text-slate-400"> · </span>
+                      {docName}
+                    </span>
+                  </p>
+                ) : null}
+                {!docUrl && legacyRef ? (
+                  <p className="text-xs text-slate-600">{legacyRef}</p>
+                ) : null}
+              </div>
+              {docUrl ? (
+                <a
+                  href={docUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                >
+                  View document
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CorporateShareholdersProfileList({ value }: { value: unknown }) {
+  const items = normalizeSubmittedProfileArray(value);
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500 py-2">Not provided</p>;
+  }
+  return (
+    <ul className="space-y-3 list-none m-0 p-0 pt-1">
+      {items.map((entry, idx) => {
+        if (!entry || typeof entry !== "object") return null;
+        const o = entry as Record<string, unknown>;
+        const kindRaw = String(o.kind ?? "").toUpperCase();
+        const isCorporate = kindRaw === "CORPORATE";
+        const fullName =
+          String(o.fullName ?? o.entityName ?? o.businessName ?? "").trim() ||
+          `Shareholder ${idx + 1}`;
+        const docUrl = String(o.documentFileUrl ?? "").trim();
+        const docName = String(o.documentFileName ?? "").trim();
+        const registeredAddress = String(
+          o.registeredAddress ?? o.address ?? "",
+        ).trim();
+        return (
+          <li
+            key={idx}
+            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-teal-600"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${
+                  isCorporate
+                    ? "bg-slate-100 text-slate-800 ring-slate-200"
+                    : "bg-teal-50 text-teal-800 ring-teal-200"
+                }`}
+              >
+                {isCorporate ? "Corporate" : "Individual"}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {isCorporate ? "Entity name" : "Full name"}
+                  </p>
+                  <p className="text-sm font-semibold text-slate-900 mt-0.5">
+                    {fullName}
+                  </p>
+                </div>
+                {isCorporate && registeredAddress ? (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Registered address
+                    </p>
+                    <p className="text-sm text-slate-800 mt-0.5 whitespace-pre-wrap break-words">
+                      {registeredAddress}
+                    </p>
+                  </div>
+                ) : null}
+                {docName ? (
+                  <p className="text-xs text-slate-600 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate" title={docName}>
+                      Identification document
+                      <span className="text-slate-400"> · </span>
+                      {docName}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+              {docUrl ? (
+                <a
+                  href={docUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                >
+                  View document
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function KycBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     PENDING: "bg-amber-50 text-amber-800 ring-amber-200",
@@ -342,7 +543,9 @@ export default function ProfilePageClient() {
                       />
                       <DetailRow
                         label="Business address"
-                        value={corporate?.businessAddress as string}
+                        value={formatCorporateBusinessAddress(
+                          corporate?.businessAddress,
+                        )}
                         wide
                       />
                       <DetailRow
@@ -406,14 +609,18 @@ export default function ProfilePageClient() {
                     title="Key personnel"
                     description="Directors and officers (as submitted)"
                   >
-                    <JsonOrEmpty value={corporate?.keyPersonnel} />
+                    <CorporateKeyPersonnelProfileList
+                      value={corporate?.keyPersonnel}
+                    />
                   </SectionCard>
 
                   <SectionCard
                     title="Shareholders"
                     description="Shareholding structure (as submitted)"
                   >
-                    <JsonOrEmpty value={corporate?.shareholders} />
+                    <CorporateShareholdersProfileList
+                      value={corporate?.shareholders}
+                    />
                   </SectionCard>
                 </>
               ) : (
@@ -710,17 +917,6 @@ export default function ProfilePageClient() {
         </>
       )}
     </div>
-  );
-}
-
-function JsonOrEmpty({ value }: { value: unknown }) {
-  if (value == null || (Array.isArray(value) && value.length === 0)) {
-    return <p className="text-sm text-slate-500 py-2">Not provided</p>;
-  }
-  return (
-    <pre className="text-xs bg-slate-50 border border-slate-100 rounded-lg p-4 overflow-x-auto text-slate-800 max-h-80">
-      {JSON.stringify(value, null, 2)}
-    </pre>
   );
 }
 

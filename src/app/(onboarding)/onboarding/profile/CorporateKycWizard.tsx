@@ -8,6 +8,14 @@ import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import type { KycDocumentRow } from "./VerificationDocuments";
 import { CorporateVerificationDocuments } from "./CorporateVerificationDocuments";
+import { DocumentPreviewModal } from "./DocumentPreviewModal";
+import {
+  isAllowedKycUpload,
+  KYC_FILE_INPUT_ACCEPT,
+  KYC_UPLOAD_MAX_BYTES,
+  kycUploadMaxSizeLabelMb,
+  parseKycUploadErrorMessage,
+} from "./kycUploadAllowed";
 import { KycSubmittedPanel } from "./KycSubmittedPanel";
 import { AppDialog } from "@/components/ui/AppDialog";
 import { Field, SectionLabel } from "./KycFormPrimitives";
@@ -24,18 +32,21 @@ type ShareholderFormRow =
   | {
       kind: "INDIVIDUAL";
       fullName: string;
-      idDocumentNumber: string;
+      documentFileUrl: string;
+      documentFileName: string;
     }
   | {
       kind: "CORPORATE";
-      entityName: string;
-      registrationNumber: string;
+      fullName: string;
+      documentFileUrl: string;
+      documentFileName: string;
       registeredAddress: string;
     };
 
 interface KeyPersonnelRow {
   fullName: string;
-  passportOrNationalId: string;
+  documentFileUrl: string;
+  documentFileName: string;
 }
 
 interface BusinessPremisesAddressForm {
@@ -97,6 +108,149 @@ function businessPremisesComplete(p: BusinessPremisesAddressForm): boolean {
   );
 }
 
+function isKeyPersonnelComplete(personnel: KeyPersonnelRow): boolean {
+  return Boolean(personnel.fullName.trim() && personnel.documentFileUrl.trim());
+}
+
+function isShareholderRowComplete(row: ShareholderFormRow): boolean {
+  if (row.kind === "INDIVIDUAL") {
+    return Boolean(row.fullName.trim() && row.documentFileUrl.trim());
+  }
+  return Boolean(
+    row.fullName.trim() &&
+    row.documentFileUrl.trim() &&
+    row.registeredAddress.trim(),
+  );
+}
+
+/** Passport / National ID upload card — matches Individual KYC verification documents pattern. */
+function CorporateOwnershipDocUpload({
+  documentFileUrl,
+  documentFileName,
+  uploading,
+  errorMsg,
+  description,
+  fileInputRef,
+  onFileSelected,
+  onBrowseClick,
+  onView,
+}: {
+  documentFileUrl: string;
+  documentFileName: string;
+  uploading: boolean;
+  errorMsg?: string;
+  description?: string;
+  fileInputRef: (el: HTMLInputElement | null) => void;
+  onFileSelected: (file: File) => void;
+  onBrowseClick: () => void;
+  onView: () => void;
+}) {
+  const done = Boolean(documentFileUrl.trim()) && !uploading && !errorMsg;
+  const showStatus = uploading || done || Boolean(errorMsg);
+  const hint = description ?? `Upload a clear copy of passport or national ID`;
+
+  return (
+    <div
+      className={`bg-slate-50/80 border rounded-xl p-5 transition-colors ${
+        done ? "border-teal-200" : "border-slate-200"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-slate-500">{hint}</p>
+          {showStatus ? (
+            <div
+              className={`mt-2 flex items-center gap-2 text-xs ${
+                errorMsg
+                  ? "text-red-500"
+                  : uploading
+                    ? "text-slate-500"
+                    : "text-teal-700"
+              }`}
+            >
+              {uploading ? (
+                <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              ) : null}
+              {errorMsg ? (
+                <svg
+                  className="w-3.5 h-3.5 shrink-0"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              ) : null}
+              {done ? (
+                <svg
+                  className="w-3.5 h-3.5 text-teal-600 shrink-0"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              ) : null}
+              <span className="truncate max-w-[min(100%,14rem)] sm:max-w-xs">
+                {uploading ? "Uploading..." : null}
+                {errorMsg ? errorMsg : null}
+                {done ? documentFileName.trim() || "Document" : null}
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <input
+            type="file"
+            accept={KYC_FILE_INPUT_ACCEPT}
+            className="hidden"
+            ref={fileInputRef}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onFileSelected(file);
+              e.target.value = "";
+            }}
+          />
+          {documentFileUrl.trim() && !uploading ? (
+            <button
+              type="button"
+              onClick={onView}
+              className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              View
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onBrowseClick}
+            disabled={uploading}
+            className={`h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+              documentFileUrl.trim() && !uploading
+                ? "border-teal-200 text-teal-700 hover:bg-teal-50"
+                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {uploading
+              ? "Uploading..."
+              : documentFileUrl.trim()
+                ? "Replace"
+                : "Upload"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface CorporateForm {
   businessName: string;
   natureOfBusiness: string;
@@ -117,12 +271,14 @@ interface CorporateForm {
 const emptyShareholder = (): ShareholderFormRow => ({
   kind: "INDIVIDUAL",
   fullName: "",
-  idDocumentNumber: "",
+  documentFileUrl: "",
+  documentFileName: "",
 });
 
 const emptyKeyPerson = (): KeyPersonnelRow => ({
   fullName: "",
-  passportOrNationalId: "",
+  documentFileUrl: "",
+  documentFileName: "",
 });
 
 const emptyForm: CorporateForm = {
@@ -186,11 +342,13 @@ function parseKeyPersonnel(raw: unknown): KeyPersonnelRow[] {
     .map((r) => {
       if (!r || typeof r !== "object") return null;
       const o = r as Record<string, unknown>;
+      const docUrl =
+        String(o.documentFileUrl ?? "").trim() ||
+        String(o.passportOrNationalIdDocumentUrl ?? "").trim();
       return {
         fullName: String(o.fullName ?? "").trim(),
-        passportOrNationalId: String(
-          o.passportOrNationalId ?? o.passportOrNationalID ?? "",
-        ).trim(),
+        documentFileUrl: docUrl,
+        documentFileName: String(o.documentFileName ?? "").trim(),
       };
     })
     .filter(Boolean) as KeyPersonnelRow[];
@@ -204,11 +362,17 @@ function parseShareholders(raw: unknown): ShareholderFormRow[] {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
     const kind = o.kind === "CORPORATE" ? "CORPORATE" : "INDIVIDUAL";
+    const docUrl =
+      String(o.documentFileUrl ?? "").trim() ||
+      String(o.passportOrNationalIdDocumentUrl ?? "").trim();
     if (kind === "CORPORATE") {
       rows.push({
         kind: "CORPORATE",
-        entityName: String(o.entityName ?? o.businessName ?? "").trim(),
-        registrationNumber: String(o.registrationNumber ?? "").trim(),
+        fullName: String(
+          o.fullName ?? o.entityName ?? o.businessName ?? "",
+        ).trim(),
+        documentFileUrl: docUrl,
+        documentFileName: String(o.documentFileName ?? "").trim(),
         registeredAddress: String(
           o.registeredAddress ?? o.address ?? "",
         ).trim(),
@@ -217,9 +381,8 @@ function parseShareholders(raw: unknown): ShareholderFormRow[] {
       rows.push({
         kind: "INDIVIDUAL",
         fullName: String(o.fullName ?? "").trim(),
-        idDocumentNumber: String(
-          o.idDocumentNumber ?? o.passportOrNationalId ?? "",
-        ).trim(),
+        documentFileUrl: docUrl,
+        documentFileName: String(o.documentFileName ?? "").trim(),
       });
     }
   }
@@ -228,25 +391,28 @@ function parseShareholders(raw: unknown): ShareholderFormRow[] {
 
 function buildCorporatePayload(form: CorporateForm): Record<string, unknown> {
   const keyPersonnel = form.keyPersonnel
-    .filter((r) => r.fullName.trim() && r.passportOrNationalId.trim())
+    .filter((r) => isKeyPersonnelComplete(r))
     .map((r) => ({
       fullName: r.fullName.trim(),
-      passportOrNationalId: r.passportOrNationalId.trim(),
+      documentFileUrl: r.documentFileUrl.trim(),
+      documentFileName: r.documentFileName.trim(),
     }));
 
   const shareholders = form.shareholders.map((row) => {
     if (row.kind === "CORPORATE") {
       return {
         kind: "CORPORATE" as const,
-        entityName: row.entityName.trim(),
-        registrationNumber: row.registrationNumber.trim(),
+        fullName: row.fullName.trim(),
+        documentFileUrl: row.documentFileUrl.trim(),
+        documentFileName: row.documentFileName.trim(),
         registeredAddress: row.registeredAddress.trim(),
       };
     }
     return {
       kind: "INDIVIDUAL" as const,
       fullName: row.fullName.trim(),
-      idDocumentNumber: row.idDocumentNumber.trim(),
+      documentFileUrl: row.documentFileUrl.trim(),
+      documentFileName: row.documentFileName.trim(),
     };
   });
 
@@ -294,9 +460,6 @@ function inferCorporateDocsComplete(
     "TRADING_LICENSE",
     "CR12",
     "PROOF_OF_ADDRESS",
-    "REPRESENTATIVE_ID",
-    "DIRECTOR_ID",
-    "SHAREHOLDER_ID",
   ];
   if (!base.every((t) => uploaded.has(t))) return false;
   if (regulatoryRequired && !uploaded.has("REGULATORY_LICENSE")) return false;
@@ -326,19 +489,8 @@ function inferSavedSectionsFromForm(f: CorporateForm): CorporateSection[] {
 
   if (licensesDone) saved.push("licenses");
 
-  const kpOk = f.keyPersonnel.some(
-    (r) => r.fullName.trim() && r.passportOrNationalId.trim(),
-  );
-  const shOk = f.shareholders.every((row) => {
-    if (row.kind === "CORPORATE") {
-      return (
-        row.entityName.trim() &&
-        row.registrationNumber.trim() &&
-        row.registeredAddress.trim()
-      );
-    }
-    return row.fullName.trim() && row.idDocumentNumber.trim();
-  });
+  const kpOk = f.keyPersonnel.some((r) => isKeyPersonnelComplete(r));
+  const shOk = f.shareholders.every((row) => isShareholderRowComplete(row));
   const hasShareholder = f.shareholders.length > 0;
   if (kpOk && shOk && hasShareholder) saved.push("ownership");
 
@@ -443,6 +595,29 @@ export function CorporateKycWizard() {
   const [pendingSectionAfterUnsaved, setPendingSectionAfterUnsaved] =
     useState<CorporateSection | null>(null);
   const [registrationCountry, setRegistrationCountry] = useState("");
+  const [uploadingPersonnelDoc, setUploadingPersonnelDoc] = useState<
+    number | null
+  >(null);
+  const [personnelUploadErrors, setPersonnelUploadErrors] = useState<
+    Record<number, string>
+  >({});
+  const [ownershipFilePreview, setOwnershipFilePreview] = useState<{
+    url: string;
+    fileName: string;
+    title: string;
+  } | null>(null);
+  const personnelFileInputRefs = useRef<
+    Record<number, HTMLInputElement | null>
+  >({});
+  const [uploadingShareholderDoc, setUploadingShareholderDoc] = useState<
+    number | null
+  >(null);
+  const [shareholderUploadErrors, setShareholderUploadErrors] = useState<
+    Record<number, string>
+  >({});
+  const shareholderFileInputRefs = useRef<
+    Record<number, HTMLInputElement | null>
+  >({});
 
   const { countries: flexCountryList } = useFlexCountries(true);
 
@@ -486,6 +661,132 @@ export function CorporateKycWizard() {
       console.error(e);
     }
   }, []);
+
+  const handlePersonnelDocumentUpload = useCallback(
+    async (file: File, personnelIndex: number) => {
+      if (file.size > KYC_UPLOAD_MAX_BYTES) {
+        setPersonnelUploadErrors((prev) => ({
+          ...prev,
+          [personnelIndex]: `This file is too large (max ${kycUploadMaxSizeLabelMb()} MB).`,
+        }));
+        return;
+      }
+
+      if (!isAllowedKycUpload(file)) {
+        setPersonnelUploadErrors((prev) => ({
+          ...prev,
+          [personnelIndex]:
+            "This file type is not accepted. Use documents or media (executables and scripts are blocked).",
+        }));
+        return;
+      }
+
+      setPersonnelUploadErrors((prev) => {
+        const next = { ...prev };
+        delete next[personnelIndex];
+        return next;
+      });
+
+      try {
+        setUploadingPersonnelDoc(personnelIndex);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("documentType", "AUTHORIZED_PERSONNEL_DOC");
+
+        const res = await api.post("/kyc/documents/upload", formData);
+        const uploadedDoc = res.data.data as {
+          fileUrl: string;
+          fileName: string;
+        };
+
+        setForm((p) => {
+          const kp = [...p.keyPersonnel];
+          kp[personnelIndex] = {
+            ...kp[personnelIndex],
+            documentFileUrl: uploadedDoc.fileUrl,
+            documentFileName: uploadedDoc.fileName,
+          };
+          return { ...p, keyPersonnel: kp };
+        });
+        await syncDocumentsFromServer();
+      } catch (err) {
+        console.error("Failed to upload personnel document:", err);
+        const serverMsg = parseKycUploadErrorMessage(err);
+        setPersonnelUploadErrors((prev) => ({
+          ...prev,
+          [personnelIndex]:
+            serverMsg ?? "Upload failed. Check your connection and try again.",
+        }));
+      } finally {
+        setUploadingPersonnelDoc(null);
+      }
+    },
+    [syncDocumentsFromServer],
+  );
+
+  const handleShareholderDocumentUpload = useCallback(
+    async (file: File, shareholderIndex: number) => {
+      if (file.size > KYC_UPLOAD_MAX_BYTES) {
+        setShareholderUploadErrors((prev) => ({
+          ...prev,
+          [shareholderIndex]: `This file is too large (max ${kycUploadMaxSizeLabelMb()} MB).`,
+        }));
+        return;
+      }
+
+      if (!isAllowedKycUpload(file)) {
+        setShareholderUploadErrors((prev) => ({
+          ...prev,
+          [shareholderIndex]:
+            "This file type is not accepted. Use documents or media (executables and scripts are blocked).",
+        }));
+        return;
+      }
+
+      setShareholderUploadErrors((prev) => {
+        const next = { ...prev };
+        delete next[shareholderIndex];
+        return next;
+      });
+
+      try {
+        setUploadingShareholderDoc(shareholderIndex);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("documentType", "AUTHORIZED_PERSONNEL_DOC");
+
+        const res = await api.post("/kyc/documents/upload", formData);
+        const uploadedDoc = res.data.data as {
+          fileUrl: string;
+          fileName: string;
+        };
+
+        setForm((p) => {
+          const sh = [...p.shareholders];
+          const cur = sh[shareholderIndex];
+          if (!cur) return p;
+          sh[shareholderIndex] = {
+            ...cur,
+            documentFileUrl: uploadedDoc.fileUrl,
+            documentFileName: uploadedDoc.fileName,
+          };
+          return { ...p, shareholders: sh };
+        });
+        await syncDocumentsFromServer();
+      } catch (err) {
+        console.error("Failed to upload shareholder document:", err);
+        const serverMsg = parseKycUploadErrorMessage(err);
+        setShareholderUploadErrors((prev) => ({
+          ...prev,
+          [shareholderIndex]:
+            serverMsg ?? "Upload failed. Check your connection and try again.",
+        }));
+      } finally {
+        setUploadingShareholderDoc(null);
+      }
+    },
+    [syncDocumentsFromServer],
+  );
 
   const handleKycSubmitted = useCallback(() => {
     setPersistedSignature(formSignature(formRef.current));
@@ -652,23 +953,14 @@ export function CorporateKycWizard() {
     }
 
     if (section === "ownership") {
-      const kpOk = form.keyPersonnel.some(
-        (r) => r.fullName.trim() && r.passportOrNationalId.trim(),
-      );
+      const kpOk = form.keyPersonnel.some((r) => isKeyPersonnelComplete(r));
       if (!kpOk)
         newErrors.keyPersonnel =
-          "Add at least one authorised person with full name and passport or national ID";
+          "Add at least one authorised person with full name and passport or national ID document uploaded";
 
-      const badSh = form.shareholders.find((row) => {
-        if (row.kind === "CORPORATE") {
-          return (
-            !row.entityName.trim() ||
-            !row.registrationNumber.trim() ||
-            !row.registeredAddress.trim()
-          );
-        }
-        return !row.fullName.trim() || !row.idDocumentNumber.trim();
-      });
+      const badSh = form.shareholders.find(
+        (row) => !isShareholderRowComplete(row),
+      );
       if (badSh) {
         newErrors.shareholders =
           "Complete all shareholder rows or remove incomplete entries";
@@ -903,32 +1195,38 @@ export function CorporateKycWizard() {
         {activeSection === "business" && (
           <div className="space-y-4">
             <div className="space-y-4">
-              <Field label="Business name" required error={errors.businessName}>
-                <input
-                  className={inputClass("businessName")}
-                  value={form.businessName}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, businessName: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field
-                label="Nature of business"
-                required
-                error={errors.natureOfBusiness}
-              >
-                <input
-                  type="text"
-                  className={inputClass("natureOfBusiness")}
-                  value={form.natureOfBusiness}
-                  onChange={(e) =>
-                    setForm((p) => ({
-                      ...p,
-                      natureOfBusiness: e.target.value,
-                    }))
-                  }
-                />
-              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="Business name"
+                  required
+                  error={errors.businessName}
+                >
+                  <input
+                    className={inputClass("businessName")}
+                    value={form.businessName}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, businessName: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Nature of business"
+                  required
+                  error={errors.natureOfBusiness}
+                >
+                  <input
+                    type="text"
+                    className={inputClass("natureOfBusiness")}
+                    value={form.natureOfBusiness}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        natureOfBusiness: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
                   label="Business registration number"
@@ -1216,57 +1514,98 @@ export function CorporateKycWizard() {
                   {errors.keyPersonnel}
                 </p>
               )}
-              <div className="space-y-3">
-                {form.keyPersonnel.map((row, i) => (
-                  <div
-                    key={i}
-                    role="group"
-                    aria-label={`Authorised personnel ${i + 1}`}
-                    className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-3"
-                  >
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                      <Field label="Full name">
-                        <input
-                          className={ownershipInputClass("keyPersonnel")}
-                          value={row.fullName}
-                          onChange={(e) =>
-                            setForm((p) => {
-                              const kp = [...p.keyPersonnel];
-                              kp[i] = { ...kp[i], fullName: e.target.value };
-                              return { ...p, keyPersonnel: kp };
-                            })
-                          }
-                        />
-                      </Field>
-                      <Field label="Passport / national ID">
-                        <input
-                          className={ownershipInputClass("keyPersonnel")}
-                          value={row.passportOrNationalId}
-                          onChange={(e) =>
-                            setForm((p) => {
-                              const kp = [...p.keyPersonnel];
-                              kp[i] = {
-                                ...kp[i],
-                                passportOrNationalId: e.target.value,
-                              };
-                              return { ...p, keyPersonnel: kp };
-                            })
-                          }
-                        />
-                      </Field>
+              <div className="space-y-4">
+                {form.keyPersonnel.map((row, i) => {
+                  const uploading = uploadingPersonnelDoc === i;
+                  const errMsg = personnelUploadErrors[i];
+                  return (
+                    <div
+                      key={i}
+                      role="group"
+                      aria-label={`Authorised personnel ${i + 1}`}
+                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-4"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-medium text-slate-700">
+                          Person {i + 1}
+                        </p>
+                        {form.keyPersonnel.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPersonnelUploadErrors({});
+                              setUploadingPersonnelDoc(null);
+                              setForm((p) => ({
+                                ...p,
+                                keyPersonnel: p.keyPersonnel.filter(
+                                  (_, idx) => idx !== i,
+                                ),
+                              }));
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="">
+                        <Field label="Full name" required>
+                          <input
+                            className={ownershipInputClass("keyPersonnel")}
+                            placeholder="Full legal name"
+                            value={row.fullName}
+                            onChange={(e) =>
+                              setForm((p) => {
+                                const kp = [...p.keyPersonnel];
+                                kp[i] = { ...kp[i], fullName: e.target.value };
+                                return { ...p, keyPersonnel: kp };
+                              })
+                            }
+                          />
+                        </Field>
+                        <div className="mt-3">
+                          <Field label="Passport or National ID" required>
+                            <CorporateOwnershipDocUpload
+                              documentFileUrl={row.documentFileUrl}
+                              documentFileName={row.documentFileName}
+                              uploading={uploading}
+                              errorMsg={errMsg}
+                              fileInputRef={(el) => {
+                                personnelFileInputRefs.current[i] = el;
+                              }}
+                              onFileSelected={(file) =>
+                                void handlePersonnelDocumentUpload(file, i)
+                              }
+                              onBrowseClick={() =>
+                                personnelFileInputRefs.current[i]?.click()
+                              }
+                              onView={() =>
+                                setOwnershipFilePreview({
+                                  url: row.documentFileUrl,
+                                  fileName: row.documentFileName || "Document",
+                                  title: `Passport or National ID — Person ${i + 1}`,
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <button
                 type="button"
                 className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
-                onClick={() =>
+                onClick={() => {
+                  setPersonnelUploadErrors({});
                   setForm((p) => ({
                     ...p,
                     keyPersonnel: [...p.keyPersonnel, emptyKeyPerson()],
-                  }))
-                }
+                  }));
+                }}
               >
                 <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
                 Add authorised person
@@ -1275,154 +1614,214 @@ export function CorporateKycWizard() {
 
             <div>
               <p className="text-sm font-semibold text-slate-900 mb-2">
-                Shareholders
+                Directors & Shareholders
               </p>
               {errors.shareholders && (
                 <p className="text-xs text-red-500 mb-2">
                   {errors.shareholders}
                 </p>
               )}
-              <div className="space-y-3">
-                {form.shareholders.map((row, i) => (
-                  <div
-                    key={i}
-                    role="group"
-                    aria-label={`Shareholder ${i + 1}`}
-                    className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-3"
-                  >
-                    <div className="mb-2 min-w-0">
-                      <p id={`shareholder-type-label-${i}`} className="sr-only">
-                        Shareholder {i + 1} type
-                      </p>
-                      <div
-                        role="radiogroup"
-                        aria-labelledby={`shareholder-type-label-${i}`}
-                        className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 sm:inline-flex sm:w-auto sm:flex-row"
-                      >
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={row.kind === "INDIVIDUAL"}
-                          data-state={
-                            row.kind === "INDIVIDUAL" ? "checked" : "unchecked"
-                          }
-                          className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
-                            row.kind === "INDIVIDUAL"
-                              ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
-                              : "text-slate-600 hover:text-slate-900"
-                          }`}
-                          onClick={() =>
-                            setForm((p) => {
-                              const sh = [...p.shareholders];
-                              sh[i] = {
-                                kind: "INDIVIDUAL",
-                                fullName: "",
-                                idDocumentNumber: "",
-                              };
-                              return { ...p, shareholders: sh };
-                            })
-                          }
+              <div className="space-y-4">
+                {form.shareholders.map((row, i) => {
+                  const uploading = uploadingShareholderDoc === i;
+                  const errMsg = shareholderUploadErrors[i];
+                  return (
+                    <div
+                      key={i}
+                      role="group"
+                      aria-label={`Shareholder ${i + 1}`}
+                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-4"
+                    >
+                      <div className="mb-3 min-w-0">
+                        <p
+                          id={`shareholder-type-label-${i}`}
+                          className="sr-only"
                         >
-                          Individual
-                        </button>
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={row.kind === "CORPORATE"}
-                          data-state={
-                            row.kind === "CORPORATE" ? "checked" : "unchecked"
-                          }
-                          className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
-                            row.kind === "CORPORATE"
-                              ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
-                              : "text-slate-600 hover:text-slate-900"
-                          }`}
-                          onClick={() =>
-                            setForm((p) => {
-                              const sh = [...p.shareholders];
-                              sh[i] = {
-                                kind: "CORPORATE",
-                                entityName: "",
-                                registrationNumber: "",
-                                registeredAddress: "",
-                              };
-                              return { ...p, shareholders: sh };
-                            })
-                          }
+                          Shareholder {i + 1} type
+                        </p>
+                        <div
+                          role="radiogroup"
+                          aria-labelledby={`shareholder-type-label-${i}`}
+                          className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 sm:inline-flex sm:w-auto sm:flex-row"
                         >
-                          Corporate
-                        </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={row.kind === "INDIVIDUAL"}
+                            data-state={
+                              row.kind === "INDIVIDUAL"
+                                ? "checked"
+                                : "unchecked"
+                            }
+                            className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
+                              row.kind === "INDIVIDUAL"
+                                ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                            onClick={() => {
+                              setShareholderUploadErrors({});
+                              setUploadingShareholderDoc(null);
+                              setForm((p) => {
+                                const sh = [...p.shareholders];
+                                sh[i] = {
+                                  kind: "INDIVIDUAL",
+                                  fullName: "",
+                                  documentFileUrl: "",
+                                  documentFileName: "",
+                                };
+                                return { ...p, shareholders: sh };
+                              });
+                            }}
+                          >
+                            Individual
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={row.kind === "CORPORATE"}
+                            data-state={
+                              row.kind === "CORPORATE" ? "checked" : "unchecked"
+                            }
+                            className={`w-full rounded-md px-3 py-2 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 sm:w-auto sm:text-sm ${
+                              row.kind === "CORPORATE"
+                                ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200/80"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                            onClick={() => {
+                              setShareholderUploadErrors({});
+                              setUploadingShareholderDoc(null);
+                              setForm((p) => {
+                                const sh = [...p.shareholders];
+                                sh[i] = {
+                                  kind: "CORPORATE",
+                                  fullName: "",
+                                  documentFileUrl: "",
+                                  documentFileName: "",
+                                  registeredAddress: "",
+                                };
+                                return { ...p, shareholders: sh };
+                              });
+                            }}
+                          >
+                            Corporate
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {row.kind === "INDIVIDUAL" ? (
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                        <Field label="Full name">
-                          <input
-                            className={ownershipInputClass("shareholders")}
-                            value={row.fullName}
-                            onChange={(e) =>
-                              setForm((p) => {
-                                const sh = [...p.shareholders];
-                                if (sh[i].kind !== "INDIVIDUAL") return p;
-                                sh[i] = {
-                                  ...sh[i],
-                                  fullName: e.target.value,
-                                };
-                                return { ...p, shareholders: sh };
-                              })
-                            }
-                          />
-                        </Field>
-                        <Field label="Passport / national ID">
-                          <input
-                            className={ownershipInputClass("shareholders")}
-                            value={row.idDocumentNumber}
-                            onChange={(e) =>
-                              setForm((p) => {
-                                const sh = [...p.shareholders];
-                                if (sh[i].kind !== "INDIVIDUAL") return p;
-                                sh[i] = {
-                                  ...sh[i],
-                                  idDocumentNumber: e.target.value,
-                                };
-                                return { ...p, shareholders: sh };
-                              })
-                            }
-                          />
-                        </Field>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                          <Field label="Entity name">
+                      {row.kind === "INDIVIDUAL" ? (
+                        <div className="">
+                          <Field label="Full name" required>
                             <input
                               className={ownershipInputClass("shareholders")}
-                              value={row.entityName}
+                              placeholder="Full legal name"
+                              value={row.fullName}
                               onChange={(e) =>
                                 setForm((p) => {
                                   const sh = [...p.shareholders];
-                                  if (sh[i].kind !== "CORPORATE") return p;
+                                  if (sh[i].kind !== "INDIVIDUAL") return p;
                                   sh[i] = {
                                     ...sh[i],
-                                    entityName: e.target.value,
+                                    fullName: e.target.value,
                                   };
                                   return { ...p, shareholders: sh };
                                 })
                               }
                             />
                           </Field>
-                          <Field label="Registration No">
-                            <input
-                              className={ownershipInputClass("shareholders")}
-                              value={row.registrationNumber}
+                          <div className="mt-3">
+                            <Field label="Passport or National ID" required>
+                              <CorporateOwnershipDocUpload
+                                documentFileUrl={row.documentFileUrl}
+                                documentFileName={row.documentFileName}
+                                uploading={uploading}
+                                errorMsg={errMsg}
+                                fileInputRef={(el) => {
+                                  shareholderFileInputRefs.current[i] = el;
+                                }}
+                                onFileSelected={(file) =>
+                                  void handleShareholderDocumentUpload(file, i)
+                                }
+                                onBrowseClick={() =>
+                                  shareholderFileInputRefs.current[i]?.click()
+                                }
+                                onView={() =>
+                                  setOwnershipFilePreview({
+                                    url: row.documentFileUrl,
+                                    fileName:
+                                      row.documentFileName || "Document",
+                                    title: `Passport or National ID — Shareholder ${i + 1} (Individual)`,
+                                  })
+                                }
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="">
+                            <Field label="Full name" required>
+                              <input
+                                className={ownershipInputClass("shareholders")}
+                                placeholder="Legal entity name"
+                                value={row.fullName}
+                                onChange={(e) =>
+                                  setForm((p) => {
+                                    const sh = [...p.shareholders];
+                                    if (sh[i].kind !== "CORPORATE") return p;
+                                    sh[i] = {
+                                      ...sh[i],
+                                      fullName: e.target.value,
+                                    };
+                                    return { ...p, shareholders: sh };
+                                  })
+                                }
+                              />
+                            </Field>
+                            <div className="mt-3">
+                              <Field label="Passport or National ID" required>
+                                <CorporateOwnershipDocUpload
+                                  documentFileUrl={row.documentFileUrl}
+                                  documentFileName={row.documentFileName}
+                                  uploading={uploading}
+                                  errorMsg={errMsg}
+                                  description={`Upload a clear copy of passport or national ID`}
+                                  fileInputRef={(el) => {
+                                    shareholderFileInputRefs.current[i] = el;
+                                  }}
+                                  onFileSelected={(file) =>
+                                    void handleShareholderDocumentUpload(
+                                      file,
+                                      i,
+                                    )
+                                  }
+                                  onBrowseClick={() =>
+                                    shareholderFileInputRefs.current[i]?.click()
+                                  }
+                                  onView={() =>
+                                    setOwnershipFilePreview({
+                                      url: row.documentFileUrl,
+                                      fileName:
+                                        row.documentFileName || "Document",
+                                      title: `Passport or National ID — Shareholder ${i + 1} (Corporate)`,
+                                    })
+                                  }
+                                />
+                              </Field>
+                            </div>
+                          </div>
+                          <Field label="Registered address" required>
+                            <textarea
+                              className={ownershipTextareaClass("shareholders")}
+                              placeholder="Registered office address"
+                              rows={3}
+                              value={row.registeredAddress}
                               onChange={(e) =>
                                 setForm((p) => {
                                   const sh = [...p.shareholders];
                                   if (sh[i].kind !== "CORPORATE") return p;
                                   sh[i] = {
                                     ...sh[i],
-                                    registrationNumber: e.target.value,
+                                    registeredAddress: e.target.value,
                                   };
                                   return { ...p, shareholders: sh };
                                 })
@@ -1430,37 +1829,21 @@ export function CorporateKycWizard() {
                             />
                           </Field>
                         </div>
-                        <Field label="Registered address">
-                          <textarea
-                            className={ownershipTextareaClass("shareholders")}
-                            value={row.registeredAddress}
-                            onChange={(e) =>
-                              setForm((p) => {
-                                const sh = [...p.shareholders];
-                                if (sh[i].kind !== "CORPORATE") return p;
-                                sh[i] = {
-                                  ...sh[i],
-                                  registeredAddress: e.target.value,
-                                };
-                                return { ...p, shareholders: sh };
-                              })
-                            }
-                          />
-                        </Field>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <button
                 type="button"
                 className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-600 bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
-                onClick={() =>
+                onClick={() => {
+                  setShareholderUploadErrors({});
                   setForm((p) => ({
                     ...p,
                     shareholders: [...p.shareholders, emptyShareholder()],
-                  }))
-                }
+                  }));
+                }}
               >
                 <Plus className="h-4 w-4 shrink-0" strokeWidth={2} />
                 Add shareholder
@@ -1532,6 +1915,16 @@ export function CorporateKycWizard() {
           </div>
         )}
       </div>
+
+      {ownershipFilePreview && (
+        <DocumentPreviewModal
+          open={Boolean(ownershipFilePreview)}
+          onClose={() => setOwnershipFilePreview(null)}
+          fileUrl={ownershipFilePreview.url}
+          fileName={ownershipFilePreview.fileName}
+          title={ownershipFilePreview.title}
+        />
+      )}
 
       <AppDialog
         open={pendingSectionAfterUnsaved !== null}
