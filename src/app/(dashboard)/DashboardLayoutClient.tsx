@@ -5,12 +5,19 @@ import type { Session } from "next-auth";
 import { getSession, signOut as nextAuthSignOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuthStore, type AuthUser } from "@/store/auth.store";
+import { useAuthStore } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
+import Image from "next/image";
+import R2GLogo from "../../../assets/logos/R2GLogo.png";
+
+import { Bell } from "lucide-react";
+import { useRef } from "react";
 import {
+  clearStaleAuthAndRedirect,
   extractAuthMeUser,
   getErrorMessage,
   getHttpErrorStatus,
+  isStaleAuthHttpStatus,
   safeGetSession,
 } from "@/lib/load-session-client";
 import {
@@ -61,22 +68,6 @@ const navItems: {
   },
 ];
 
-function applySessionUser(
-  su: NonNullable<Session["user"]> & { id?: string },
-  setUser: (user: AuthUser | null) => void,
-) {
-  if (!su?.id) return false;
-  setUser({
-    id: su.id,
-    email: su.email ?? null,
-    phone: null,
-    role: (su.role as AuthUser["role"]) || "INDIVIDUAL",
-    kycStatus: (su.kycStatus as AuthUser["kycStatus"]) || "PENDING",
-    createdAt: su.createdAt ?? new Date().toISOString(),
-  });
-  return true;
-}
-
 export default function DashboardLayoutClient({
   children,
   initialSession,
@@ -93,20 +84,20 @@ export default function DashboardLayoutClient({
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const naSession =
-          initialSession ?? (await safeGetSession());
-        if (naSession?.user) {
-          await fetch("/api/auth/sync-backend-session", {
+        const naSession = initialSession ?? (await safeGetSession());
+        if (naSession?.user?.id) {
+          const syncRes = await fetch("/api/auth/sync-backend-session", {
             method: "POST",
             credentials: "same-origin",
           });
-        }
-
-        if (
-          naSession?.user &&
-          applySessionUser(naSession.user, setUser)
-        ) {
-          return;
+          if (
+            !syncRes.ok &&
+            syncRes.status !== 204 &&
+            isStaleAuthHttpStatus(syncRes.status)
+          ) {
+            await clearStaleAuthAndRedirect("/register");
+            return;
+          }
         }
 
         const res = await api.get("/auth/me");
@@ -116,24 +107,36 @@ export default function DashboardLayoutClient({
             "[DashboardLayoutClient] unexpected /auth/me shape",
             res.data,
           );
-          setSessionBanner(
-            // "Could not read your account data. Try refreshing the page.",
-            "",
-          );
+          if (naSession?.user?.id) {
+            await clearStaleAuthAndRedirect("/register");
+            return;
+          }
+          setSessionBanner("");
           return;
         }
         setUser(u);
       } catch (e) {
-        const retry = await safeGetSession();
-        if (retry?.user && applySessionUser(retry.user, setUser)) {
+        const status = getHttpErrorStatus(e);
+        if (isStaleAuthHttpStatus(status)) {
+          await clearStaleAuthAndRedirect("/register");
           return;
         }
-        const status = getHttpErrorStatus(e);
-        if (status !== undefined) {
-          if (status === 401 || status === 403) {
-            window.location.assign("/login");
-            return;
+        const retry = await safeGetSession();
+        if (retry?.user?.id) {
+          try {
+            const res = await api.get("/auth/me");
+            const u = extractAuthMeUser(res.data);
+            if (u) {
+              setUser(u);
+              return;
+            }
+          } catch {
+            /* fall through */
           }
+          await clearStaleAuthAndRedirect("/register");
+          return;
+        }
+        if (status !== undefined) {
           console.error(
             "[DashboardLayoutClient] /auth/me failed",
             status,
@@ -190,6 +193,24 @@ export default function DashboardLayoutClient({
     window.location.href = "/login";
   };
 
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        notifMenuRef.current &&
+        !notifMenuRef.current.contains(e.target as Node)
+      ) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [notifOpen]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
@@ -202,9 +223,15 @@ export default function DashboardLayoutClient({
       `}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2 px-6 py-5 border-b border-slate-200">
-          <div className="w-7 h-7 bg-teal-600 rounded-lg" />
-          <span className="font-semibold text-slate-900">Remit2Globe</span>
+        <div className="border-b border-slate-200">
+          <div className="flex justify-center mb-4 mt-4 ">
+            <Image
+              src={R2GLogo}
+              alt="Remit2Globe"
+              priority
+              className="object-contain w-[125px]"
+            />
+          </div>
         </div>
 
         {/* Nav */}
@@ -253,32 +280,6 @@ export default function DashboardLayoutClient({
             );
           })}
         </nav>
-
-        {/* User + logout */}
-        <div className="px-4 py-4 border-t border-slate-200">
-          <div className="flex items-center gap-3 px-3 py-2 mb-1">
-            <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
-              {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
-                {user?.email || user?.phone || "User"}
-              </p>
-              <p className="text-xs text-slate-500 capitalize">
-                {user?.role?.toLowerCase()}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
-          >
-            <span>
-              <LogOut className="w-5 h-5" />
-            </span>
-            Sign out
-          </button>
-        </div>
       </aside>
 
       {/* Mobile overlay */}
@@ -291,19 +292,87 @@ export default function DashboardLayoutClient({
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar (mobile) */}
-        <header className="lg:hidden flex items-center gap-4 px-4 py-4 bg-white border-b border-slate-200">
+        <header
+          className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 lg:px-6 bg-white border-b border-slate-200"
+          style={{ height: "93px" }}
+        >
           <button
+            type="button"
             onClick={() => setSidebarOpen(true)}
-            className="text-slate-600"
+            className="lg:hidden text-slate-600 p-1 -ml-1 rounded-md hover:bg-slate-100"
+            aria-label="Open menu"
           >
             ☰
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-teal-600 rounded" />
-            <span className="font-semibold text-slate-900 text-sm">
-              Remit2Globe
-            </span>
+
+          <div className="hidden lg:block flex-1 min-w-0" aria-hidden />
+
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 ml-auto">
+            {/* Notification Icon + Menu */}
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                className="p-2 rounded-full hover:bg-teal-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-200 relative"
+                aria-label="Open notifications"
+                id="notif-icon-btn"
+                onClick={(e) => {
+                  // If menu is open and click is inside button, toggle off; otherwise, open.
+                  setNotifOpen((open) => !open);
+                }}
+              >
+                <Bell className="w-6 h-6 text-teal-600" />
+                <span
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none border border-white shadow"
+                  style={{ minWidth: "20px", textAlign: "center" }}
+                >
+                  3
+                </span>
+              </button>
+
+              {/* Notification Menu */}
+              <div
+                ref={notifMenuRef}
+                className={`
+                  absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-40
+                  transition-all duration-300 ease-in-out
+                  ${notifOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-3 pointer-events-none"}
+                `}
+                style={{ boxShadow: "0 8px 32px 0 rgba(0,0,0,0.14)" }}
+              >
+                <div className="p-4">
+                  <div className="font-medium text-slate-900 mb-2">
+                    Notifications
+                  </div>
+                  <ul className="divide-y divide-slate-100">
+                    <li className="py-2 text-sm text-slate-800">
+                      No new notifications.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 px-1">
+              <div className="w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
+                {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
+              </div>
+              <div className="min-w-0 hidden sm:block">
+                <p className="text-sm font-medium text-slate-900 truncate max-w-[12rem] md:max-w-[16rem]">
+                  {user?.email || user?.phone || "User"}
+                </p>
+                <p className="text-xs text-slate-500 capitalize truncate">
+                  {user?.role?.toLowerCase()}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors shrink-0"
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           </div>
         </header>
 

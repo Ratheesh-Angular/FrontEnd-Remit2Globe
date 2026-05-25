@@ -1,7 +1,7 @@
+import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicRoutes = ["/login", "/register", "/forgot-password"];
 const protectedRoutes = [
   "/dashboard",
   "/onboarding",
@@ -11,21 +11,13 @@ const protectedRoutes = [
   "/profile",
 ];
 
-function hasNextAuthSessionCookie(request: NextRequest) {
-  return request.cookies
-    .getAll()
-    .some(
-      (c) =>
-        c.name === "next-auth.session-token" ||
-        c.name.startsWith("next-auth.session-token.") ||
-        c.name === "__Secure-next-auth.session-token" ||
-        c.name.startsWith("__Secure-next-auth.session-token."),
-    );
-}
-
-export default function middleware(request: NextRequest) {
+export default async function middleware(request: NextRequest) {
   const backendToken = request.cookies.get("token")?.value;
-  const hasNa = hasNextAuthSessionCookie(request);
+  const naToken = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+  const hasNa = Boolean(naToken?.sub);
   const authed = Boolean(backendToken) || hasNa;
   const { pathname } = request.nextUrl;
 
@@ -33,9 +25,9 @@ export default function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Only skip /login and /register when NextAuth is active. Backend `token` alone
-  // must not force /register → /dashboard (dashboard RSC uses getServerSession, not `token`).
-  if (hasNa && publicRoutes.includes(pathname)) {
+  // Only skip /login when NextAuth JWT is valid. Do not redirect /register — stale
+  // cookies must not block Google signup after a DB user delete.
+  if (hasNa && pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

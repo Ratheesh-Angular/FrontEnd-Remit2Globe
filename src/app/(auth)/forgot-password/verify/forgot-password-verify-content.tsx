@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-
+import Image from "next/image";
+import R2GLogo from "../../../../../assets/logos/R2GLogo.png";
 const PASSWORD_RESET_SESSION_KEY = "passwordResetToken";
 
 function maskEmail(email: string) {
@@ -127,32 +128,13 @@ export default function ForgotPasswordVerifyContent() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <div className="flex items-center gap-2.5 mb-6 justify-center">
-          <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 18 18"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M9 2L15.5 6V12L9 16L2.5 12V6L9 2Z"
-                fill="white"
-                fillOpacity="0.9"
-              />
-              <path
-                d="M6 9.5L8 11.5L12 7"
-                stroke="white"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-slate-900 tracking-tight">
-            Remit 2 Globe
-          </span>
+        <div className="flex justify-center mb-6">
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
         </div>
 
         <div className="mb-8 text-center">
@@ -160,7 +142,8 @@ export default function ForgotPasswordVerifyContent() {
             Check your email
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Enter the 6-digit code sent to {email ? maskEmail(email) : "your email"}
+            Enter the 6-digit code sent to{" "}
+            {email ? maskEmail(email) : "your email"}
           </p>
         </div>
 

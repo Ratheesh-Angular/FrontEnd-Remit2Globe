@@ -1,6 +1,17 @@
 import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 
+export type BankAccountForReceipt = {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  swiftBic?: string | null;
+  iban?: string | null;
+  currency: string;
+  countryNote?: string | null;
+  instructions?: string | null;
+};
+
 export type TransferReceiptPdfData = {
   referenceCode: string;
   status: string;
@@ -28,6 +39,8 @@ export type TransferReceiptPdfData = {
   } | null;
   payInLabel: string;
   payerPhone: string | null;
+  /** Bank accounts to display when payInMethod is BANK_TRANSFER */
+  bankAccounts?: BankAccountForReceipt[];
   /** e.g. post-confirmation message on send-money */
   additionalNote?: string;
 };
@@ -353,7 +366,43 @@ export function downloadTransferReceiptPdf(data: TransferReceiptPdfData): void {
     });
   }
 
-  drawCard(doc, "Transfer details", y, detailGroups);
+  y = drawCard(doc, "Transfer details", y, detailGroups);
+
+  // Bank account details section (only for bank transfer pay-in)
+  if (data.bankAccounts && data.bankAccounts.length > 0) {
+    const bankGroups: ReceiptGroup[] = [];
+
+    for (let i = 0; i < data.bankAccounts.length; i++) {
+      const acct = data.bankAccounts[i];
+      const rows: ReceiptRow[] = [
+        { label: "Bank name", value: acct.bankName, bold: true },
+        { label: "Account name", value: acct.accountName },
+        { label: "Account number", value: acct.accountNumber, bold: true },
+      ];
+
+      if (acct.swiftBic) {
+        rows.push({ label: "SWIFT / BIC", value: acct.swiftBic });
+      }
+      if (acct.iban) {
+        rows.push({ label: "IBAN", value: acct.iban });
+      }
+      if (acct.countryNote) {
+        rows.push({ label: "Region", value: acct.countryNote });
+      }
+      if (acct.instructions) {
+        rows.push({ label: "Instructions", value: acct.instructions });
+      }
+
+      const title =
+        data.bankAccounts.length > 1
+          ? `${acct.currency} Account ${i + 1}`
+          : `${acct.currency} Account`;
+
+      bankGroups.push({ title, rows });
+    }
+
+    y = drawCard(doc, "Payment instructions", y, bankGroups);
+  }
 
   addFooter(doc);
   const safe = data.referenceCode.replace(/[^\w.-]+/g, "_");

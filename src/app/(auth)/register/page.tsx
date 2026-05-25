@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
 import Flag from "react-world-flags";
-import { signIn } from "next-auth/react";
+import { getSession, signIn, signOut } from "next-auth/react";
+import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 import type { Country } from "@/lib/phone-countries";
 import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
@@ -29,11 +31,13 @@ function oauthErrorMessage(code: string) {
 
 type AccountType = "individual" | "corporate";
 
-const ACCOUNT_TYPE_TO_API_ROLE: Record<AccountType, "INDIVIDUAL" | "CORPORATE"> =
-  {
-    individual: "INDIVIDUAL",
-    corporate: "CORPORATE",
-  };
+const ACCOUNT_TYPE_TO_API_ROLE: Record<
+  AccountType,
+  "INDIVIDUAL" | "CORPORATE"
+> = {
+  individual: "INDIVIDUAL",
+  corporate: "CORPORATE",
+};
 
 interface FormData {
   email: string;
@@ -74,6 +78,7 @@ export default function RegisterPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
+    console.log("err_oauth", err);
     if (!err) return;
     setOauthErrorCode(err);
     const url = new URL(window.location.href);
@@ -160,6 +165,30 @@ export default function RegisterPage() {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }
 
+  async function handleGoogleSignIn() {
+    setIsLoading(true);
+    try {
+      const session = await getSession();
+      if (session?.user?.id) {
+        const res = await fetch("/api/auth/verify-user", {
+          credentials: "same-origin",
+        });
+        if (res.ok) {
+          window.location.assign("/dashboard");
+          return;
+        }
+      }
+      await signOut({ redirect: false });
+      await fetch("/api/auth/backend-session", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      await signIn("google", { callbackUrl: "/dashboard" });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
@@ -208,32 +237,13 @@ export default function RegisterPage() {
       {/* Card */}
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-8">
         {/* Logo */}
-        <div className="flex items-center gap-2.5 mb-6 justify-center">
-          <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 18 18"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M9 2L15.5 6V12L9 16L2.5 12V6L9 2Z"
-                fill="white"
-                fillOpacity="0.9"
-              />
-              <path
-                d="M6 9.5L8 11.5L12 7"
-                stroke="white"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-slate-900 tracking-tight">
-            Remit 2 Globe
-          </span>
+        <div className="flex justify-center mb-6">
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
         </div>
         {/* Heading */}
         <div className="mb-6">
@@ -316,7 +326,9 @@ export default function RegisterPage() {
               htmlFor="email"
               className="text-sm font-medium text-slate-700 mb-1.5 block"
             >
-              Email address
+              {accountType === "corporate"
+                ? "Enter Business Email Address"
+                : "Email address"}
             </label>
             <input
               id="email"
@@ -404,66 +416,72 @@ export default function RegisterPage() {
             )}
           </div>
 
-          {/* Or Divider */}
-          <div className="relative flex items-center py-2">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-4 text-sm text-slate-500">Or</span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
+          {accountType === "individual" && (
+            <>
+              {/* Or Divider */}
+              <div className="relative flex items-center py-2">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-4 text-sm text-slate-500">
+                  Or
+                </span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
 
-          {/* Social Login Buttons */}
-          <div className="space-y-3">
-            {/* Continue with Google */}
-            <button
-              type="button"
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              disabled={isLoading}
-              className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 18 18"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M9.003 18c2.43 0 4.467-.806 5.956-2.18L12.05 13.56c-.806.54-1.836.86-3.047.86-2.344 0-4.328-1.584-5.036-3.711H.96v2.332C2.44 15.983 5.485 18 9.003 18z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M3.964 10.712c-.18-.54-.282-1.117-.282-1.71 0-.593.102-1.17.282-1.71V4.96H.957C.347 6.175 0 7.55 0 9.002c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M9.003 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.464.891 11.426 0 9.003 0 5.485 0 2.44 2.017.96 4.958L3.967 7.29c.708-2.127 2.692-3.71 5.036-3.71z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Continue with Google
-            </button>
+              {/* Social Login Buttons */}
+              <div className="space-y-3">
+                {/* Continue with Google */}
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading}
+                  className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M9.003 18c2.43 0 4.467-.806 5.956-2.18L12.05 13.56c-.806.54-1.836.86-3.047.86-2.344 0-4.328-1.584-5.036-3.711H.96v2.332C2.44 15.983 5.485 18 9.003 18z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M3.964 10.712c-.18-.54-.282-1.117-.282-1.71 0-.593.102-1.17.282-1.71V4.96H.957C.347 6.175 0 7.55 0 9.002c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M9.003 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.464.891 11.426 0 9.003 0 5.485 0 2.44 2.017.96 4.958L3.967 7.29c.708-2.127 2.692-3.71 5.036-3.71z"
+                      fill="#EA4335"
+                    />
+                  </svg>
+                  Continue with Google
+                </button>
 
-            {/* Continue with Apple */}
-            <button
-              type="button"
-              disabled={isLoading}
-              className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 18 18"
-                fill="currentColor"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M14.94 13.52c-.26.56-.39.81-.73 1.3-.48.69-1.16 1.55-2 1.56-.75.01-0.94-.48-1.96-.48s-1.24.47-1.98.49c-.82.02-1.48-.82-1.96-1.51-1.33-1.93-1.48-4.19-.65-5.39.58-.84 1.5-1.33 2.36-1.33.88 0 1.43.48 2.15.48.7 0 1.12-.48 2.13-.48.76 0 1.59.41 2.17 1.12-1.91 1.05-1.6 3.78.47 4.74zM12.03 3.78c.41-.51.73-1.23.61-1.96-.66.03-1.44.46-1.9 1-.41.47-.76 1.21-.63 1.91.74.05 1.5-.41 1.92-.95z" />
-              </svg>
-              Continue with Apple
-            </button>
-          </div>
+                {/* Continue with Apple */}
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    fill="currentColor"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M14.94 13.52c-.26.56-.39.81-.73 1.3-.48.69-1.16 1.55-2 1.56-.75.01-0.94-.48-1.96-.48s-1.24.47-1.98.49c-.82.02-1.48-.82-1.96-1.51-1.33-1.93-1.48-4.19-.65-5.39.58-.84 1.5-1.33 2.36-1.33.88 0 1.43.48 2.15.48.7 0 1.12-.48 2.13-.48.76 0 1.59.41 2.17 1.12-1.91 1.05-1.6 3.78.47 4.74zM12.03 3.78c.41-.51.73-1.23.61-1.96-.66.03-1.44.46-1.9 1-.41.47-.76 1.21-.63 1.91.74.05 1.5-.41 1.92-.95z" />
+                  </svg>
+                  Continue with Apple
+                </button>
+              </div>
+            </>
+          )}
 
           {/* Terms */}
           {/* <div>

@@ -18,10 +18,7 @@ type CorporateDocType =
   | "TRADING_LICENSE"
   | "CR12"
   | "REGULATORY_LICENSE"
-  | "PROOF_OF_ADDRESS"
-  | "REPRESENTATIVE_ID"
-  | "DIRECTOR_ID"
-  | "SHAREHOLDER_ID";
+  | "PROOF_OF_ADDRESS";
 
 interface DocConfig {
   type: CorporateDocType;
@@ -53,8 +50,8 @@ const BASE_DOC_CONFIG: DocConfig[] = [
   },
   {
     type: "CR12",
-    label: "Company Registration (e.g. CR12)",
-    description: "Detailed company registration extract or equivalent.",
+    label: "Company Detailed Information (e.g. CR12)",
+    description: "Detailed company information extract or equivalent.",
     required: true,
   },
   {
@@ -62,27 +59,6 @@ const BASE_DOC_CONFIG: DocConfig[] = [
     label: "Proof of Business Address",
     description:
       "Utility bill, lease, or bank statement showing business address.",
-    required: true,
-  },
-  {
-    type: "REPRESENTATIVE_ID",
-    label: "Representative ID",
-    description:
-      "Passport or national ID for the authorized representative. Use one PDF if multiple pages.",
-    required: true,
-  },
-  {
-    type: "DIRECTOR_ID",
-    label: "Director ID",
-    description:
-      "Passport or national ID for a director. Combine multiple directors into one PDF if needed.",
-    required: true,
-  },
-  {
-    type: "SHAREHOLDER_ID",
-    label: "Shareholder ID / corporate shareholder docs",
-    description:
-      "ID for individual shareholders or corporate registration docs for corporate shareholders (single PDF).",
     required: true,
   },
 ];
@@ -108,18 +84,12 @@ function emptyUploads(): Record<CorporateDocType, UploadedDoc | null> {
     CR12: null,
     REGULATORY_LICENSE: null,
     PROOF_OF_ADDRESS: null,
-    REPRESENTATIVE_ID: null,
-    DIRECTOR_ID: null,
-    SHAREHOLDER_ID: null,
   };
 }
 
 function docSectionsForConfig(docConfig: DocConfig[]) {
   const companyItems = docConfig.filter((d) => COMPANY_TYPES.has(d.type));
   const premisesItems = docConfig.filter((d) => d.type === "PROOF_OF_ADDRESS");
-  const peopleItems = docConfig.filter((d) =>
-    ["REPRESENTATIVE_ID", "DIRECTOR_ID", "SHAREHOLDER_ID"].includes(d.type),
-  );
   const sections: { id: string; title: string; items: DocConfig[] }[] = [];
   if (companyItems.length)
     sections.push({
@@ -132,12 +102,6 @@ function docSectionsForConfig(docConfig: DocConfig[]) {
       id: "corp-kyc-docs-premises",
       title: "Business premises",
       items: premisesItems,
-    });
-  if (peopleItems.length)
-    sections.push({
-      id: "corp-kyc-docs-people",
-      title: "People & ownership IDs",
-      items: peopleItems,
     });
   return sections;
 }

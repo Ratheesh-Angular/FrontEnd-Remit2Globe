@@ -21,7 +21,7 @@ export function FlexCountryFlag({
   if (a2) {
     return (
       <Flag
-        code={a2}
+        code={a2.toLowerCase()}
         style={{
           width: 20,
           height: 14,

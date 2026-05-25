@@ -10,7 +10,8 @@ import {
 } from "@/lib/beneficiary-bank-identifier";
 import { Loader } from "@/components/ui/Loader";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
-import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import countriesIso from "i18n-iso-countries";
 import {
@@ -19,6 +20,7 @@ import {
   type CountryCode,
 } from "libphonenumber-js";
 import { flexApiUrl } from "@/lib/flex-api";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 
 interface FlexBank {
   serviceType?: string;
@@ -130,7 +132,6 @@ function nationalMobileFromStored(mobile: string | null | undefined): string {
   try {
     const p = parsePhoneNumberFromString(raw);
     if (p?.nationalNumber) return String(p.nationalNumber);
-    console.log("final-checking");
   } catch {
     /* ignore */
   }
@@ -159,9 +160,12 @@ export function AddBeneficiaryModal({
   const [localMobileNumber, setLocalMobileNumber] = useState("");
   const {
     countries: flexCountries,
-    loading: flexCountriesLoading,
-    error: flexCountriesError,
   } = useFlexCountries(open);
+  const {
+    countries: catalogCountryList,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(open);
   const [flexBanks, setFlexBanks] = useState<FlexBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
@@ -184,13 +188,19 @@ export function AddBeneficiaryModal({
     );
   }, [flexBanks, bankSearch]);
 
-  const selectedFlexCountry = flexCountries.find(
-    (c) => c.couName === formData.country,
-  );
+  /** Full static catalog (+ Flex fallback) with loose label match for flags / dial code. */
+  const selectedDestinationCountry = useMemo(() => {
+    const raw = formData.country.trim();
+    if (!raw) return undefined;
+    return (
+      matchFlexCountryByLabel(catalogCountryList, raw) ??
+      matchFlexCountryByLabel(flexCountries, raw)
+    );
+  }, [catalogCountryList, flexCountries, formData.country]);
 
   const bankIdConfig = useMemo(
-    () => resolveBankIdentifierConfig(selectedFlexCountry?.couCode),
-    [selectedFlexCountry?.couCode],
+    () => resolveBankIdentifierConfig(selectedDestinationCountry?.couCode),
+    [selectedDestinationCountry?.couCode],
   );
 
   /** When false (e.g. production without Flex IP allowlisting), bank name is a plain text field. */
@@ -325,7 +335,7 @@ export function AddBeneficiaryModal({
       setBankOpen(false);
       return;
     }
-    const couCode = selectedFlexCountry?.couCode;
+    const couCode = selectedDestinationCountry?.couCode;
     if (!couCode) {
       setFlexBanks([]);
       setBanksLoading(false);
@@ -359,7 +369,7 @@ export function AddBeneficiaryModal({
     open,
     formData.deliveryChannel,
     formData.country,
-    selectedFlexCountry?.couCode,
+    selectedDestinationCountry?.couCode,
     useFlexBankListUi,
   ]);
 
@@ -466,7 +476,7 @@ export function AddBeneficiaryModal({
     formData.deliveryChannel,
     bankIdConfig.lookup,
     formData.swiftBic,
-    selectedFlexCountry?.couCode,
+    selectedDestinationCountry?.couCode,
   ]);
 
   function handleChange(field: keyof FormData, value: string) {
@@ -538,8 +548,9 @@ export function AddBeneficiaryModal({
       } else {
         payload.country = formData.country.trim();
         payload.mobileMoneyProvider = formData.mobileMoneyProvider.trim();
-        const fc = flexCountries.find((c) => c.couName === formData.country);
-        const dial = fc ? dialCodeFromCouCode(fc.couCode) : undefined;
+        const dial = selectedDestinationCountry
+          ? dialCodeFromCouCode(selectedDestinationCountry.couCode)
+          : undefined;
         const digits = localMobileNumber.replace(/\D/g, "");
         payload.mobileNumber =
           dial && digits ? `+${dial}${digits}` : digits || localMobileNumber;
@@ -717,13 +728,13 @@ export function AddBeneficiaryModal({
                   {countryLocked ? (
                     <>
                       <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                        {selectedFlexCountry ? (
+                        {selectedDestinationCountry ? (
                           <>
                             <FlexCountryFlag
-                              couCode={selectedFlexCountry.couCode}
+                              couCode={selectedDestinationCountry.couCode}
                             />
                             <span className="font-medium">
-                              {selectedFlexCountry.couName}
+                              {selectedDestinationCountry.couName}
                             </span>
                           </>
                         ) : (
@@ -743,7 +754,7 @@ export function AddBeneficiaryModal({
                       </p>
                     </>
                   ) : (
-                    <FlexCountrySelect
+                    <CatalogCountrySelect
                       value={formData.country}
                       onChange={(couName) => {
                         handleChange("country", couName);
@@ -755,10 +766,10 @@ export function AddBeneficiaryModal({
                         setBankOpen(false);
                       }}
                       error={Boolean(errors.country)}
-                      placeholder="Select country…"
-                      countries={flexCountries}
-                      countriesLoading={flexCountriesLoading}
-                      countriesError={flexCountriesError}
+                      placeholder="Select destination country…"
+                      countries={catalogCountryList}
+                      countriesLoading={catalogCountriesLoading}
+                      countriesError={catalogCountriesError}
                     />
                   )}
                   {errors.country && (
@@ -1102,13 +1113,13 @@ export function AddBeneficiaryModal({
                   {countryLocked ? (
                     <>
                       <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                        {selectedFlexCountry ? (
+                        {selectedDestinationCountry ? (
                           <>
                             <FlexCountryFlag
-                              couCode={selectedFlexCountry.couCode}
+                              couCode={selectedDestinationCountry.couCode}
                             />
                             <span className="font-medium">
-                              {selectedFlexCountry.couName}
+                              {selectedDestinationCountry.couName}
                             </span>
                           </>
                         ) : (
@@ -1128,7 +1139,7 @@ export function AddBeneficiaryModal({
                       </p>
                     </>
                   ) : (
-                    <FlexCountrySelect
+                    <CatalogCountrySelect
                       value={formData.country}
                       onChange={(couName) => {
                         handleChange("country", couName);
@@ -1136,9 +1147,9 @@ export function AddBeneficiaryModal({
                       }}
                       error={Boolean(errors.country)}
                       placeholder="Select country…"
-                      countries={flexCountries}
-                      countriesLoading={flexCountriesLoading}
-                      countriesError={flexCountriesError}
+                      countries={catalogCountryList}
+                      countriesLoading={catalogCountriesLoading}
+                      countriesError={catalogCountriesError}
                     />
                   )}
                   {errors.country && (
@@ -1188,18 +1199,18 @@ export function AddBeneficiaryModal({
                   >
                     <div className="flex-shrink-0">
                       <div className="flex items-center gap-1.5 px-3 h-10 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
-                        {formData.country && selectedFlexCountry ? (
+                        {formData.country && selectedDestinationCountry ? (
                           <>
                             <FlexCountryFlag
-                              couCode={selectedFlexCountry.couCode}
+                              couCode={selectedDestinationCountry.couCode}
                             />
                             {dialCodeFromCouCode(
-                              selectedFlexCountry.couCode,
+                              selectedDestinationCountry.couCode,
                             ) ? (
                               <span className="text-slate-700 font-medium">
                                 +
                                 {dialCodeFromCouCode(
-                                  selectedFlexCountry.couCode,
+                                  selectedDestinationCountry.couCode,
                                 )}
                               </span>
                             ) : (
@@ -1216,13 +1227,13 @@ export function AddBeneficiaryModal({
                       type="tel"
                       inputMode="numeric"
                       placeholder={
-                        formData.country && selectedFlexCountry
+                        formData.country && selectedDestinationCountry
                           ? "National mobile number (7–15 digits)"
                           : "Select country first"
                       }
                       value={localMobileNumber}
                       onChange={(e) => {
-                        if (!selectedFlexCountry) return;
+                        if (!selectedDestinationCountry) return;
                         const digits = e.target.value
                           .replace(/\D/g, "")
                           .slice(0, 15);

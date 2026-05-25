@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { FlexCountry } from "@/types/flex-country";
-import { getCatalogCountries } from "@/lib/catalog-countries";
+import {
+  getCatalogCountries,
+  matchFlexCountryByLabel,
+} from "@/lib/catalog-countries";
 import { FlexCountryFlag } from "./FlexCountryFlag";
 
 export type CatalogCountrySelectProps = {
@@ -77,7 +80,10 @@ export function CatalogCountrySelect({
     );
   }, [catalogCountries, search]);
 
-  const selected = catalogCountries.find((c) => c.couName === value);
+  const selected = useMemo(
+    () => matchFlexCountryByLabel(catalogCountries, value),
+    [catalogCountries, value],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -156,14 +162,14 @@ export function CatalogCountrySelect({
                       setSearch("");
                     }}
                     className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                      value === c.couName
+                      selected?.couCode === c.couCode
                         ? "bg-teal-50 text-teal-700 font-medium"
                         : "text-slate-700"
                     }`}
                   >
                     <FlexCountryFlag couCode={c.couCode} />
                     <span>{c.couName}</span>
-                    {value === c.couName && (
+                    {selected?.couCode === c.couCode && (
                       <svg
                         className="ml-auto w-4 h-4 text-teal-600"
                         viewBox="0 0 20 20"

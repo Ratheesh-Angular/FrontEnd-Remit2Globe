@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-
+import Image from "next/image";
+import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 const PASSWORD_SETUP_SESSION_KEY = "passwordSetupToken";
 
 export default function VerifyContent() {
@@ -77,7 +78,11 @@ export default function VerifyContent() {
     }
 
     // Auto-verify when all digits are entered
-    if (newOtp.every((digit) => digit !== "") && !phoneVerified && emailVerified) {
+    if (
+      newOtp.every((digit) => digit !== "") &&
+      !phoneVerified &&
+      emailVerified
+    ) {
       handleVerifyPhone(newOtp.join(""));
     }
   };
@@ -96,7 +101,9 @@ export default function VerifyContent() {
 
   const handleVerifyEmail = async (code: string) => {
     if (!userId) {
-      setError("Missing account reference. Return to registration and try again.");
+      setError(
+        "Missing account reference. Return to registration and try again.",
+      );
       return;
     }
     setIsLoading(true);
@@ -110,9 +117,7 @@ export default function VerifyContent() {
       }
     } catch (error: unknown) {
       const ax = error as { response?: { data?: { message?: string } } };
-      setError(
-        ax.response?.data?.message || "Invalid email verification code",
-      );
+      setError(ax.response?.data?.message || "Invalid email verification code");
       setEmailOtp(["", "", "", "", "", ""]);
       emailInputRefs.current[0]?.focus();
     } finally {
@@ -122,7 +127,9 @@ export default function VerifyContent() {
 
   const handleVerifyPhone = async (code: string) => {
     if (!userId) {
-      setError("Missing account reference. Return to registration and try again.");
+      setError(
+        "Missing account reference. Return to registration and try again.",
+      );
       return;
     }
     setIsLoading(true);
@@ -146,9 +153,7 @@ export default function VerifyContent() {
       }
     } catch (error: unknown) {
       const ax = error as { response?: { data?: { message?: string } } };
-      setError(
-        ax.response?.data?.message || "Invalid phone verification code",
-      );
+      setError(ax.response?.data?.message || "Invalid phone verification code");
       setPhoneOtp(["", "", "", "", "", ""]);
       phoneInputRefs.current[0]?.focus();
     } finally {
@@ -159,7 +164,9 @@ export default function VerifyContent() {
   const handleResendOtp = async (type: "email" | "phone") => {
     if (!canResend) return;
     if (!userId) {
-      setError("Missing account reference. Return to registration and try again.");
+      setError(
+        "Missing account reference. Return to registration and try again.",
+      );
       return;
     }
 
@@ -196,32 +203,13 @@ export default function VerifyContent() {
       {/* Card */}
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         {/* Logo */}
-        <div className="flex items-center gap-2.5 mb-6 justify-center">
-          <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 18 18"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M9 2L15.5 6V12L9 16L2.5 12V6L9 2Z"
-                fill="white"
-                fillOpacity="0.9"
-              />
-              <path
-                d="M6 9.5L8 11.5L12 7"
-                stroke="white"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-slate-900 tracking-tight">
-            Remit 2 Globe
-          </span>
+        <div className="flex justify-center mb-6">
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
         </div>
 
         {/* Heading */}
@@ -259,12 +247,7 @@ export default function VerifyContent() {
                 }`}
               >
                 {emailVerified ? (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 20 20"
-                    fill="white"
-                  >
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="white">
                     <path
                       fillRule="evenodd"
                       d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
@@ -272,7 +255,9 @@ export default function VerifyContent() {
                     />
                   </svg>
                 ) : (
-                  <span className="text-xs font-semibold text-slate-600">1</span>
+                  <span className="text-xs font-semibold text-slate-600">
+                    1
+                  </span>
                 )}
               </div>
               <div>
@@ -321,9 +306,7 @@ export default function VerifyContent() {
               disabled={!canResend || isLoading}
               className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
             >
-              {canResend
-                ? "Resend code"
-                : `Resend code in ${resendTimer}s`}
+              {canResend ? "Resend code" : `Resend code in ${resendTimer}s`}
             </button>
           )}
         </div>
@@ -345,12 +328,7 @@ export default function VerifyContent() {
                 }`}
               >
                 {phoneVerified ? (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 20 20"
-                    fill="white"
-                  >
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="white">
                     <path
                       fillRule="evenodd"
                       d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
@@ -423,9 +401,7 @@ export default function VerifyContent() {
               disabled={!canResend || isLoading}
               className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
             >
-              {canResend
-                ? "Resend code"
-                : `Resend code in ${resendTimer}s`}
+              {canResend ? "Resend code" : `Resend code in ${resendTimer}s`}
             </button>
           )}
         </div>

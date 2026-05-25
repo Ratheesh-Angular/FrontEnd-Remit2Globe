@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-
+import Image from "next/image";
+import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -57,19 +58,21 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
-      <div className="flex items-center gap-2 mb-8">
-        <div className="w-8 h-8 bg-teal-600 rounded-lg" />
-        <span className="text-xl font-semibold text-slate-900">
-          Remit2Globe
-        </span>
-      </div>
-
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+        <div className="flex justify-center mb-6">
+          {" "}
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
+        </div>
         <h1 className="text-xl font-semibold text-slate-900 mb-1">
           Forgot password
         </h1>
         <p className="text-sm text-slate-500 mb-6">
-          Enter the email for your account. We&apos;ll send a verification code.
+          Enter the email for your account for verification code
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

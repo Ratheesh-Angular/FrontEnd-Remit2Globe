@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import api from "@/lib/api";
-
+import Image from "next/image";
+import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 export default function LoginPage() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -65,11 +66,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 bg-teal-600 rounded-lg shrink-0" />
-          <span className="text-xl font-semibold text-slate-900">
-            Remit2Globe
-          </span>
+        <div className="flex justify-center mb-6">
+          {" "}
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
         </div>
 
         <h1 className="text-xl font-semibold text-slate-900 mb-1">

@@ -1,0 +1,344 @@
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../src/generated/prisma"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String?   @unique
+  phone         String?   @unique
+  country       String?
+  passwordHash  String?
+  name          String?
+  image         String?
+  googleId      String?   @unique
+  role          UserRole  @default(INDIVIDUAL)
+  kycStatus     KycStatus @default(PENDING)
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  individualProfile IndividualProfile?
+  corporateProfile  CorporateProfile?
+  documents         KycDocument[]
+  beneficiaries     Beneficiary[]
+  remittanceTransfers RemittanceTransfer[]
+  otps              Otp[]
+  accounts          Account[]
+  sessions          Session[]
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  userId    String
+  type      OtpType
+  code      String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+model IndividualProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  firstName        String?
+  middleName       String?
+  lastName         String?
+  fullName         String?
+  dateOfBirth      DateTime?
+  nationality      String?
+  isNational       Boolean   @default(false)
+
+  passportNumber   String?
+  passportIssuingCountry String?
+  passportIssue    DateTime?
+  passportExpiry   DateTime?
+
+  citizenPrimaryDocumentType String?
+
+  workPermitNumber String?
+  workPermitIssue  DateTime?
+  workPermitExpiry DateTime?
+
+  nationalIdNumber String?
+  nationalIdIssuingCountry String?
+  nationalIdIssue  DateTime?
+  nationalIdExpiry DateTime?
+
+  residenceAddress Json?
+  residentialAddress String?
+
+  country          String?
+
+  contactEmail     String?
+  contactPhone     String?
+  occupation       String?
+  employerName     String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id])
+}
+
+model CorporateProfile {
+  id                      String    @id @default(uuid())
+  userId                  String    @unique
+  businessName            String?
+  natureOfBusiness        String?
+  businessAddress         String?
+  registrationNumber      String?
+  incorporationDate       DateTime?
+
+  tradingLicenseNumber    String?
+  tradingLicenseIssue     DateTime?
+  tradingLicenseExpiry    DateTime?
+
+  regulatoryLicenseNumber String?
+  regulatoryLicenseIssue  DateTime?
+  regulatoryLicenseExpiry DateTime?
+
+  keyPersonnel            Json?
+  shareholders            Json?
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  user                    User      @relation(fields: [userId], references: [id])
+}
+
+model KycDocument {
+  id           String         @id @default(uuid())
+  userId       String
+  documentType DocumentType
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  mimeType     String?
+  status       DocumentStatus @default(PENDING)
+  uploadedAt   DateTime       @default(now())
+
+  user         User           @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Beneficiary {
+  id                  String          @id @default(uuid())
+  userId              String
+  deliveryChannel     DeliveryChannel
+  firstName           String
+  lastName            String
+
+  country             String?
+  bankName            String?
+  branchName          String?
+  accountNumber       String?
+  swiftBic            String?
+
+  mobileMoneyProvider String?
+  mobileNumber        String?
+
+  active              Boolean         @default(true)
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  user                User            @relation(fields: [userId], references: [id])
+  remittanceTransfers RemittanceTransfer[]
+
+  @@index([userId, active])
+}
+
+model RemittanceTransfer {
+  id                      String             @id @default(uuid())
+  userId                  String
+  referenceCode           String             @unique
+  status                  RemittanceStatus   @default(DRAFT)
+  currentStep             Int                @default(1)
+
+  senderCountryIso2       String?
+  payCurrency               String?
+  payAmount                 Decimal?           @db.Decimal(18, 2)
+  recipientCountryLabel   String?
+  recipientCountryIso2    String?
+  receiveCurrency           String?
+  receiveAmount             Decimal?           @db.Decimal(18, 2)
+  fxRateSnapshot            Decimal?           @db.Decimal(24, 10)
+  feeAmount                   Decimal?           @db.Decimal(18, 2)
+  quoteExpiresAt              DateTime?
+
+  beneficiaryId String?
+
+  sourceOfIncome          String?
+  transferPurpose         String?
+  relationshipToRecipient String?
+  complianceAccepted        Boolean            @default(false)
+
+  payInMethod PayInMethod?
+  payerPhone  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  beneficiary Beneficiary? @relation(fields: [beneficiaryId], references: [id], onDelete: SetNull)
+  paymentProofs RemittancePaymentProof[]
+
+  @@index([userId, status])
+}
+
+model RemittancePaymentProof {
+  id         String   @id @default(uuid())
+  transferId String
+  fileUrl    String
+  fileKey    String
+  fileName   String
+  mimeType   String
+  fileSize   Int
+  uploadedAt DateTime @default(now())
+
+  transfer RemittanceTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+}
+
+model FxRate {
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(24, 10)
+  feePercent   Decimal  @default(0) @db.Decimal(8, 4)
+  feeFixed     Decimal  @default(0) @db.Decimal(18, 2)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([fromCurrency, toCurrency])
+}
+
+model CompanyBankAccount {
+  id            String   @id @default(uuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  swiftBic      String?
+  iban          String?
+  currency      String
+  countryNote   String?
+  instructions  String?  @db.Text
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum UserRole {
+  INDIVIDUAL
+  CORPORATE
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentType {
+  PASSPORT_FRONT
+  PASSPORT_BACK
+  WORK_PERMIT_FRONT
+  WORK_PERMIT_BACK
+  NATIONAL_ID_FRONT
+  NATIONAL_ID_BACK
+  OTHER_GOVT_ID
+  CERTIFICATE_OF_INCORPORATION
+  TRADING_LICENSE
+  CR12
+  REGULATORY_LICENSE
+  PROOF_OF_ADDRESS
+  DIRECTOR_ID
+  SHAREHOLDER_ID
+  REPRESENTATIVE_ID
+  AUTHORIZED_PERSONNEL_DOC
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DeliveryChannel {
+  BANK_TRANSFER
+  MOBILE_MONEY
+}
+
+enum OtpType {
+  EMAIL
+  PHONE
+  PASSWORD_RESET
+}
+
+enum RemittanceStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAYMENT_SUBMITTED
+  UNDER_REVIEW
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PayInMethod {
+  BANK_TRANSFER
+  MOBILE_MONEY
+}

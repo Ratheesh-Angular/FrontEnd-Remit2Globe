@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Lock, AlertCircle, Clock } from "lucide-react";
 
 interface User {
   id: string;
@@ -14,8 +14,9 @@ interface User {
 }
 
 export default function DashboardClient({ user }: { user: User }) {
-  console.log(user, "user");
   const router = useRouter();
+
+  const displayName = user?.name?.trim() || null;
 
   const isKycPending = user?.kycStatus === "PENDING";
   const isKycSubmitted = user?.kycStatus === "SUBMITTED";
@@ -27,9 +28,11 @@ export default function DashboardClient({ user }: { user: User }) {
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
-          Welcome back{user?.name ? `, ${user.name}` : ""}
+          Welcome back{displayName ? `, ${displayName}` : ""}
         </h1>
-        <p className="text-sm text-slate-500 mt-1">{user?.name}</p>
+        <p className="text-sm text-slate-500 mt-1">
+          {user?.email ?? ""}
+        </p>
       </div>
 
       {/* KYC Banner — PENDING */}
@@ -46,9 +49,9 @@ export default function DashboardClient({ user }: { user: User }) {
           </div>
           <button
             onClick={() => router.push("/onboarding/profile")}
-            className="shrink-0 inline-flex items-center justify-center h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
+            className="cursor-pointer shrink-0 inline-flex items-center justify-center h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors"
           >
-            Complete KYC →
+            Complete KYC <AlertCircle className="w-4 h-4 ml-2 font-bold" />
           </button>
         </div>
       )}
@@ -66,7 +69,7 @@ export default function DashboardClient({ user }: { user: User }) {
             </p>
           </div>
           <span className="shrink-0 inline-flex items-center justify-center h-10 px-5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg">
-            In Review
+            In Review <Clock className="w-4 h-4 ml-2 font-bold" />
           </span>
         </div>
       )}
@@ -93,7 +96,7 @@ export default function DashboardClient({ user }: { user: User }) {
       )}
 
       {/* KYC approved — success message */}
-      {isKycApproved && (
+      {/* {isKycApproved && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
             ✓
@@ -107,7 +110,7 @@ export default function DashboardClient({ user }: { user: User }) {
             </p>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

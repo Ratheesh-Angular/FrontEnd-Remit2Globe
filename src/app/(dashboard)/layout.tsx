@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getValidatedServerSession } from "@/lib/auth-session";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
 export default async function DashboardGroupLayout({
@@ -7,7 +6,7 @@ export default async function DashboardGroupLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await getValidatedServerSession();
   return (
     <DashboardLayoutClient initialSession={session}>
       {children}

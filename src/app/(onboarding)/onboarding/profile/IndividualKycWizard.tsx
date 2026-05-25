@@ -9,6 +9,9 @@ import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect"
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
+import Flag from "react-world-flags";
+import type { Country } from "@/lib/phone-countries";
+import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
 import {
   VerificationDocuments,
   type KycDocumentRow,
@@ -326,10 +329,43 @@ function mergeSavedSectionsWithKycStatus(
   return base;
 }
 
+/** Cleared when switching Resident ⇄ Citizen so the other path doesn't show stale passport/ID/permit values. */
+function emptyIdentityDocs(): Pick<
+  IndividualForm,
+  | "passportNumber"
+  | "passportIssuingCountry"
+  | "passportIssue"
+  | "passportExpiry"
+  | "citizenPrimaryDocumentType"
+  | "workPermitNumber"
+  | "workPermitIssue"
+  | "workPermitExpiry"
+  | "nationalIdNumber"
+  | "nationalIdIssuingCountry"
+  | "nationalIdIssue"
+  | "nationalIdExpiry"
+> {
+  return {
+    passportNumber: "",
+    passportIssuingCountry: "",
+    passportIssue: "",
+    passportExpiry: "",
+    citizenPrimaryDocumentType: "",
+    workPermitNumber: "",
+    workPermitIssue: "",
+    workPermitExpiry: "",
+    nationalIdNumber: "",
+    nationalIdIssuingCountry: "",
+    nationalIdIssue: "",
+    nationalIdExpiry: "",
+  };
+}
+
 type FormErrors = Partial<
   Record<Exclude<keyof IndividualForm, "residenceAddress">, string>
 > & {
   residenceAddress?: Partial<Record<keyof ResidenceAddressForm, string>>;
+  registrationPhone?: string;
 };
 
 export function IndividualKycWizard() {
@@ -350,6 +386,12 @@ export function IndividualKycWizard() {
     string | undefined
   >(undefined);
   const [kycSubmittedAt, setKycSubmittedAt] = useState<Date | null>(null);
+  /** Missing User.country or User.phone (e.g. Google signup) — collect in Personal Info. */
+  const [kycNeedsRegistrationContact, setKycNeedsRegistrationContact] =
+    useState(false);
+  const [registrationPhoneCountry, setRegistrationPhoneCountry] =
+    useState<Country | null>(null);
+  const [registrationLocalPhone, setRegistrationLocalPhone] = useState("");
   /** When set, user tried to switch step with unsaved edits — `AppDialog` confirms discard. */
   const [pendingSectionAfterUnsaved, setPendingSectionAfterUnsaved] =
     useState<Section | null>(null);
@@ -381,6 +423,19 @@ export function IndividualKycWizard() {
     () => flexCountryList.find((c) => c.couName === form.country),
     [flexCountryList, form.country],
   );
+
+  useEffect(() => {
+    if (!kycNeedsRegistrationContact) return;
+    const c = form.country.trim();
+    if (!c) {
+      setRegistrationPhoneCountry(null);
+      return;
+    }
+    const fc = flexCountryList.find((x) => x.couName === c);
+    setRegistrationPhoneCountry(
+      fc ? phoneCountryFromCouCode(fc.couCode) : null,
+    );
+  }, [kycNeedsRegistrationContact, form.country, flexCountryList]);
 
   const syncDocumentsFromServer = useCallback(async () => {
     try {
@@ -429,6 +484,7 @@ export function IndividualKycWizard() {
         const userRow = res.data.data as
           | {
               country?: string | null;
+              phone?: string | null;
               individualProfile?: Record<string, unknown> | null;
               documents?: KycDocumentRow[];
               kycStatus?: string;
@@ -437,6 +493,10 @@ export function IndividualKycWizard() {
           | undefined;
         const profile = userRow?.individualProfile;
         const countryFromRegistration = userRow?.country?.trim() || "";
+        const phoneFromUser = String(userRow?.phone ?? "").trim() || "";
+        const needsContactGap = !countryFromRegistration || !phoneFromUser;
+        setKycNeedsRegistrationContact(needsContactGap);
+        setRegistrationLocalPhone("");
 
         let nextForm: IndividualForm;
 
@@ -556,6 +616,40 @@ export function IndividualKycWizard() {
     router.replace("/onboarding/profile", { scroll: false });
   }, [isLoading, searchParams, savedSections, kycLifecycleStatus, router]);
 
+  /** Only when switching path — avoids wiping docs on hydration. */
+  function handleIsNationalChange(nextNational: boolean) {
+    const prevNational = form.isNational;
+    if (nextNational === prevNational) return;
+    setSaveError(null);
+    setForm((p) => ({
+      ...p,
+      isNational: nextNational,
+      ...emptyIdentityDocs(),
+    }));
+    setErrors((e) => {
+      const copy = { ...e };
+      const keysToClear = [
+        "passportNumber",
+        "passportIssuingCountry",
+        "passportIssue",
+        "passportExpiry",
+        "citizenPrimaryDocumentType",
+        "workPermitNumber",
+        "workPermitIssue",
+        "workPermitExpiry",
+        "nationalIdNumber",
+        "nationalIdIssuingCountry",
+        "nationalIdIssue",
+        "nationalIdExpiry",
+        "isNational",
+      ] as const;
+      for (const k of keysToClear) {
+        delete copy[k];
+      }
+      return copy;
+    });
+  }
+
   const setField = (
     field: Exclude<keyof IndividualForm, "residenceAddress">,
     value: string | boolean,
@@ -601,7 +695,31 @@ export function IndividualKycWizard() {
       //   newErrors.nationality = "Nationality is required";
       if (!form.occupation.trim())
         newErrors.occupation = "Occupation is required";
-      if (!form.country.trim()) {
+      if (kycNeedsRegistrationContact) {
+        if (!form.country.trim()) {
+          newErrors.country = "Select your country of residence.";
+        }
+        if (!registrationPhoneCountry) {
+          newErrors.registrationPhone = "Please select a country first.";
+        } else if (!registrationLocalPhone.trim()) {
+          newErrors.registrationPhone = "Phone number is required.";
+        } else {
+          const min = registrationPhoneCountry.minDigits ?? 7;
+          const max = registrationPhoneCountry.maxDigits ?? 15;
+          if (
+            registrationLocalPhone.length < min ||
+            registrationLocalPhone.length > max
+          ) {
+            const label = registrationPhoneCountry.name ?? "this country";
+            const dial = registrationPhoneCountry.dialCode ?? "";
+            const dialPart = dial ? ` (+${dial})` : "";
+            newErrors.registrationPhone =
+              min === max
+                ? `Enter exactly ${min} digits for ${label}${dialPart}.`
+                : `Enter ${min}–${max} digits for ${label}${dialPart}.`;
+          }
+        }
+      } else if (!form.country.trim()) {
         newErrors.country =
           "Country of residence from your registration is required. If this appears empty, refresh the page or contact support.";
       }
@@ -692,9 +810,31 @@ export function IndividualKycWizard() {
     try {
       setIsSaving(true);
       setSaveError(null);
-      const payload = buildSanitizedKycPayload(form);
+      const basePayload = buildSanitizedKycPayload(form);
+      const payload: Record<string, unknown> = { ...basePayload };
+      if (
+        kycNeedsRegistrationContact &&
+        registrationPhoneCountry &&
+        registrationLocalPhone.trim()
+      ) {
+        payload.registrationPhoneE164 = `+${registrationPhoneCountry.dialCode}${registrationLocalPhone}`;
+      }
       await api.post("/kyc/individual/profile", payload);
-      const sig = JSON.stringify(payload);
+      if (section === "personal") {
+        try {
+          const pr = await api.get("/kyc/profile");
+          const row = pr.data.data as {
+            country?: string | null;
+            phone?: string | null;
+          };
+          const gap = !(row.country?.trim() && row.phone?.trim());
+          setKycNeedsRegistrationContact(gap);
+          if (!gap) setRegistrationLocalPhone("");
+        } catch {
+          /* ignore */
+        }
+      }
+      const sig = JSON.stringify(basePayload);
       setPersistedSignature(sig);
       setSavedSections((prev) =>
         prev.includes(section) ? prev : [...prev, section],
@@ -726,7 +866,10 @@ export function IndividualKycWizard() {
   };
 
   const isDirty =
-    persistedSignature.length > 0 && formSignature(form) !== persistedSignature;
+    persistedSignature.length > 0 &&
+    (formSignature(form) !== persistedSignature ||
+      (kycNeedsRegistrationContact &&
+        registrationLocalPhone.trim().length > 0));
 
   useEffect(() => {
     if (!isDirty) return;
@@ -754,6 +897,7 @@ export function IndividualKycWizard() {
     if (!target) return;
     setPendingSectionAfterUnsaved(null);
     setForm(formFromSignature(persistedSignature));
+    setRegistrationLocalPhone("");
     setErrors({});
     setSaveError(null);
     setActiveSection(target);
@@ -909,36 +1053,129 @@ export function IndividualKycWizard() {
             </Field> */}
 
             <Field label="Country of Residence" required error={errors.country}>
-              <div
-                className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-slate-50 text-slate-700 cursor-not-allowed select-none border-slate-200 ${
-                  errors.country ? "border-red-400" : ""
-                }`}
-                title="Taken from your registration — contact support to change."
-              >
-                {form.country ? (
-                  <>
-                    <span className="text-base leading-none shrink-0 opacity-90">
-                      {residenceFlexCountry ? (
-                        <FlexCountryFlag
-                          couCode={residenceFlexCountry.couCode}
-                        />
-                      ) : (
-                        <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
-                      )}
-                    </span>
-                    <span className="font-medium">{form.country}</span>
-                  </>
-                ) : (
-                  <span className="text-slate-400">Loading country…</span>
-                )}
-                {/* <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 bg-white">
-                  From registration
-                </span> */}
-              </div>
-              {/* <p className="text-xs text-slate-500 mt-1.5">
-                This matches the country you selected when you created your
-                account. It cannot be changed here.
-              </p> */}
+              {kycNeedsRegistrationContact ? (
+                <>
+                  <FlexCountrySelect
+                    value={form.country}
+                    onChange={(couName) => {
+                      const fc = flexCountryList.find(
+                        (c) => c.couName === couName,
+                      );
+                      setForm((prev) => ({ ...prev, country: couName }));
+                      setRegistrationPhoneCountry(
+                        fc ? phoneCountryFromCouCode(fc.couCode) : null,
+                      );
+                      setRegistrationLocalPhone("");
+                      setErrors((prev) => ({
+                        ...prev,
+                        country: undefined,
+                        registrationPhone: undefined,
+                      }));
+                    }}
+                    error={Boolean(errors.country)}
+                    disabled={isSaving}
+                    placeholder="Select your country of residence"
+                    countries={flexCountryList}
+                    countriesLoading={flexCountriesLoading}
+                  />
+                  <div className="mt-4 space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700 block">
+                      Mobile number <span className="text-red-500">*</span>
+                    </label>
+                    {/* <p className="text-xs text-slate-500">
+                      We do not have a mobile number on your account yet (for
+                      example if you signed in with Google). Add the number you
+                      use for account verification.
+                    </p> */}
+                    <div
+                      className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+                        errors.registrationPhone
+                          ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
+                          : "border-slate-200"
+                      } ${isSaving ? "bg-slate-50" : ""}`}
+                    >
+                      <div className="flex-shrink-0">
+                        <div className="flex items-center gap-1.5 px-3 h-11 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
+                          {registrationPhoneCountry ? (
+                            <>
+                              <Flag
+                                code={registrationPhoneCountry.code}
+                                style={{
+                                  width: 20,
+                                  height: 14,
+                                  borderRadius: 2,
+                                  objectFit: "cover",
+                                }}
+                              />
+                              <span className="text-slate-700 font-medium">
+                                +{registrationPhoneCountry.dialCode}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">
+                              Select country
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        placeholder={
+                          registrationPhoneCountry
+                            ? `${registrationPhoneCountry.minDigits} digit number`
+                            : "Select country first"
+                        }
+                        value={registrationLocalPhone}
+                        onChange={(e) => {
+                          if (registrationPhoneCountry) {
+                            const digits = e.target.value
+                              .replace(/\D/g, "")
+                              .slice(0, registrationPhoneCountry.maxDigits);
+                            setRegistrationLocalPhone(digits);
+                            setErrors((prev) => ({
+                              ...prev,
+                              registrationPhone: undefined,
+                            }));
+                          }
+                        }}
+                        disabled={isSaving || !registrationPhoneCountry}
+                        className="flex-1 h-11 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
+                      />
+                    </div>
+                    {errors.registrationPhone && (
+                      <p className="mt-1.5 text-xs text-red-500">
+                        {errors.registrationPhone}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div
+                  className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-slate-50 text-slate-700 cursor-not-allowed select-none border-slate-200 ${
+                    errors.country ? "border-red-400" : ""
+                  }`}
+                  title="Taken from your registration — contact support to change."
+                >
+                  {form.country ? (
+                    <>
+                      <span className="text-base leading-none shrink-0 opacity-90">
+                        {residenceFlexCountry ? (
+                          <FlexCountryFlag
+                            couCode={residenceFlexCountry.couCode}
+                          />
+                        ) : (
+                          <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
+                        )}
+                      </span>
+                      <span className="font-medium">{form.country}</span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">Loading country…</span>
+                  )}
+                </div>
+              )}
             </Field>
 
             <div>
@@ -951,7 +1188,7 @@ export function IndividualKycWizard() {
                     type="radio"
                     name="residencyStatus"
                     checked={form.isNational === false}
-                    onChange={() => setField("isNational", false)}
+                    onChange={() => handleIsNationalChange(false)}
                     className="w-4 h-4 text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-slate-700">Resident</span>
@@ -962,7 +1199,7 @@ export function IndividualKycWizard() {
                     type="radio"
                     name="residencyStatus"
                     checked={form.isNational === true}
-                    onChange={() => setField("isNational", true)}
+                    onChange={() => handleIsNationalChange(true)}
                     className="w-4 h-4 text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-slate-700">Citizen</span>
@@ -1416,7 +1653,7 @@ export function IndividualKycWizard() {
                   );
                   requestNavigateToSection(sections[currentIndex - 1].key);
                 }}
-                className="text-sm text-slate-600 hover:text-slate-900 font-medium"
+                className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 font-medium "
               >
                 Back
               </button>
@@ -1426,11 +1663,11 @@ export function IndividualKycWizard() {
                 type="button"
                 onClick={() => saveSection(activeSection)}
                 disabled={isSaving}
-                className="h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="cursor-pointer h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white cursor-pointer border-t-transparent rounded-full animate-spin" />
                     Saving...
                   </>
                 ) : (
@@ -1448,7 +1685,7 @@ export function IndividualKycWizard() {
               onClick={() => {
                 requestNavigateToSection("address");
               }}
-              className="text-sm text-slate-600 hover:text-slate-900 font-medium"
+              className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 font-medium "
             >
               Back
             </button>

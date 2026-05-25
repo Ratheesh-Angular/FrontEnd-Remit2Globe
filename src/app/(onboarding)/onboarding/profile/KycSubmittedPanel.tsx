@@ -180,7 +180,7 @@ export function KycSubmittedPanel({
       <button
         type="button"
         onClick={() => router.push("/dashboard")}
-        className="inline-flex h-11 items-center justify-center rounded-lg bg-teal-600 px-6 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+        className="cursor-pointer inline-flex h-11 items-center justify-center rounded-lg bg-teal-600 px-6 text-sm font-medium text-white transition-colors hover:bg-teal-700"
       >
         Back to Dashboard
       </button>
