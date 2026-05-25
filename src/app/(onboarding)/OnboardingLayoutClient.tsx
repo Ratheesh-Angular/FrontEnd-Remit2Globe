@@ -2,33 +2,20 @@
 
 import { useEffect, useState } from "react";
 import type { Session } from "next-auth";
-import { getSession } from "next-auth/react";
 import Link from "next/link";
-import { useAuthStore, type AuthUser } from "@/store/auth.store";
+import { useAuthStore } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 import {
+  clearStaleAuthAndRedirect,
   extractAuthMeUser,
   getErrorMessage,
   getHttpErrorStatus,
+  isStaleAuthHttpStatus,
   safeGetSession,
 } from "@/lib/load-session-client";
-
-function applySessionUser(
-  su: NonNullable<Session["user"]> & { id?: string },
-  setUser: (user: AuthUser | null) => void,
-) {
-  if (!su?.id) return false;
-  setUser({
-    id: su.id,
-    email: su.email ?? null,
-    phone: null,
-    role: (su.role as AuthUser["role"]) || "INDIVIDUAL",
-    kycStatus: (su.kycStatus as AuthUser["kycStatus"]) || "PENDING",
-    createdAt: su.createdAt ?? new Date().toISOString(),
-  });
-  return true;
-}
-
+import Image from "next/image";
+import R2GLogo from "../../../assets/logos/R2GLogo.png";
+import { ArrowLeftIcon } from "lucide-react";
 export default function OnboardingLayoutClient({
   children,
   initialSession,
@@ -42,20 +29,20 @@ export default function OnboardingLayoutClient({
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const naSession =
-          initialSession ?? (await safeGetSession());
-        if (naSession?.user) {
-          await fetch("/api/auth/sync-backend-session", {
+        const naSession = initialSession ?? (await safeGetSession());
+        if (naSession?.user?.id) {
+          const syncRes = await fetch("/api/auth/sync-backend-session", {
             method: "POST",
             credentials: "same-origin",
           });
-        }
-
-        if (
-          naSession?.user &&
-          applySessionUser(naSession.user, setUser)
-        ) {
-          return;
+          if (
+            !syncRes.ok &&
+            syncRes.status !== 204 &&
+            isStaleAuthHttpStatus(syncRes.status)
+          ) {
+            await clearStaleAuthAndRedirect("/register");
+            return;
+          }
         }
 
         const res = await api.get("/auth/me");
@@ -65,24 +52,36 @@ export default function OnboardingLayoutClient({
             "[OnboardingLayoutClient] unexpected /auth/me shape",
             res.data,
           );
-          setSessionBanner(
-            // "Could not read your account data. Try refreshing the page.",
-            "",
-          );
+          if (naSession?.user?.id) {
+            await clearStaleAuthAndRedirect("/register");
+            return;
+          }
+          setSessionBanner("");
           return;
         }
         setUser(u);
       } catch (e) {
-        const retry = await safeGetSession();
-        if (retry?.user && applySessionUser(retry.user, setUser)) {
+        const status = getHttpErrorStatus(e);
+        if (isStaleAuthHttpStatus(status)) {
+          await clearStaleAuthAndRedirect("/register");
           return;
         }
-        const status = getHttpErrorStatus(e);
-        if (status !== undefined) {
-          if (status === 401 || status === 403) {
-            window.location.assign("/login");
-            return;
+        const retry = await safeGetSession();
+        if (retry?.user?.id) {
+          try {
+            const res = await api.get("/auth/me");
+            const u = extractAuthMeUser(res.data);
+            if (u) {
+              setUser(u);
+              return;
+            }
+          } catch {
+            /* fall through */
           }
+          await clearStaleAuthAndRedirect("/register");
+          return;
+        }
+        if (status !== undefined) {
           console.error(
             "[OnboardingLayoutClient] /auth/me failed",
             status,
@@ -122,16 +121,18 @@ export default function OnboardingLayoutClient({
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-teal-600 rounded-lg" />
-          <span className="font-semibold text-slate-900">Remit2Globe</span>
+          <Image src={R2GLogo} alt="Remit2Globe" width={100} height={100} />
         </div>
 
         <Link
           aria-label="Back to Dashboard"
           href="/dashboard"
-          className="text-sm text-slate-500 hover:text-slate-700"
+          className="cursor-pointer flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700"
         >
-          ← Back to Dashboard
+          <ArrowLeftIcon className="w-4 h-4" />
+          <span className="text-sm text-slate-500 hover:text-slate-700">
+            Back to Dashboard
+          </span>
         </Link>
       </header>
 

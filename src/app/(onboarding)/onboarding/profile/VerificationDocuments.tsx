@@ -252,10 +252,12 @@ export function VerificationDocuments({
         error &&
         typeof error === "object" &&
         "response" in error &&
-        (error as { response?: { data?: { message?: string } } }).response
-          ?.data?.message;
+        (error as { response?: { data?: { message?: string } } }).response?.data
+          ?.message;
       setSubmitError(
-        typeof msg === "string" ? msg : "Something went wrong. Please try again.",
+        typeof msg === "string"
+          ? msg
+          : "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -407,7 +409,7 @@ export function VerificationDocuments({
                     type="button"
                     onClick={() => fileInputRefs.current[doc.type]?.click()}
                     disabled={upload?.status === "uploading"}
-                    className={`h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                    className={`cursor-pointer h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
                       upload?.status === "done"
                         ? "border-teal-200 text-teal-700 hover:bg-teal-50"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"

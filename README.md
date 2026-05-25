@@ -14,9 +14,13 @@ pnpm dev
 bun dev
 ```
 
+**Full local stack:** Pages that load Flex country lists (register, beneficiaries, etc.) call Next **BFF** routes such as `GET /api/public-flex/countries`, which proxy to the Express API. Run **`cbp-backend`** as well (default **`http://localhost:8000`**) or set **`BACKEND_API_URL`** / **`NEXT_PUBLIC_API_URL`** to a reachable **`…/api`** root; otherwise those routes return **502** (`ECONNREFUSED`).
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 Copy [`.env.example`](./.env.example) to **`.env`** and set variables before running in production. Use **`.env`** only (this repo standardizes on `.env` + `.env.example`).
+
+**Prisma (NextAuth):** This app uses [`prisma/schema.prisma`](./prisma/schema.prisma) only to generate `@prisma/client` for Google OAuth (`PrismaAdapter`). Migrations are owned by **`cbp-backend`**. When you change the backend schema, copy/sync `cbp-backend/prisma/schema.prisma` into `cbp-frontend/prisma/schema.prisma` (keep `generator output = "../src/generated/prisma"`), then run **`npm run prisma:generate`** (also runs on **`postinstall`**).
 
 ## Production on AWS EC2
 

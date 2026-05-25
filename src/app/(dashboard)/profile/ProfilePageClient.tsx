@@ -84,7 +84,9 @@ function formatCorporateBusinessAddress(raw: unknown): string {
   try {
     const j = JSON.parse(s) as unknown;
     if (j && typeof j === "object" && !Array.isArray(j)) {
-      const formatted = parseStoredBusinessAddressLines(j as Record<string, unknown>);
+      const formatted = parseStoredBusinessAddressLines(
+        j as Record<string, unknown>,
+      );
       if (formatted) return formatted;
     }
   } catch {
@@ -1032,6 +1034,7 @@ function ChangePasswordPanel({
               {show.p ? "Hide" : "Show"}
             </button>
           </div>
+
           {password.length > 0 && (
             <div className="mt-3 space-y-2">
               <div className="flex h-2 rounded-full bg-slate-100 overflow-hidden ring-1 ring-inset ring-slate-200/60">

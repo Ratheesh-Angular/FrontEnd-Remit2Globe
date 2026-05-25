@@ -29,6 +29,17 @@ const HOP_BY_HOP = new Set([
 
 type RouteCtx = { params: Promise<{ path?: string[] }> };
 
+/** Detect ECONNREFUSED nested on fetch AggregateError.cause (Node). */
+function upstreamLikelyUnreachable(err: unknown): boolean {
+  const e = err as Error & { cause?: unknown };
+  const c = e?.cause as { code?: string; errors?: Array<{ code?: string }> } | undefined;
+  if (c?.code === "ECONNREFUSED") return true;
+  if (Array.isArray(c?.errors) && c.errors.some((x) => x?.code === "ECONNREFUSED")) {
+    return true;
+  }
+  return false;
+}
+
 function segmentToRelativePath(segments: string[]): string {
   if (segments.length === 0) return "";
   return `/${segments.join("/")}`;
@@ -84,8 +95,20 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
     const hint =
       err instanceof Error ? err.message : typeof err === "string" ? err : "unknown_error";
     console.error("[api/public-flex] upstream fetch failed:", target.toString(), hint, err);
+
+    const devUnreachable =
+      process.env.NODE_ENV !== "production" &&
+      ((typeof hint === "string" &&
+        (hint.toLowerCase().includes("econnrefused") ||
+          hint.toLowerCase().includes("fetch failed"))) ||
+        upstreamLikelyUnreachable(err));
+
+    const message = devUnreachable
+      ? "Could not reach the Flex API upstream. Start the Express API (cbp-backend, default port 8000) or set BACKEND_INTERNAL_API_URL / BACKEND_API_URL / NEXT_PUBLIC_API_URL to a reachable /api root."
+      : "Could not reach the Flex API upstream.";
+
     return NextResponse.json(
-      { success: false, message: "Could not reach the Flex API upstream." },
+      { success: false, message },
       { status: 502, headers: BFF_JSON_HEADERS },
     );
   }

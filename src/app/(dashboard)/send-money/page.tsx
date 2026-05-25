@@ -23,8 +23,11 @@ import enCountries from "i18n-iso-countries/langs/en.json";
 countriesIso.registerLocale(enCountries);
 import {
   ALPHA2_TO_CURRENCY,
+  COU_CODE_TO_CURRENCY,
   CURRENCY_TO_FLAG_ALPHA2,
 } from "@/lib/send-money-currencies";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import {
   ChevronRight,
   Check,
@@ -39,7 +42,7 @@ import {
   Copy,
 } from "lucide-react";
 import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
-import { flexApiUrl, parseFlexCountriesResponse } from "@/lib/flex-api";
+import { CorporateSupportingDocumentsSection } from "@/components/remittance/CorporateSupportingDocumentsSection";
 
 interface FlexCountry {
   couCode: string;
@@ -61,6 +64,9 @@ interface SenderContext {
   canUseMobilePayIn: boolean;
   /** Comma-separated country names where mobile pay-in (e.g. M-Pesa) is supported */
   mobilePayInMarketsLabel: string;
+  /** E.164 saved at registration — used to prefill payer mobile */
+  registeredPhone?: string | null;
+  userRole?: "INDIVIDUAL" | "CORPORATE";
 }
 
 interface Quote {
@@ -114,6 +120,13 @@ interface PaymentProof {
   uploadedAt: string;
 }
 
+interface TransferSupportingDocumentRow {
+  id: string;
+  docType: "INVOICE" | "BILL_OF_LADING";
+  fileName: string;
+  fileUrl: string;
+}
+
 interface TransferRow {
   id: string;
   referenceCode: string;
@@ -128,6 +141,7 @@ interface TransferRow {
   payerPhone?: string | null;
   beneficiary?: Beneficiary | null;
   paymentProofs?: PaymentProof[];
+  supportingDocuments?: TransferSupportingDocumentRow[];
 }
 
 function alpha2FromCouCode(couCode: string): string | undefined {
@@ -137,23 +151,25 @@ function alpha2FromCouCode(couCode: string): string | undefined {
 }
 
 function receiveCurrencyForCouCode(couCode: string): string {
+  const a3 = couCode?.trim().toUpperCase();
+  if (a3 && COU_CODE_TO_CURRENCY[a3]) return COU_CODE_TO_CURRENCY[a3];
   const a2 = alpha2FromCouCode(couCode);
   if (a2 && ALPHA2_TO_CURRENCY[a2]) return ALPHA2_TO_CURRENCY[a2];
   return "USD";
 }
 
-/** Map beneficiary `country` (Flex country name) to Flex corridor row for currency + filters. */
+/** Map beneficiary `country` (country name) to catalog row for currency + filters. */
 function resolveRecipientFromBeneficiaryCountry(
   countryLabel: string | null | undefined,
-  flexCountries: FlexCountry[],
+  countries: FlexCountry[],
 ): { couCode: string; couName: string } | null {
   const raw = (countryLabel ?? "").trim();
   if (!raw) return null;
   const lower = raw.toLowerCase();
 
-  let fc = flexCountries.find((c) => c.couName.trim().toLowerCase() === lower);
+  let fc = countries.find((c) => c.couName.trim().toLowerCase() === lower);
   if (!fc) {
-    fc = flexCountries.find(
+    fc = countries.find(
       (c) =>
         c.couName.toLowerCase().includes(lower) ||
         lower.includes(c.couName.toLowerCase()),
@@ -166,7 +182,7 @@ function resolveRecipientFromBeneficiaryCountry(
     if (typeof a2 === "string" && a2.length === 2) {
       const a3 = countriesIso.alpha2ToAlpha3(a2);
       if (a3) {
-        const byAlpha3 = flexCountries.find(
+        const byAlpha3 = countries.find(
           (c) => c.couCode.toUpperCase() === a3.toUpperCase(),
         );
         if (byAlpha3)
@@ -256,17 +272,6 @@ const DUMMY_PAYOUT_ACCOUNTS: CompanyAccount[] = [
     instructions:
       "Use your transfer reference in the payment narrative. Credits are applied after reconciliation.",
   },
-  {
-    id: "dev-2",
-    bankName: "Meridian Global N.A.",
-    accountName: "Remit2Globe Settlement",
-    accountNumber: "GB12MIDL40051599881264",
-    swiftBic: "MIDLGB22",
-    iban: "GB12MIDL40051599881264",
-    currency: "GBP",
-    countryNote: "London, UK",
-    instructions: "SWIFT / IBAN transfers only. Include reference code.",
-  },
 ];
 
 function SendMoneyPageContent() {
@@ -287,7 +292,7 @@ function SendMoneyPageContent() {
     relationship: LookupOpt[];
   } | null>(null);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
-  const [flexCountries, setFlexCountries] = useState<FlexCountry[]>([]);
+  const { countries: catalogCountries } = useCatalogCountries(true);
 
   const [payCurrency, setPayCurrency] = useState("");
   const [payAmount, setPayAmount] = useState("");
@@ -395,52 +400,81 @@ function SendMoneyPageContent() {
     };
   }, [recipientCouName, recipientCouCode]);
 
-  const dedupedFlexCountries = useMemo(() => {
+  const dedupedCatalogCountries = useMemo(() => {
     const byCode = new Map<string, FlexCountry>();
-    for (const c of flexCountries) {
+    for (const c of catalogCountries) {
       if (!byCode.has(c.couCode)) byCode.set(c.couCode, c);
     }
     return [...byCode.values()];
-  }, [flexCountries]);
+  }, [catalogCountries]);
 
-  /** One row per admin-allowed Flex country; label is receive currency ( corridor country drives quotes/beneficiaries ). */
-  const recipientReceiveOptions = useMemo(() => {
-    const sorted = [...dedupedFlexCountries].sort((a, b) =>
-      a.couName.localeCompare(b.couName, undefined, { sensitivity: "base" }),
-    );
-    const opts: RecipientReceiveOption[] = sorted.map((c) => ({
-      currency: receiveCurrencyForCouCode(c.couCode),
-      couCode: c.couCode,
-      couName: c.couName,
+  const corporateSupportingDocsForUi = useMemo(() => {
+    const raw = transferRow?.supportingDocuments ?? [];
+    return raw.map((d) => ({
+      id: d.id,
+      fileName: d.fileName,
+      fileUrl: d.fileUrl,
+      docType:
+        String(d.docType).toUpperCase() === "BILL_OF_LADING"
+          ? ("BILL_OF_LADING" as const)
+          : ("INVOICE" as const),
     }));
-    opts.sort(
-      (a, b) =>
-        a.currency.localeCompare(b.currency) ||
-        a.couName.localeCompare(b.couName, undefined, { sensitivity: "base" }),
+  }, [transferRow?.supportingDocuments]);
+
+  const onCorporateSupportingDocUploaded = useCallback(
+    (doc: {
+      id: string;
+      docType: "INVOICE" | "BILL_OF_LADING";
+      fileName: string;
+      fileUrl: string;
+    }) => {
+      setTransferRow((r) => {
+        if (!r) return r;
+        const list = r.supportingDocuments ?? [];
+        const next = list.filter((d) => d.docType !== doc.docType).concat(doc);
+        return { ...r, supportingDocuments: next };
+      });
+    },
+    [],
+  );
+
+  /** Unique receive currencies from the full catalog (one representative country each). */
+  const recipientCurrencyOptions = useMemo(() => {
+    const byCurrency = new Map<string, RecipientReceiveOption>();
+    for (const c of dedupedCatalogCountries) {
+      const currency = receiveCurrencyForCouCode(c.couCode);
+      if (!byCurrency.has(currency)) {
+        byCurrency.set(currency, {
+          currency,
+          couCode: c.couCode,
+          couName: c.couName,
+        });
+      }
+    }
+    return [...byCurrency.values()].sort((a, b) =>
+      a.currency.localeCompare(b.currency),
     );
-    return opts;
-  }, [dedupedFlexCountries]);
+  }, [dedupedCatalogCountries]);
 
-  const filteredRecipientReceiveOptions = useMemo(() => {
+  const filteredRecipientCurrencyOptions = useMemo(() => {
     const q = recipientSearch.toLowerCase().trim();
-    if (!q) return recipientReceiveOptions;
-    return recipientReceiveOptions.filter((opt) => {
-      const countryHit = opt.couName.toLowerCase().includes(q);
-      const curHit = opt.currency.toLowerCase().includes(q);
-      const codeHit = opt.couCode.toLowerCase().includes(q);
-      const a2 = alpha2FromCouCode(opt.couCode);
-      const isoHit = (a2 ?? "").toLowerCase().includes(q);
-      return countryHit || curHit || codeHit || isoHit;
-    });
-  }, [recipientReceiveOptions, recipientSearch]);
+    if (!q) return recipientCurrencyOptions;
+    return recipientCurrencyOptions.filter(
+      (opt) =>
+        opt.currency.toLowerCase().includes(q) ||
+        opt.couName.toLowerCase().includes(q),
+    );
+  }, [recipientCurrencyOptions, recipientSearch]);
 
-  /** Avoid US-flag flash before corridor state is applied (matches first list currency). */
+  /** Avoid mismatched-flag flash before corridor state is applied. */
   const recipientDisplayCurrency = useMemo(
     () =>
       receiveCurrency ||
-      recipientReceiveOptions[0]?.currency ||
+      recipientCurrencyOptions.find((o) => o.currency.toUpperCase() === "USD")
+        ?.currency ||
+      recipientCurrencyOptions[0]?.currency ||
       "",
-    [receiveCurrency, recipientReceiveOptions],
+    [receiveCurrency, recipientCurrencyOptions],
   );
 
   const filteredPayCurrencyOptions = useMemo(() => {
@@ -457,12 +491,17 @@ function SendMoneyPageContent() {
   );
 
   const filteredBeneficiaries = useMemo(() => {
-    const r = recipientCouName.trim().toLowerCase();
-    if (!r) return beneficiaries;
-    return beneficiaries.filter(
-      (b) => (b.country ?? "").trim().toLowerCase() === r,
-    );
-  }, [beneficiaries, recipientCouName]);
+    const cur = receiveCurrency.trim().toUpperCase();
+    if (!cur) return beneficiaries;
+    return beneficiaries.filter((b) => {
+      const resolved = resolveRecipientFromBeneficiaryCountry(
+        b.country,
+        dedupedCatalogCountries,
+      );
+      if (!resolved) return false;
+      return receiveCurrencyForCouCode(resolved.couCode) === cur;
+    });
+  }, [beneficiaries, receiveCurrency, dedupedCatalogCountries]);
 
   const bankAccountsToShow = useMemo(() => {
     if (companyAccounts.length > 0) return companyAccounts;
@@ -535,7 +574,7 @@ function SendMoneyPageContent() {
     setLoading(true);
     setError("");
     try {
-      const [ctxRes, lookRes, benRes, flexCountriesList] = await Promise.all([
+      const [ctxRes, lookRes, benRes] = await Promise.all([
         api.get<{ data: SenderContext }>("/remittance/context"),
         api.get<{
           data: {
@@ -547,19 +586,15 @@ function SendMoneyPageContent() {
         api.get<{ data: { beneficiaries: Beneficiary[] } }>("/beneficiaries", {
           params: { activeOnly: "true" },
         }),
-        fetch(flexApiUrl("/countries"), { credentials: "include" }).then(
-          async (r) => {
-            const json: unknown = await r.json();
-            return parseFlexCountriesResponse(json);
-          },
-        ),
       ]);
       const c = ctxRes.data.data;
       setCtx(c);
+      setPayerPhone((prev) =>
+        prev.trim() ? prev : (c.registeredPhone?.trim() ?? ""),
+      );
       setPayCurrency(c.defaultPayCurrency || c.payCurrencies[0] || "USD");
       setLookups(lookRes.data.data);
       setBeneficiaries(benRes.data.data.beneficiaries);
-      setFlexCountries(flexCountriesList);
     } catch (e: unknown) {
       setError("Could not load send-money data. Try again later.");
       console.error(e);
@@ -578,7 +613,8 @@ function SendMoneyPageContent() {
       beneficiaryQueryProcessedRef.current = null;
       return;
     }
-    if (loading || !beneficiaries.length || !flexCountries.length) return;
+    if (loading || !beneficiaries.length || !dedupedCatalogCountries.length)
+      return;
 
     const b = beneficiaries.find((x) => x.id === beneficiaryQueryId);
     if (!b) {
@@ -592,58 +628,68 @@ function SendMoneyPageContent() {
 
     const resolved = resolveRecipientFromBeneficiaryCountry(
       b.country,
-      flexCountries,
+      dedupedCatalogCountries,
     );
     if (resolved) {
       setRecipientCouCode(resolved.couCode);
       setRecipientCouName(resolved.couName);
+      setReceiveCurrency(receiveCurrencyForCouCode(resolved.couCode));
     }
     setBeneficiaryId(b.id);
     setSelectedBen(b);
-  }, [loading, beneficiaryQueryId, beneficiaries, flexCountries]);
+  }, [loading, beneficiaryQueryId, beneficiaries, dedupedCatalogCountries]);
 
-  /** Default “What they get” to first allowed corridor currency when none chosen yet. */
+  /** Default receive currency when none chosen yet. */
   useEffect(() => {
     if (loading) return;
-    if (recipientCouCode) return;
-    const opts = recipientReceiveOptions;
+    if (receiveCurrency) return;
+    const opts = recipientCurrencyOptions;
     if (!opts.length) return;
 
     if (beneficiaryQueryId) {
-      const ready = beneficiaries.length > 0 && flexCountries.length > 0;
+      const ready =
+        beneficiaries.length > 0 && dedupedCatalogCountries.length > 0;
       if (!ready) return;
       const b = beneficiaries.find((x) => x.id === beneficiaryQueryId);
       if (b) {
         const resolved = resolveRecipientFromBeneficiaryCountry(
           b.country,
-          flexCountries,
+          dedupedCatalogCountries,
         );
         if (resolved) return;
       }
     }
 
-    const first = opts[0];
-    setRecipientCouCode(first.couCode);
-    setRecipientCouName(first.couName);
+    const usd = opts.find((o) => o.currency.toUpperCase() === "USD");
+    const pick = usd ?? opts[0];
+    setReceiveCurrency(pick.currency);
+    setRecipientCouCode(pick.couCode);
+    setRecipientCouName(pick.couName);
   }, [
     loading,
-    recipientCouCode,
-    recipientReceiveOptions,
+    receiveCurrency,
+    recipientCurrencyOptions,
     beneficiaryQueryId,
     beneficiaries,
-    flexCountries,
+    dedupedCatalogCountries,
   ]);
 
-  /** Changing recipient country clears a deep-linked beneficiary if it no longer matches. */
+  /** Changing receive currency clears a beneficiary that no longer matches. */
   useEffect(() => {
-    if (!selectedBen || !recipientCouName.trim()) return;
-    const benCountry = (selectedBen.country ?? "").trim().toLowerCase();
-    const rec = recipientCouName.trim().toLowerCase();
-    if (benCountry && rec && benCountry !== rec) {
+    if (!selectedBen || !receiveCurrency.trim()) return;
+    const resolved = resolveRecipientFromBeneficiaryCountry(
+      selectedBen.country,
+      dedupedCatalogCountries,
+    );
+    if (
+      resolved &&
+      receiveCurrencyForCouCode(resolved.couCode) !==
+        receiveCurrency.trim().toUpperCase()
+    ) {
       setSelectedBen(null);
       setBeneficiaryId("");
     }
-  }, [recipientCouName, selectedBen]);
+  }, [receiveCurrency, selectedBen, dedupedCatalogCountries]);
 
   useEffect(() => {
     if (!payCurrencyOpen && !recipientOpen) return;
@@ -684,14 +730,6 @@ function SendMoneyPageContent() {
       setQuoteLoading(false);
     }
   }, [payAmount, payCurrency, receiveCurrency]);
-
-  useEffect(() => {
-    if (!recipientCouCode) {
-      setReceiveCurrency("");
-      return;
-    }
-    setReceiveCurrency(receiveCurrencyForCouCode(recipientCouCode));
-  }, [recipientCouCode]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -796,6 +834,15 @@ function SendMoneyPageContent() {
       if (!isValidE164Phone(p)) {
         setError(
           "Enter a valid mobile number for the selected country (check length and digits).",
+        );
+        return;
+      }
+    }
+    if (ctx.userRole === "CORPORATE") {
+      const docCount = transferRow?.supportingDocuments?.length ?? 0;
+      if (docCount < 1) {
+        setError(
+          "Corporate transfers require supporting documentation: upload either an invoice or a bill of lading.",
         );
         return;
       }
@@ -1037,6 +1084,9 @@ function SendMoneyPageContent() {
     const payInIsMobile =
       payInMethod === "MOBILE_MONEY" ||
       transferRow?.payInMethod === "MOBILE_MONEY";
+    const payInIsBankTransfer =
+      payInMethod === "BANK_TRANSFER" ||
+      transferRow?.payInMethod === "BANK_TRANSFER";
     const amt = confirmationAmounts;
     downloadTransferReceiptPdf({
       referenceCode: ref,
@@ -1070,6 +1120,18 @@ function SendMoneyPageContent() {
       payerPhone: payInIsMobile
         ? payerPhone.trim() || transferRow?.payerPhone || null
         : null,
+      bankAccounts: payInIsBankTransfer
+        ? bankAccountsToShow.map((a) => ({
+            bankName: a.bankName,
+            accountName: a.accountName,
+            accountNumber: a.accountNumber,
+            swiftBic: a.swiftBic,
+            iban: a.iban,
+            currency: a.currency,
+            countryNote: a.countryNote,
+            instructions: a.instructions,
+          }))
+        : undefined,
       additionalNote: postConfirmMessage?.trim() || undefined,
     });
   }
@@ -1286,14 +1348,12 @@ function SendMoneyPageContent() {
                   className="flex items-center gap-2 h-11 sm:h-12 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
                 >
                   <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
-                    {recipientDisplayCurrency ? (
-                      <Flag
-                        code={payCurrencyFlagCode(recipientDisplayCurrency)}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="h-full w-full bg-slate-200 block" />
-                    )}
+                    <Flag
+                      code={payCurrencyFlagCode(
+                        recipientDisplayCurrency || "USD",
+                      )}
+                      className="h-full w-full object-cover"
+                    />
                   </span>
                   <span className="text-base font-bold text-slate-900">
                     {recipientDisplayCurrency || "—"}
@@ -1301,43 +1361,58 @@ function SendMoneyPageContent() {
                   <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
                 </button>
                 {recipientOpen && (
-                  <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,16rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                  <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,18rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
                     <div className="p-2 border-b border-slate-100">
                       <input
                         autoFocus
-                        placeholder="Search currency…"
+                        placeholder="Search currency or country…"
                         value={recipientSearch}
                         onChange={(e) => setRecipientSearch(e.target.value)}
                         className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                       />
                     </div>
                     <ul className="max-h-52 overflow-y-auto py-1">
-                      {filteredRecipientReceiveOptions.map((opt) => (
-                        <li key={opt.couCode}>
+                      {filteredRecipientCurrencyOptions.map((opt) => (
+                        <li key={opt.currency}>
                           <button
                             type="button"
                             onClick={() => {
+                              setReceiveCurrency(opt.currency);
                               setRecipientCouCode(opt.couCode);
                               setRecipientCouName(opt.couName);
                               setRecipientOpen(false);
                             }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
-                              recipientCouCode === opt.couCode
+                            className={`flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                              receiveCurrency === opt.currency
                                 ? "bg-teal-50 text-teal-800 font-medium"
                                 : "text-slate-700"
                             }`}
                           >
                             <Flag
                               code={payCurrencyFlagCode(opt.currency)}
-                              className="w-6 h-4 rounded object-cover"
+                              className="w-6 h-4 rounded object-cover shrink-0 mt-0.5"
                             />
-                            <span className="font-semibold">{opt.currency}</span>
+                            <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                              <span className="font-semibold leading-tight text-[13px] sm:text-sm">
+                                {opt.currency}
+                              </span>
+                              <span
+                                className={`text-[11px] leading-snug line-clamp-2 ${
+                                  receiveCurrency === opt.currency
+                                    ? "text-teal-700/85"
+                                    : "text-slate-500"
+                                }`}
+                                title={opt.couName}
+                              >
+                                {opt.couName}
+                              </span>
+                            </span>
                           </button>
                         </li>
                       ))}
-                      {filteredRecipientReceiveOptions.length === 0 && (
+                      {filteredRecipientCurrencyOptions.length === 0 && (
                         <li className="px-3 py-3 text-sm text-slate-400 text-center">
-                          No currencies found
+                          No match
                         </li>
                       )}
                     </ul>
@@ -1356,10 +1431,7 @@ function SendMoneyPageContent() {
           <button
             type="button"
             disabled={
-              submitting ||
-              !quote ||
-              !recipientCouName ||
-              !parseFloat(payAmount)
+              submitting || !quote || !receiveCurrency || !parseFloat(payAmount)
             }
             onClick={() => void handleStep1Next()}
             className="w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
@@ -1375,21 +1447,21 @@ function SendMoneyPageContent() {
         <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <p className="text-sm text-slate-600 sm:pt-0.5">
-              Choose a beneficiary in{" "}
-              <strong>{recipientCouName || "this country"}</strong>.
+              Choose a beneficiary receiving{" "}
+              <strong>{receiveCurrency || "this currency"}</strong>.
             </p>
             <button
               type="button"
-              disabled={!recipientCouName.trim()}
+              disabled={!receiveCurrency.trim()}
               title={
-                recipientCouName.trim()
+                receiveCurrency.trim()
                   ? undefined
-                  : "Choose a recipient country first"
+                  : "Choose a receive currency first"
               }
               onClick={() => {
-                if (!recipientCouName.trim()) {
+                if (!receiveCurrency.trim()) {
                   setError(
-                    "Choose a recipient country before adding a beneficiary.",
+                    "Choose a receive currency before adding a beneficiary.",
                   );
                   return;
                 }
@@ -1433,19 +1505,13 @@ function SendMoneyPageContent() {
                         <>
                           <span className="inline-flex items-center gap-1">
                             {(() => {
-                              const fc = flexCountries.find(
+                              const fc = dedupedCatalogCountries.find(
                                 (x) =>
                                   x.couName.trim().toLowerCase() ===
                                   (b.country ?? "").trim().toLowerCase(),
                               );
-                              const a2 = fc
-                                ? alpha2FromCouCode(fc.couCode)
-                                : undefined;
-                              return a2 ? (
-                                <Flag
-                                  code={a2}
-                                  className="w-5 h-3.5 rounded object-cover"
-                                />
+                              return fc ? (
+                                <FlexCountryFlag couCode={fc.couCode} />
                               ) : null;
                             })()}
                             {b.country}
@@ -1597,6 +1663,15 @@ function SendMoneyPageContent() {
               </div>
             </div>
 
+            {ctx.userRole === "CORPORATE" && (
+              <CorporateSupportingDocumentsSection
+                transferId={transferId}
+                documents={corporateSupportingDocsForUi}
+                disabled={submitting}
+                onDocumentUploaded={onCorporateSupportingDocUploaded}
+              />
+            )}
+
             {payInMethod === "MOBILE_MONEY" && ctx.canUseMobilePayIn && (
               <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
                 <label
@@ -1649,6 +1724,8 @@ function SendMoneyPageContent() {
                 !transferPurpose.trim() ||
                 !relationship.trim() ||
                 !payInMethod ||
+                (ctx.userRole === "CORPORATE" &&
+                  (transferRow?.supportingDocuments?.length ?? 0) < 1) ||
                 (payInMethod === "MOBILE_MONEY" &&
                   !isValidE164Phone(payerPhone))
               }
@@ -2164,10 +2241,11 @@ function SendMoneyPageContent() {
             </button>
             <button
               type="button"
-              onClick={resetFlow}
+              // onClick={resetFlow}
+              onClick={() => router.push("/transactions")}
               className="h-9 sm:h-10 flex-1 min-w-0 sm:min-w-[8rem] bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
             >
-              New transfer
+              View Transactions
             </button>
           </div>
         </div>

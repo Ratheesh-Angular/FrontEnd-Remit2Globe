@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getValidatedServerSession } from "@/lib/auth-session";
 import OnboardingLayoutClient from "./OnboardingLayoutClient";
 
 export default async function OnboardingGroupLayout({
@@ -7,7 +6,7 @@ export default async function OnboardingGroupLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await getValidatedServerSession();
   return (
     <OnboardingLayoutClient initialSession={session}>
       {children}

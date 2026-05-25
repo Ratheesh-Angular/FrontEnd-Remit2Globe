@@ -151,7 +151,7 @@ function CorporateOwnershipDocUpload({
 
   return (
     <div
-      className={`bg-slate-50/80 border rounded-xl p-5 transition-colors ${
+      className={`bg-slate-50/80 border rounded-xl p-3 transition-colors ${
         done ? "border-teal-200" : "border-slate-200"
       }`}
     >
@@ -233,7 +233,7 @@ function CorporateOwnershipDocUpload({
             type="button"
             onClick={onBrowseClick}
             disabled={uploading}
-            className={`h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+            className={`cursor-pointer h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
               documentFileUrl.trim() && !uploading
                 ? "border-teal-200 text-teal-700 hover:bg-teal-50"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -317,7 +317,7 @@ const corpSections: {
     key: "ownership",
     label: "Authorised personnel & shareholders",
     description:
-      "Directors, officers, decision-makers, and shareholders on your KYC record.",
+      "CEO's, Directors, officers, and shareholders on your KYC record.",
   },
   {
     key: "documents",
@@ -1523,7 +1523,7 @@ export function CorporateKycWizard() {
                       key={i}
                       role="group"
                       aria-label={`Authorised personnel ${i + 1}`}
-                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-4"
+                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 p-4"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-medium text-slate-700">
@@ -1630,7 +1630,7 @@ export function CorporateKycWizard() {
                       key={i}
                       role="group"
                       aria-label={`Shareholder ${i + 1}`}
-                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 bg-slate-50/30 p-4"
+                      className="rounded-lg border border-slate-200 border-l-2 border-l-teal-600 p-4"
                     >
                       <div className="mb-3 min-w-0">
                         <p
@@ -1878,7 +1878,7 @@ export function CorporateKycWizard() {
                   );
                   requestNavigateToSection(corpSections[idx - 1].key);
                 }}
-                className="text-sm text-slate-600 hover:text-slate-900 font-medium"
+                className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 font-medium "
               >
                 Back
               </button>
@@ -1888,11 +1888,11 @@ export function CorporateKycWizard() {
                 type="button"
                 onClick={() => saveSection(activeSection)}
                 disabled={isSaving}
-                className="h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="cursor-pointer h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white cursor-pointer border-t-transparent rounded-full animate-spin" />
                     Saving...
                   </>
                 ) : (
@@ -1908,7 +1908,7 @@ export function CorporateKycWizard() {
             <button
               type="button"
               onClick={() => requestNavigateToSection("ownership")}
-              className="text-sm text-slate-600 hover:text-slate-900 font-medium"
+              className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 font-medium "
             >
               Back
             </button>

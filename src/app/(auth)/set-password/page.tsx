@@ -9,7 +9,8 @@ import {
   meetsStrongPassword,
   type PasswordStrength,
 } from "@/lib/passwordStrength";
-
+import Image from "next/image";
+import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 const SESSION_KEY = "passwordSetupToken";
 
 function strengthLabel(s: PasswordStrength): string {
@@ -118,32 +119,13 @@ export default function SetPasswordPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <div className="flex items-center gap-2.5 mb-6 justify-center">
-          <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 18 18"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M9 2L15.5 6V12L9 16L2.5 12V6L9 2Z"
-                fill="white"
-                fillOpacity="0.9"
-              />
-              <path
-                d="M6 9.5L8 11.5L12 7"
-                stroke="white"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-slate-900 tracking-tight">
-            Remit 2 Globe
-          </span>
+        <div className="flex justify-center mb-6">
+          <Image
+            src={R2GLogo}
+            alt="Remit2Globe"
+            priority
+            className="object-contain w-[125px]"
+          />
         </div>
 
         <div className="mb-8 text-center">
@@ -197,35 +179,96 @@ export default function SetPasswordPage() {
               </div>
             )}
 
-            <div className="mt-4 rounded-xl border border-slate-200/90 bg-gradient-to-b from-slate-50/90 to-white p-4 shadow-sm">
-              <p className="text-sm font-semibold text-slate-800 mb-3">
-                Password needs at least:
-              </p>
-              <ul className="space-y-2.5" role="list">
-                {requirementRows.map((row) => (
-                  <li key={row.id} className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-bold leading-none transition-colors ${
-                        row.met
-                          ? "border-emerald-500 bg-emerald-500 text-white shadow-sm shadow-emerald-500/25"
-                          : "border-slate-300 bg-white text-slate-300"
-                      }`}
-                      aria-hidden
-                    >
-                      {row.met ? "✓" : ""}
-                    </span>
-                    <span
-                      className={`text-sm leading-snug pt-0.5 transition-colors ${
-                        row.met
-                          ? "text-emerald-800 font-medium"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      {row.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            {/* 
+              Show password requirements only if:
+                - user has started typing, AND
+                - requirements are not all met (not strong)
+              Smoothly animate their appearance/disappearance.
+            */}
+            <div
+              className={`
+                transition-all duration-500
+                ${
+                  password.length === 0 ||
+                  (strength === "strong" && requirementRows.every((r) => r.met))
+                    ? "opacity-0 max-h-0 pointer-events-none translate-y-2"
+                    : "opacity-100 max-h-[300px] pointer-events-auto translate-y-0"
+                }
+              `}
+              aria-hidden={
+                password.length === 0 ||
+                (strength === "strong" && requirementRows.every((r) => r.met))
+              }
+            >
+              <div className="mt-4 rounded-xl border border-slate-200/90 bg-gradient-to-b from-slate-50/90 to-white p-4 shadow-md animate-fadein">
+                <p className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <svg
+                    width="18"
+                    height="18"
+                    fill="none"
+                    viewBox="0 0 20 20"
+                    className="text-teal-500"
+                  >
+                    <circle
+                      cx="10"
+                      cy="10"
+                      r="9"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                    <path
+                      d="M7 10.5l2 2 4-4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Password requirements
+                </p>
+                <ul className="space-y-2.5" role="list">
+                  {requirementRows.map((row) => (
+                    <li key={row.id} className="flex items-center gap-2">
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[13px] font-bold leading-none transition-colors duration-200 ease-out ${
+                          row.met
+                            ? "border-emerald-500 bg-emerald-500 text-white shadow-emerald-500/25 shadow-md"
+                            : "border-slate-300 bg-white text-slate-300"
+                        }`}
+                        aria-hidden
+                      >
+                        {row.met ? (
+                          <svg
+                            width="12"
+                            height="12"
+                            fill="none"
+                            viewBox="0 0 12 12"
+                          >
+                            <path
+                              d="M3 6.5l2 2 4-4"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <span className="font-bold">–</span>
+                        )}
+                      </span>
+                      <span
+                        className={`text-[15px] leading-snug pt-0.5 transition-colors duration-200 ${
+                          row.met
+                            ? "text-emerald-800 font-medium"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        {row.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -254,7 +297,9 @@ export default function SetPasswordPage() {
               </button>
             </div>
             {confirm.length > 0 && !matchOk && (
-              <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
+              <p className="text-xs text-red-600 mt-1">
+                Passwords do not match
+              </p>
             )}
           </div>
 

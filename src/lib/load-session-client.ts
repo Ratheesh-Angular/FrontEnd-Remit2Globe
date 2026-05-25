@@ -1,6 +1,7 @@
 import type { Session } from "next-auth";
-import { getSession } from "next-auth/react";
+import { getSession, signOut } from "next-auth/react";
 import type { AuthUser } from "@/store/auth.store";
+import { sessionApi as api } from "@/lib/api";
 
 /** NextAuth client fetch can throw on network/5xx; treat as "no session". */
 export async function safeGetSession(): Promise<Session | null> {
@@ -69,4 +70,26 @@ export function getErrorMessage(e: unknown): string | undefined {
   if (!e || typeof e !== "object") return undefined;
   const m = (e as { message?: unknown }).message;
   return typeof m === "string" ? m : undefined;
+}
+
+/** Clears NextAuth + mirrored backend cookies when the DB user no longer exists. */
+export async function clearStaleAuthAndRedirect(to: string): Promise<void> {
+  try {
+    await fetch("/api/auth/backend-session", {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+  } catch {
+    /* ignore */
+  }
+  try {
+    await api.post("/auth/logout");
+  } catch {
+    /* cookie may already be gone */
+  }
+  await signOut({ callbackUrl: to });
+}
+
+export function isStaleAuthHttpStatus(status: number | undefined): boolean {
+  return status === 401 || status === 403 || status === 404;
 }
