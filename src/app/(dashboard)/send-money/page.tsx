@@ -243,6 +243,66 @@ const SELECT_FIELD =
 const PAYMENT_PROOF_ACCEPT =
   "image/*,.pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.ppt,.pptx,.csv,.heic,.heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/rtf";
 
+/** Drop lookup rows with unusable empty `value` (defense in depth for API payloads). */
+function filterLookupOpts(opts: LookupOpt[]): LookupOpt[] {
+  return opts.filter((o) => String(o.value ?? "").trim() !== "");
+}
+
+type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY";
+
+/** Mirrors Step 3 Continue `disabled` rules and user-facing blocker copy. */
+function evaluateStep3ContinueGate(opts: {
+  submitting: boolean;
+  sourceOfIncome: string;
+  transferPurpose: string;
+  relationship: string;
+  payInMethod: PayInKind;
+  userRole?: "INDIVIDUAL" | "CORPORATE";
+  supportingDocumentsCount: number;
+  payerPhone: string;
+}): { continueDisabled: boolean; hintLines: string[] } {
+  const hintLines: string[] = [];
+
+  const noSource = !opts.sourceOfIncome.trim();
+  const noPurpose = !opts.transferPurpose.trim();
+  const noRelationship = !opts.relationship.trim();
+  const noPayMethod = !opts.payInMethod;
+  const corpNeedsSupportingDoc =
+    opts.userRole === "CORPORATE" && opts.supportingDocumentsCount < 1;
+  const mobilePhoneInvalidWhenRequired =
+    opts.payInMethod === "MOBILE_MONEY" && !isValidE164Phone(opts.payerPhone);
+
+  if (noSource) hintLines.push("Select source of income.");
+  if (noPurpose) hintLines.push("Select purpose of transfer.");
+  if (noRelationship) hintLines.push("Select relationship to recipient.");
+  if (noPayMethod) {
+    hintLines.push("Choose how you pay us — bank transfer or mobile money.");
+  }
+  if (corpNeedsSupportingDoc) {
+    hintLines.push(
+      "Upload at least one supporting document (invoice or bill of lading). Corporate transfers require this before you continue.",
+    );
+  }
+  if (mobilePhoneInvalidWhenRequired) {
+    hintLines.push(
+      opts.payerPhone.trim().length > 0
+        ? "Enter a valid mobile number for the selected country (check length and digits)."
+        : "Enter your mobile number with country code (e.g. +254712345678).",
+    );
+  }
+
+  const continueDisabled =
+    opts.submitting ||
+    noSource ||
+    noPurpose ||
+    noRelationship ||
+    noPayMethod ||
+    corpNeedsSupportingDoc ||
+    mobilePhoneInvalidWhenRequired;
+
+  return { continueDisabled, hintLines };
+}
+
 type BankProofRow = {
   clientId: string;
   remoteId?: string;
@@ -563,11 +623,36 @@ function SendMoneyPageContent() {
     };
   }, [lookups, sourceOfIncome, transferPurpose, relationship]);
 
+  const step3ContinueGate = useMemo(
+    () =>
+      evaluateStep3ContinueGate({
+        submitting,
+        sourceOfIncome,
+        transferPurpose,
+        relationship,
+        payInMethod,
+        userRole: ctx?.userRole,
+        supportingDocumentsCount: transferRow?.supportingDocuments?.length ?? 0,
+        payerPhone,
+      }),
+    [
+      submitting,
+      sourceOfIncome,
+      transferPurpose,
+      relationship,
+      payInMethod,
+      ctx?.userRole,
+      transferRow?.supportingDocuments?.length,
+      payerPhone,
+    ],
+  );
+
   useEffect(() => {
     if (step !== 3 || !ctx) return;
-    if (!ctx.canUseMobilePayIn) {
-      setPayInMethod("BANK_TRANSFER");
-    }
+    setPayInMethod((prev) => {
+      if (!ctx.canUseMobilePayIn) return "BANK_TRANSFER";
+      return prev || "BANK_TRANSFER";
+    });
   }, [step, ctx]);
 
   const loadInitial = useCallback(async () => {
@@ -593,7 +678,12 @@ function SendMoneyPageContent() {
         prev.trim() ? prev : (c.registeredPhone?.trim() ?? ""),
       );
       setPayCurrency(c.defaultPayCurrency || c.payCurrencies[0] || "USD");
-      setLookups(lookRes.data.data);
+      const d = lookRes.data.data;
+      setLookups({
+        sourceOfIncome: filterLookupOpts(d.sourceOfIncome),
+        transferPurpose: filterLookupOpts(d.transferPurpose),
+        relationship: filterLookupOpts(d.relationship),
+      });
       setBeneficiaries(benRes.data.data.beneficiaries);
     } catch (e: unknown) {
       setError("Could not load send-money data. Try again later.");
@@ -1521,7 +1611,7 @@ function SendMoneyPageContent() {
                       )}
                       {b.deliveryChannel === "BANK_TRANSFER" ? (
                         <span>
-                          {b.bankName} · {maskAccount(b.accountNumber)}
+                          {b.bankName} · {b.accountNumber}
                         </span>
                       ) : (
                         <span>
@@ -1671,6 +1761,14 @@ function SendMoneyPageContent() {
                 onDocumentUploaded={onCorporateSupportingDocUploaded}
               />
             )}
+            {ctx.userRole === "CORPORATE" &&
+              (transferRow?.supportingDocuments?.length ?? 0) < 1 && (
+                <p className="text-xs text-amber-800 bg-amber-50/90 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+                  <strong>Corporate transfers:</strong> upload at least one
+                  supporting document (invoice or bill of lading) before you can
+                  continue.
+                </p>
+              )}
 
             {payInMethod === "MOBILE_MONEY" && ctx.canUseMobilePayIn && (
               <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
@@ -1687,6 +1785,12 @@ function SendMoneyPageContent() {
                   onChange={setPayerPhone}
                   disabled={submitting}
                   defaultIso2={ctx.senderCountryIso2}
+                  error={
+                    payerPhone.trim().length > 0 &&
+                    !isValidE164Phone(payerPhone)
+                      ? "Enter a valid mobile number for the selected country (check length and digits)."
+                      : undefined
+                  }
                   hint={
                     <>
                       Search and pick your country code (same as on
@@ -1708,6 +1812,22 @@ function SendMoneyPageContent() {
             )}
           </div>
 
+          {!submitting && step3ContinueGate.hintLines.length > 0 && (
+            <div
+              role="status"
+              className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-amber-950"
+            >
+              <p className="text-xs font-medium text-amber-900 mb-1">
+                To continue:
+              </p>
+              <ul className="text-xs text-amber-900/90 list-disc pl-4 space-y-0.5">
+                {step3ContinueGate.hintLines.map((line, i) => (
+                  <li key={`${i}:${line}`}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -1718,17 +1838,7 @@ function SendMoneyPageContent() {
             </button>
             <button
               type="button"
-              disabled={
-                submitting ||
-                !sourceOfIncome.trim() ||
-                !transferPurpose.trim() ||
-                !relationship.trim() ||
-                !payInMethod ||
-                (ctx.userRole === "CORPORATE" &&
-                  (transferRow?.supportingDocuments?.length ?? 0) < 1) ||
-                (payInMethod === "MOBILE_MONEY" &&
-                  !isValidE164Phone(payerPhone))
-              }
+              disabled={step3ContinueGate.continueDisabled}
               onClick={() => void handleStep3Next()}
               className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
             >
@@ -1835,7 +1945,7 @@ function SendMoneyPageContent() {
                       ) : null}
                       <span className="block text-xs text-slate-500 mt-0.5 font-mono">
                         {selectedBen.accountNumber
-                          ? maskAccount(selectedBen.accountNumber)
+                          ? selectedBen.accountNumber
                           : "—"}
                       </span>
                     </>

@@ -21,6 +21,7 @@ import {
 } from "libphonenumber-js";
 import { flexApiUrl } from "@/lib/flex-api";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
+import mobileMoneyProvidersData from "@/data/mobile-money-providers.json";
 
 interface FlexBank {
   serviceType?: string;
@@ -158,9 +159,7 @@ export function AddBeneficiaryModal({
   const [saveError, setSaveError] = useState("");
   const [isConfirmingAccount, setIsConfirmingAccount] = useState(false);
   const [localMobileNumber, setLocalMobileNumber] = useState("");
-  const {
-    countries: flexCountries,
-  } = useFlexCountries(open);
+  const { countries: flexCountries } = useFlexCountries(open);
   const {
     countries: catalogCountryList,
     loading: catalogCountriesLoading,
@@ -220,6 +219,17 @@ export function AddBeneficiaryModal({
       ),
     [useFlexBankListUi, formData.country, banksLoading, flexBanks.length],
   );
+
+  /** Get available mobile money providers for the selected country */
+  const availableMobileMoneyProviders = useMemo(() => {
+    const country = formData.country?.trim();
+    if (!country) return [];
+
+    const providers = (mobileMoneyProvidersData as Record<string, string[]>)[
+      country
+    ];
+    return providers || [];
+  }, [formData.country]);
 
   useEffect(() => {
     if (!bankOpen) return;
@@ -814,7 +824,7 @@ export function AddBeneficiaryModal({
                     )}
                     {bankIdLookupStatus === "ok" && (
                       <p className="mt-1 text-xs text-teal-700">
-                        Bank and branch were filled automatically — you can edit
+                        Bank and branch were filled automatically. you can edit
                         them below if needed.
                       </p>
                     )}
@@ -1144,6 +1154,8 @@ export function AddBeneficiaryModal({
                       onChange={(couName) => {
                         handleChange("country", couName);
                         setLocalMobileNumber("");
+                        // Clear mobile money provider when country changes
+                        handleChange("mobileMoneyProvider", "");
                       }}
                       error={Boolean(errors.country)}
                       placeholder="Select country…"
@@ -1169,16 +1181,36 @@ export function AddBeneficiaryModal({
                     onChange={(e) =>
                       handleChange("mobileMoneyProvider", e.target.value)
                     }
+                    disabled={
+                      !formData.country ||
+                      availableMobileMoneyProviders.length === 0
+                    }
                     className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
                       errors.mobileMoneyProvider
                         ? "border-red-400"
                         : "border-slate-200"
-                    } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"}`}
+                    } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"} ${!formData.country || availableMobileMoneyProviders.length === 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
                   >
-                    <option value="">Select provider</option>
-                    <option value="M-Pesa">M-Pesa</option>
-                    <option value="Wallet Money">Wallet Money</option>
+                    <option value="">
+                      {!formData.country
+                        ? "Select country first"
+                        : availableMobileMoneyProviders.length === 0
+                          ? "No providers available for this country"
+                          : "Select provider"}
+                    </option>
+                    {availableMobileMoneyProviders.map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
                   </select>
+                  {availableMobileMoneyProviders.length === 0 &&
+                    formData.country && (
+                      <p className="mt-1 text-xs text-amber-600">
+                        Mobile money is not available for {formData.country}.
+                        Please use bank transfer instead.
+                      </p>
+                    )}
                   {errors.mobileMoneyProvider && (
                     <p className="mt-1 text-xs text-red-500">
                       {errors.mobileMoneyProvider}

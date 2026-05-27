@@ -28,7 +28,7 @@ const BY_ALPHA3 = new Map<string, BankIdentifierCountryConfig>([
     {
       fieldLabel: "IFSC code",
       placeholder: "e.g. HDFC0000001",
-      hint: "11 characters (bank code + 0 + branch). Verified via Razorpay public IFSC API.",
+      hint: "",
       lookup: "ifsc",
       hideFlexBankPicker: true,
       showIdentifierBeforeBankDetails: true,
