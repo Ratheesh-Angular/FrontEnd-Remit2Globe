@@ -25,6 +25,7 @@ import {
   ALPHA2_TO_CURRENCY,
   COU_CODE_TO_CURRENCY,
   CURRENCY_TO_FLAG_ALPHA2,
+  PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY,
 } from "@/lib/send-money-currencies";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
@@ -503,12 +504,20 @@ function SendMoneyPageContent() {
     const byCurrency = new Map<string, RecipientReceiveOption>();
     for (const c of dedupedCatalogCountries) {
       const currency = receiveCurrencyForCouCode(c.couCode);
-      if (!byCurrency.has(currency)) {
-        byCurrency.set(currency, {
-          currency,
-          couCode: c.couCode,
-          couName: c.couName,
-        });
+      const opt: RecipientReceiveOption = {
+        currency,
+        couCode: c.couCode,
+        couName: c.couName,
+      };
+      const existing = byCurrency.get(currency);
+      const preferred =
+        PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY[currency.toUpperCase()];
+      if (!existing) {
+        byCurrency.set(currency, opt);
+        continue;
+      }
+      if (preferred && c.couCode.toUpperCase() === preferred) {
+        byCurrency.set(currency, opt);
       }
     }
     return [...byCurrency.values()].sort((a, b) =>

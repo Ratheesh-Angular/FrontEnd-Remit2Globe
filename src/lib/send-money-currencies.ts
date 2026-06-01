@@ -184,6 +184,11 @@ export const CURRENCY_TO_FLAG_ALPHA2: Record<string, string> = {
   SOS: "SO",
 };
 
+/** ISO3 country to show for a receive currency when multiple catalog rows map to it. */
+export const PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY: Record<string, string> = {
+  USD: "USA",
+};
+
 export const AFRICAN_MOBILE_PAYIN_ISO2 = new Set([
   "KE",
   "TZ",
