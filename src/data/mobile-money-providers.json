@@ -1,21 +1,59 @@
 {
-  "Ghana": ["MTN", "Vodafone/Telecel", "Airtel"],
-  "Kenya": ["M-Pesa", "Airtel"],
+  "Ghana": [
+    "MTN",
+    "Vodafone/Telecel",
+    "Airtel"
+  ],
+  "Kenya": [
+    "M-Pesa",
+    "Airtel"
+  ],
   "Tanzania": [
     "Vodacom M-Pesa",
     "Airtel",
     "Tigo Pesa eWallet",
     "HaloPesa eWallet"
   ],
-  "Uganda": ["Airtel", "MTN"],
-  "Ethiopia": ["M-Pesa Safaricom"],
-  "Rwanda": ["Airtel", "MTN"],
-  "Cameroon": ["Orange", "MTN"],
-  "Senegal": ["Orange"],
-  "Ivory Coast": ["Orange"],
-  "Malawi": ["Airtel"],
-  "Madagascar": ["Airtel"],
-  "South Sudan": ["MTN"],
-  "Bangladesh": ["bKash", "Nagad", "Upay"],
-  "Pakistan": ["JazzCash", "EasyPaisa"]
+  "Uganda": [
+    "Airtel",
+    "MTN"
+  ],
+  "Ethiopia": [
+    "M-Pesa Safaricom"
+  ],
+  "Rwanda": [
+    "Airtel",
+    "MTN"
+  ],
+  "Cameroon": [
+    "Orange",
+    "MTN"
+  ],
+  "Senegal": [
+    "Orange"
+  ],
+  "Ivory Coast": [
+    "Orange"
+  ],
+  "Malawi": [
+    "Airtel"
+  ],
+  "Madagascar": [
+    "Airtel"
+  ],
+  "South Sudan": [
+    "MTN"
+  ],
+  "Bangladesh": [
+    "bKash",
+    "Nagad",
+    "Upay"
+  ],
+  "Pakistan": [
+    "JazzCash",
+    "EasyPaisa"
+  ],
+  "India": [
+    "UPI"
+  ]
 }

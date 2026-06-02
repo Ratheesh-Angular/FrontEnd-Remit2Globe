@@ -22,6 +22,8 @@ import {
 import { flexApiUrl } from "@/lib/flex-api";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import mobileMoneyProvidersData from "@/data/mobile-money-providers.json";
+import { COU_CODE_TO_CURRENCY, CURRENCY_TO_FLAG_ALPHA2 } from "@/lib/send-money-currencies";
+import Flag from "react-world-flags";
 
 interface FlexBank {
   serviceType?: string;
@@ -45,6 +47,10 @@ function dialCodeFromCouCode(couCode: string): string | undefined {
   }
 }
 
+function payCurrencyFlagCode(currency: string): string {
+  return CURRENCY_TO_FLAG_ALPHA2[currency.toUpperCase()] ?? "US";
+}
+
 type DeliveryChannel = "BANK_TRANSFER" | "MOBILE_MONEY";
 
 export interface CreatedBeneficiaryPayload {
@@ -59,6 +65,7 @@ export interface CreatedBeneficiaryPayload {
   swiftBic?: string | null;
   mobileMoneyProvider?: string | null;
   mobileNumber?: string | null;
+  payoutCurrency?: string | null;
   active?: boolean;
 }
 
@@ -91,6 +98,7 @@ interface FormData {
   accountNumber: string;
   confirmAccountNumber: string;
   swiftBic: string;
+  payoutCurrency: string;
   // Mobile Money
   mobileMoneyProvider: string;
   mobileNumber: string;
@@ -106,6 +114,7 @@ const emptyForm: FormData = {
   accountNumber: "",
   confirmAccountNumber: "",
   swiftBic: "",
+  payoutCurrency: "",
   mobileMoneyProvider: "",
   mobileNumber: "",
 };
@@ -122,6 +131,7 @@ function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
     accountNumber: acct,
     confirmAccountNumber: acct,
     swiftBic: String(b.swiftBic ?? ""),
+    payoutCurrency: String(b.payoutCurrency ?? ""),
     mobileMoneyProvider: String(b.mobileMoneyProvider ?? ""),
     mobileNumber: "",
   };
@@ -168,6 +178,7 @@ export function AddBeneficiaryModal({
   const [flexBanks, setFlexBanks] = useState<FlexBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
+  const [payoutCurrencyOpen, setPayoutCurrencyOpen] = useState(false);
   const [bankSearch, setBankSearch] = useState("");
   const [bankIdLookupStatus, setBankIdLookupStatus] = useState<
     "idle" | "loading" | "ok" | "not_found" | "error"
@@ -196,6 +207,17 @@ export function AddBeneficiaryModal({
       matchFlexCountryByLabel(flexCountries, raw)
     );
   }, [catalogCountryList, flexCountries, formData.country]);
+
+  const payoutCurrencyOptions = useMemo(() => {
+    const defaultOptions = ["USD", "EUR", "GBP"];
+    const code = selectedDestinationCountry?.couCode;
+    let local = "";
+    if (code) {
+      local = COU_CODE_TO_CURRENCY[code.toUpperCase()] || "";
+    }
+    const all = local ? [local, ...defaultOptions] : defaultOptions;
+    return Array.from(new Set(all));
+  }, [selectedDestinationCountry?.couCode]);
 
   const bankIdConfig = useMemo(
     () => resolveBankIdentifierConfig(selectedDestinationCountry?.couCode),
@@ -232,14 +254,15 @@ export function AddBeneficiaryModal({
   }, [formData.country]);
 
   useEffect(() => {
-    if (!bankOpen) return;
+    if (!bankOpen && !payoutCurrencyOpen) return;
     const close = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest("[data-bank-dropdown]")) setBankOpen(false);
+      if (!target.closest("[data-payout-dropdown]")) setPayoutCurrencyOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [bankOpen]);
+  }, [bankOpen, payoutCurrencyOpen]);
 
   useEffect(() => {
     if (
@@ -280,6 +303,7 @@ export function AddBeneficiaryModal({
       setSaveError("");
       setIsConfirmingAccount(false);
       setBankOpen(false);
+      setPayoutCurrencyOpen(false);
       setBankSearch("");
       setBankIdLookupStatus("idle");
       setFlexBanks([]);
@@ -313,9 +337,9 @@ export function AddBeneficiaryModal({
     setFormData(
       lockCountry?.couName?.trim()
         ? {
-            ...emptyForm,
-            country: String(lockCountry.couName).trim(),
-          }
+          ...emptyForm,
+          country: String(lockCountry.couName).trim(),
+        }
         : { ...emptyForm },
     );
     setErrors({});
@@ -324,6 +348,7 @@ export function AddBeneficiaryModal({
     setLocalMobileNumber("");
     setFlexBanks([]);
     setBankOpen(false);
+    setPayoutCurrencyOpen(false);
     setBankSearch("");
     setBankIdLookupStatus("idle");
   }, [open, lockCountry?.couName, editBeneficiaryId]);
@@ -504,6 +529,7 @@ export function AddBeneficiaryModal({
 
     if (formData.deliveryChannel === "BANK_TRANSFER") {
       if (!formData.country.trim()) errs.country = "Country is required";
+      if (!formData.payoutCurrency.trim()) errs.payoutCurrency = "Payout currency is required";
       if (!formData.bankName.trim()) errs.bankName = "Bank name is required";
       if (!formData.accountNumber.trim())
         errs.accountNumber = "Account number is required";
@@ -520,6 +546,7 @@ export function AddBeneficiaryModal({
 
     if (formData.deliveryChannel === "MOBILE_MONEY") {
       if (!formData.country.trim()) errs.country = "Country is required";
+      if (!formData.payoutCurrency.trim()) errs.payoutCurrency = "Payout currency is required";
       if (!formData.mobileMoneyProvider.trim())
         errs.mobileMoneyProvider = "Provider is required";
       if (!localMobileNumber.trim())
@@ -551,12 +578,14 @@ export function AddBeneficiaryModal({
 
       if (formData.deliveryChannel === "BANK_TRANSFER") {
         payload.country = formData.country.trim();
+        payload.payoutCurrency = formData.payoutCurrency.trim();
         payload.bankName = formData.bankName.trim();
         payload.branchName = formData.branchName.trim() || undefined;
         payload.accountNumber = formData.confirmAccountNumber.trim(); // Use confirmed account number
         payload.swiftBic = formData.swiftBic.trim();
       } else {
         payload.country = formData.country.trim();
+        payload.payoutCurrency = formData.payoutCurrency.trim();
         payload.mobileMoneyProvider = formData.mobileMoneyProvider.trim();
         const dial = selectedDestinationCountry
           ? dialCodeFromCouCode(selectedDestinationCountry.couCode)
@@ -657,6 +686,159 @@ export function AddBeneficiaryModal({
         {/* Form */}
         {showForm && (
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Destination Country <span className="text-red-500">*</span>
+                </label>
+                {countryLocked ? (
+                  <>
+                    <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
+                      {selectedDestinationCountry ? (
+                        <>
+                          <FlexCountryFlag
+                            couCode={selectedDestinationCountry.couCode}
+                          />
+                          <span className="font-medium">
+                            {selectedDestinationCountry.couName}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-medium">
+                          {formData.country ||
+                            lockCountry?.couName?.trim() ||
+                            "—"}
+                        </span>
+                      )}
+                      <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
+                        From transfer
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Country matches the recipient you selected for this
+                      transfer.
+                    </p>
+                  </>
+                ) : (
+                  <CatalogCountrySelect
+                    value={formData.country}
+                    onChange={(couName) => {
+                      handleChange("country", couName);
+                      // We reset the payout currency so it can be re-selected/auto-filled
+                      handleChange("payoutCurrency", "");
+                      handleChange("bankName", "");
+                      handleChange("branchName", "");
+                      handleChange("swiftBic", "");
+                      setBankIdLookupStatus("idle");
+                      setBankSearch("");
+                      setBankOpen(false);
+                    }}
+                    error={Boolean(errors.country)}
+                    placeholder="Select destination country…"
+                    countries={catalogCountryList}
+                    countriesLoading={catalogCountriesLoading}
+                    countriesError={catalogCountriesError}
+                  />
+                )}
+                {errors.country && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {errors.country}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Payout Currency <span className="text-red-500">*</span>
+                </label>
+                <div className="relative" data-payout-dropdown>
+                  <button
+                    type="button"
+                    disabled={!formData.country}
+                    onClick={() => setPayoutCurrencyOpen((v) => !v)}
+                    className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.payoutCurrency ? "border-red-400" : "border-slate-200"
+                      } ${!formData.country ? "bg-slate-50 cursor-not-allowed opacity-50" : "bg-white"}`}
+                  >
+                    {formData.payoutCurrency ? (
+                      <>
+                        <Flag
+                          code={payCurrencyFlagCode(formData.payoutCurrency)}
+                          className="w-5 h-3.5 rounded object-cover shrink-0"
+                        />
+                        <span className="text-slate-900 truncate">
+                          {formData.payoutCurrency}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">
+                        {!formData.country ? "Select country first" : "Select currency"}
+                      </span>
+                    )}
+                    <svg
+                      className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+
+                  {payoutCurrencyOpen && payoutCurrencyOptions.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                      <ul className="max-h-52 overflow-y-auto py-1">
+                        {payoutCurrencyOptions.map((cur) => (
+                          <li key={cur}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleChange("payoutCurrency", cur);
+                                setPayoutCurrencyOpen(false);
+                              }}
+                              className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${formData.payoutCurrency === cur
+                                ? "bg-teal-50 text-teal-700 font-medium"
+                                : "text-slate-700"
+                                }`}
+                            >
+                              <Flag
+                                code={payCurrencyFlagCode(cur)}
+                                className="w-5 h-3.5 rounded object-cover shrink-0"
+                              />
+                              <span className="truncate">{cur}</span>
+                              {formData.payoutCurrency === cur && (
+                                <svg
+                                  className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                {errors.payoutCurrency && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {errors.payoutCurrency}
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Delivery Channel */}
             <div>
               <label className="text-sm font-medium text-slate-700 block mb-1.5">
@@ -697,9 +879,8 @@ export function AddBeneficiaryModal({
                   autoComplete="given-name"
                   value={formData.firstName}
                   onChange={(e) => handleChange("firstName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                    errors.firstName ? "border-red-400" : "border-slate-200"
-                  }`}
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.firstName ? "border-red-400" : "border-slate-200"
+                    }`}
                 />
                 {errors.firstName && (
                   <p className="mt-1 text-xs text-red-500">
@@ -718,9 +899,8 @@ export function AddBeneficiaryModal({
                   autoComplete="family-name"
                   value={formData.lastName}
                   onChange={(e) => handleChange("lastName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                    errors.lastName ? "border-red-400" : "border-slate-200"
-                  }`}
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.lastName ? "border-red-400" : "border-slate-200"
+                    }`}
                 />
                 {errors.lastName && (
                   <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
@@ -731,63 +911,7 @@ export function AddBeneficiaryModal({
             {/* Bank Transfer Fields */}
             {formData.deliveryChannel === "BANK_TRANSFER" && (
               <>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                    Destination Country <span className="text-red-500">*</span>
-                  </label>
-                  {countryLocked ? (
-                    <>
-                      <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                        {selectedDestinationCountry ? (
-                          <>
-                            <FlexCountryFlag
-                              couCode={selectedDestinationCountry.couCode}
-                            />
-                            <span className="font-medium">
-                              {selectedDestinationCountry.couName}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="font-medium">
-                            {formData.country ||
-                              lockCountry?.couName?.trim() ||
-                              "—"}
-                          </span>
-                        )}
-                        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
-                          From transfer
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Country matches the recipient you selected for this
-                        transfer.
-                      </p>
-                    </>
-                  ) : (
-                    <CatalogCountrySelect
-                      value={formData.country}
-                      onChange={(couName) => {
-                        handleChange("country", couName);
-                        handleChange("bankName", "");
-                        handleChange("branchName", "");
-                        handleChange("swiftBic", "");
-                        setBankIdLookupStatus("idle");
-                        setBankSearch("");
-                        setBankOpen(false);
-                      }}
-                      error={Boolean(errors.country)}
-                      placeholder="Select destination country…"
-                      countries={catalogCountryList}
-                      countriesLoading={catalogCountriesLoading}
-                      countriesError={catalogCountriesError}
-                    />
-                  )}
-                  {errors.country && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.country}
-                    </p>
-                  )}
-                </div>
+
 
                 {bankIdConfig.showIdentifierBeforeBankDetails && (
                   <div>
@@ -810,9 +934,8 @@ export function AddBeneficiaryModal({
                               : raw;
                         handleChange("swiftBic", v);
                       }}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.swiftBic ? "border-red-400" : "border-slate-200"
-                      }`}
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.swiftBic ? "border-red-400" : "border-slate-200"
+                        }`}
                     />
                     <p className="mt-1 text-xs text-slate-500">
                       {bankIdConfig.hint}
@@ -851,7 +974,31 @@ export function AddBeneficiaryModal({
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">
                     Bank name <span className="text-red-500">*</span>
                   </label>
-                  {!showFlexBankDropdown ? (
+                  <input
+                    type="text"
+                    disabled={Boolean(
+                      useFlexBankListUi && !formData.country?.trim(),
+                    )}
+                    placeholder={
+                      useFlexBankListUi && !formData.country?.trim()
+                        ? "Select country first"
+                        : useFlexBankListUi &&
+                          formData.country?.trim() &&
+                          !banksLoading &&
+                          flexBanks.length === 0
+                          ? "Type bank name"
+                          : bankIdConfig.lookup === "ifsc"
+                            ? "Filled from IFSC or type manually"
+                            : bankIdConfig.lookup === "aba"
+                              ? "Filled from routing number or type manually"
+                              : "Bank name"
+                    }
+                    value={formData.bankName}
+                    onChange={(e) => handleChange("bankName", e.target.value)}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${errors.bankName ? "border-red-400" : "border-slate-200"
+                      }`}
+                  />
+                  {/* {!showFlexBankDropdown ? (
                     <input
                       type="text"
                       disabled={Boolean(
@@ -965,7 +1112,7 @@ export function AddBeneficiaryModal({
                         </div>
                       )}
                     </div>
-                  )}
+                  )} */}
                   {errors.bankName && (
                     <p className="mt-1 text-xs text-red-500">
                       {errors.bankName}
@@ -1017,11 +1164,10 @@ export function AddBeneficiaryModal({
                       }
                     }}
                     onFocus={() => setIsConfirmingAccount(false)}
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.accountNumber
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    }`}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.accountNumber
+                      ? "border-red-400"
+                      : "border-slate-200"
+                      }`}
                   />
                   {errors.accountNumber && (
                     <p className="mt-1 text-xs text-red-500">
@@ -1062,11 +1208,10 @@ export function AddBeneficiaryModal({
                     }}
                     onFocus={() => setIsConfirmingAccount(true)}
                     onBlur={() => setIsConfirmingAccount(false)}
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.confirmAccountNumber
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    }`}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.confirmAccountNumber
+                      ? "border-red-400"
+                      : "border-slate-200"
+                      }`}
                   />
                   {errors.confirmAccountNumber && (
                     <p className="mt-1 text-xs text-red-500">
@@ -1096,9 +1241,8 @@ export function AddBeneficiaryModal({
                               : raw;
                         handleChange("swiftBic", v);
                       }}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                        errors.swiftBic ? "border-red-400" : "border-slate-200"
-                      }`}
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.swiftBic ? "border-red-400" : "border-slate-200"
+                        }`}
                     />
                     <p className="mt-1 text-xs text-slate-500">
                       {bankIdConfig.hint}
@@ -1116,59 +1260,150 @@ export function AddBeneficiaryModal({
             {/* Mobile Money Fields */}
             {formData.deliveryChannel === "MOBILE_MONEY" && (
               <>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                    Country <span className="text-red-500">*</span>
-                  </label>
-                  {countryLocked ? (
-                    <>
-                      <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
-                        {selectedDestinationCountry ? (
-                          <>
-                            <FlexCountryFlag
-                              couCode={selectedDestinationCountry.couCode}
-                            />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      Country <span className="text-red-500">*</span>
+                    </label>
+                    {countryLocked ? (
+                      <>
+                        <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
+                          {selectedDestinationCountry ? (
+                            <>
+                              <FlexCountryFlag
+                                couCode={selectedDestinationCountry.couCode}
+                              />
+                              <span className="font-medium">
+                                {selectedDestinationCountry.couName}
+                              </span>
+                            </>
+                          ) : (
                             <span className="font-medium">
-                              {selectedDestinationCountry.couName}
+                              {formData.country ||
+                                lockCountry?.couName?.trim() ||
+                                "—"}
+                            </span>
+                          )}
+                          <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
+                            From transfer
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Country matches the recipient you selected for this
+                          transfer.
+                        </p>
+                      </>
+                    ) : (
+                      <CatalogCountrySelect
+                        value={formData.country}
+                        onChange={(couName) => {
+                          handleChange("country", couName);
+                          setLocalMobileNumber("");
+                          handleChange("payoutCurrency", "");
+                          // Clear mobile money provider when country changes
+                          handleChange("mobileMoneyProvider", "");
+                        }}
+                        error={Boolean(errors.country)}
+                        placeholder="Select country…"
+                        countries={catalogCountryList}
+                        countriesLoading={catalogCountriesLoading}
+                        countriesError={catalogCountriesError}
+                      />
+                    )}
+                    {errors.country && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.country}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      Payout Currency <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative" data-payout-dropdown>
+                      <button
+                        type="button"
+                        disabled={!formData.country}
+                        onClick={() => setPayoutCurrencyOpen((v) => !v)}
+                        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.payoutCurrency ? "border-red-400" : "border-slate-200"
+                          } ${!formData.country ? "bg-slate-50 cursor-not-allowed opacity-50" : "bg-white"}`}
+                      >
+                        {formData.payoutCurrency ? (
+                          <>
+                            <Flag
+                              code={payCurrencyFlagCode(formData.payoutCurrency)}
+                              className="w-5 h-3.5 rounded object-cover shrink-0"
+                            />
+                            <span className="text-slate-900 truncate">
+                              {formData.payoutCurrency}
                             </span>
                           </>
                         ) : (
-                          <span className="font-medium">
-                            {formData.country ||
-                              lockCountry?.couName?.trim() ||
-                              "—"}
+                          <span className="text-slate-400">
+                            {!formData.country ? "Select country first" : "Select currency"}
                           </span>
                         )}
-                        <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
-                          From transfer
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Country matches the recipient you selected for this
-                        transfer.
+                        <svg
+                          className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+
+                      {payoutCurrencyOpen && payoutCurrencyOptions.length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                          <ul className="max-h-52 overflow-y-auto py-1">
+                            {payoutCurrencyOptions.map((cur) => (
+                              <li key={cur}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleChange("payoutCurrency", cur);
+                                    setPayoutCurrencyOpen(false);
+                                  }}
+                                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${formData.payoutCurrency === cur
+                                    ? "bg-teal-50 text-teal-700 font-medium"
+                                    : "text-slate-700"
+                                    }`}
+                                >
+                                  <Flag
+                                    code={payCurrencyFlagCode(cur)}
+                                    className="w-5 h-3.5 rounded object-cover shrink-0"
+                                  />
+                                  <span className="truncate">{cur}</span>
+                                  {formData.payoutCurrency === cur && (
+                                    <svg
+                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {errors.payoutCurrency && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.payoutCurrency}
                       </p>
-                    </>
-                  ) : (
-                    <CatalogCountrySelect
-                      value={formData.country}
-                      onChange={(couName) => {
-                        handleChange("country", couName);
-                        setLocalMobileNumber("");
-                        // Clear mobile money provider when country changes
-                        handleChange("mobileMoneyProvider", "");
-                      }}
-                      error={Boolean(errors.country)}
-                      placeholder="Select country…"
-                      countries={catalogCountryList}
-                      countriesLoading={catalogCountriesLoading}
-                      countriesError={catalogCountriesError}
-                    />
-                  )}
-                  {errors.country && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.country}
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1185,11 +1420,10 @@ export function AddBeneficiaryModal({
                       !formData.country ||
                       availableMobileMoneyProviders.length === 0
                     }
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.mobileMoneyProvider
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"} ${!formData.country || availableMobileMoneyProviders.length === 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
+                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${errors.mobileMoneyProvider
+                      ? "border-red-400"
+                      : "border-slate-200"
+                      } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"} ${!formData.country || availableMobileMoneyProviders.length === 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
                   >
                     <option value="">
                       {!formData.country
@@ -1223,11 +1457,10 @@ export function AddBeneficiaryModal({
                     Mobile Number <span className="text-red-500">*</span>
                   </label>
                   <div
-                    className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
-                      errors.mobileNumber
-                        ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
-                        : "border-slate-200"
-                    }`}
+                    className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${errors.mobileNumber
+                      ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
+                      : "border-slate-200"
+                      }`}
                   >
                     <div className="flex-shrink-0">
                       <div className="flex items-center gap-1.5 px-3 h-10 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">

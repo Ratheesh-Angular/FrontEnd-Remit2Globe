@@ -48,7 +48,7 @@ const BY_ALPHA3 = new Map<string, BankIdentifierCountryConfig>([
   [
     "CAN",
     {
-      fieldLabel: "Institution / transit / SWIFT",
+      fieldLabel: "Transit / SWIFT",
       placeholder: "e.g. 003 + transit + SWIFT if applicable",
       hint: "Use your bank’s Canadian institution number, transit number, or SWIFT as required for the transfer.",
       lookup: "none",
