@@ -783,7 +783,7 @@ function SendMoneyPageContent() {
     if (
       resolved &&
       receiveCurrencyForCouCode(resolved.couCode) !==
-      receiveCurrency.trim().toUpperCase()
+        receiveCurrency.trim().toUpperCase()
     ) {
       setSelectedBen(null);
       setBeneficiaryId("");
@@ -1092,11 +1092,11 @@ function SendMoneyPageContent() {
         setTransferRow((tr) =>
           tr
             ? {
-              ...tr,
-              paymentProofs: (tr.paymentProofs ?? []).filter(
-                (p) => p.id !== row.remoteId,
-              ),
-            }
+                ...tr,
+                paymentProofs: (tr.paymentProofs ?? []).filter(
+                  (p) => p.id !== row.remoteId,
+                ),
+              }
             : tr,
         );
       } catch (e: unknown) {
@@ -1193,15 +1193,15 @@ function SendMoneyPageContent() {
       generatedAt: new Date(),
       amounts: amt
         ? {
-          fromCurrency: amt.fromCurrency,
-          toCurrency: amt.toCurrency,
-          youSend: amt.youSend,
-          fee: amt.fee,
-          totalToPay: amt.totalToPay,
-          receive: amt.receive,
-          hasRate: amt.hasRate,
-          rate: amt.hasRate && amt.rate != null ? amt.rate : null,
-        }
+            fromCurrency: amt.fromCurrency,
+            toCurrency: amt.toCurrency,
+            youSend: amt.youSend,
+            fee: amt.fee,
+            totalToPay: amt.totalToPay,
+            receive: amt.receive,
+            hasRate: amt.hasRate,
+            rate: amt.hasRate && amt.rate != null ? amt.rate : null,
+          }
         : null,
       recipientCountry: recipientCouName,
       beneficiary: {
@@ -1221,15 +1221,15 @@ function SendMoneyPageContent() {
         : null,
       bankAccounts: payInIsBankTransfer
         ? bankAccountsToShow.map((a) => ({
-          bankName: a.bankName,
-          accountName: a.accountName,
-          accountNumber: a.accountNumber,
-          swiftBic: a.swiftBic,
-          iban: a.iban,
-          currency: a.currency,
-          countryNote: a.countryNote,
-          instructions: a.instructions,
-        }))
+            bankName: a.bankName,
+            accountName: a.accountName,
+            accountNumber: a.accountNumber,
+            swiftBic: a.swiftBic,
+            iban: a.iban,
+            currency: a.currency,
+            countryNote: a.countryNote,
+            instructions: a.instructions,
+          }))
         : undefined,
       additionalNote: postConfirmMessage?.trim() || undefined,
     });
@@ -1261,12 +1261,13 @@ function SendMoneyPageContent() {
             return (
               <div key={label} className="flex items-center shrink-0">
                 <div
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${active
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+                    active
                       ? "bg-teal-600 text-white border-teal-600"
                       : done
                         ? "bg-teal-50 text-teal-800 border-teal-200"
                         : "bg-white text-slate-500 border-slate-200"
-                    }`}
+                  }`}
                 >
                   {done ? <Check className="w-3.5 h-3.5" /> : <span>{n}</span>}
                   <span className="hidden sm:inline">{label}</span>
@@ -1365,10 +1366,11 @@ function SendMoneyPageContent() {
                               setPayCurrency(cur);
                               setPayCurrencyOpen(false);
                             }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${payCurrency === cur
+                            className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                              payCurrency === cur
                                 ? "bg-teal-50 text-teal-800 font-medium"
                                 : "text-slate-700"
-                              }`}
+                            }`}
                           >
                             <Flag
                               code={payCurrencyFlagCode(cur)}
@@ -1483,10 +1485,11 @@ function SendMoneyPageContent() {
                               setRecipientCouName(opt.couName);
                               setRecipientOpen(false);
                             }}
-                            className={`flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${receiveCurrency === opt.currency
+                            className={`flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                              receiveCurrency === opt.currency
                                 ? "bg-teal-50 text-teal-800 font-medium"
                                 : "text-slate-700"
-                              }`}
+                            }`}
                           >
                             <Flag
                               code={payCurrencyFlagCode(opt.currency)}
@@ -1497,10 +1500,11 @@ function SendMoneyPageContent() {
                                 {opt.currency}
                               </span>
                               <span
-                                className={`text-[11px] leading-snug line-clamp-2 ${receiveCurrency === opt.currency
+                                className={`text-[11px] leading-snug line-clamp-2 ${
+                                  receiveCurrency === opt.currency
                                     ? "text-teal-700/85"
                                     : "text-slate-500"
-                                  }`}
+                                }`}
                                 title={opt.couName}
                               >
                                 {opt.couName}
@@ -1590,10 +1594,11 @@ function SendMoneyPageContent() {
                       setBeneficiaryId(b.id);
                       setSelectedBen(b);
                     }}
-                    className={`w-full text-left rounded-lg border px-3 py-3 transition-colors ${beneficiaryId === b.id
+                    className={`w-full text-left rounded-lg border px-3 py-3 transition-colors ${
+                      beneficiaryId === b.id
                         ? "border-teal-600 bg-teal-50"
                         : "border-slate-200 hover:border-slate-300"
-                      }`}
+                    }`}
                   >
                     <p className="text-sm font-semibold text-slate-900">
                       {formatBeneficiaryName(b)}
@@ -1720,10 +1725,11 @@ function SendMoneyPageContent() {
                 <button
                   type="button"
                   onClick={() => setPayInMethod("BANK_TRANSFER")}
-                  className={`h-10 px-4 rounded-lg text-sm border ${payInMethod === "BANK_TRANSFER"
+                  className={`h-10 px-4 rounded-lg text-sm border ${
+                    payInMethod === "BANK_TRANSFER"
                       ? "bg-teal-600 text-white border-teal-600"
                       : "border-slate-200 bg-white hover:bg-slate-50"
-                    }`}
+                  }`}
                 >
                   Bank transfer
                 </button>
@@ -1731,10 +1737,11 @@ function SendMoneyPageContent() {
                   <button
                     type="button"
                     onClick={() => setPayInMethod("MOBILE_MONEY")}
-                    className={`h-10 px-4 rounded-lg text-sm border ${payInMethod === "MOBILE_MONEY"
+                    className={`h-10 px-4 rounded-lg text-sm border ${
+                      payInMethod === "MOBILE_MONEY"
                         ? "bg-teal-600 text-white border-teal-600"
                         : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
+                    }`}
                   >
                     Mobile money
                   </button>
@@ -1793,7 +1800,7 @@ function SendMoneyPageContent() {
                   defaultIso2={ctx.senderCountryIso2}
                   error={
                     payerPhone.trim().length > 0 &&
-                      !isValidE164Phone(payerPhone)
+                    !isValidE164Phone(payerPhone)
                       ? "Enter a valid mobile number for the selected country (check length and digits)."
                       : undefined
                   }
@@ -2094,7 +2101,7 @@ function SendMoneyPageContent() {
                     </div>
                   ) : null}
                   {confirmationAmounts.hasRate &&
-                    confirmationAmounts.rate != null ? (
+                  confirmationAmounts.rate != null ? (
                     <p className="pt-1 text-[11px] text-slate-500 tabular-nums text-center">
                       1 {confirmationAmounts.fromCurrency} ={" "}
                       {fmtMoney(confirmationAmounts.rate)}{" "}
@@ -2146,183 +2153,183 @@ function SendMoneyPageContent() {
 
           {(payInMethod === "BANK_TRANSFER" ||
             transferRow?.payInMethod === "BANK_TRANSFER") && (
-              <div className="w-full max-w-3xl mx-auto space-y-3 text-center">
-                <ul className="space-y-2 w-full text-left">
-                  {bankAccountsToShow.map((a) => (
-                    <li
-                      key={a.id}
-                      className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 text-xs shadow-sm"
-                    >
-                      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                        <span className="font-semibold text-slate-900 leading-tight">
-                          {a.bankName}
-                        </span>
-                        <span className="shrink-0 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">
-                          {a.currency}
-                        </span>
+            <div className="w-full max-w-3xl mx-auto space-y-3 text-center">
+              <ul className="space-y-2 w-full text-left">
+                {bankAccountsToShow.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-3 text-xs shadow-sm"
+                  >
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      <span className="font-semibold text-slate-900 leading-tight">
+                        {a.bankName}
+                      </span>
+                      <span className="shrink-0 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">
+                        {a.currency}
+                      </span>
+                    </div>
+                    {a.countryNote ? (
+                      <p className="text-[11px] text-slate-500 mb-1.5 line-clamp-1">
+                        {a.countryNote}
+                      </p>
+                    ) : null}
+                    <dl className="space-y-1 text-slate-700">
+                      <div className="flex flex-wrap gap-x-1 gap-y-0">
+                        <dt className="text-slate-400 shrink-0">Name</dt>
+                        <dd className="font-medium text-slate-800 min-w-0">
+                          {a.accountName}
+                        </dd>
                       </div>
-                      {a.countryNote ? (
-                        <p className="text-[11px] text-slate-500 mb-1.5 line-clamp-1">
-                          {a.countryNote}
+                      <div className="flex flex-wrap gap-x-1 gap-y-0 items-baseline">
+                        <dt className="text-slate-400 shrink-0">Account</dt>
+                        <dd className="font-mono font-semibold text-slate-900 break-all">
+                          {a.accountNumber}
+                        </dd>
+                      </div>
+                      {(a.swiftBic || a.iban) && (
+                        <div className="text-[11px] text-slate-600 flex flex-wrap gap-x-2 gap-y-0.5">
+                          {a.swiftBic ? (
+                            <span>
+                              SWIFT{" "}
+                              <span className="font-mono">{a.swiftBic}</span>
+                            </span>
+                          ) : null}
+                          {a.iban ? (
+                            <span>
+                              IBAN{" "}
+                              <span className="font-mono break-all">
+                                {a.iban}
+                              </span>
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                      {a.instructions ? (
+                        <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 line-clamp-2">
+                          {a.instructions}
                         </p>
                       ) : null}
-                      <dl className="space-y-1 text-slate-700">
-                        <div className="flex flex-wrap gap-x-1 gap-y-0">
-                          <dt className="text-slate-400 shrink-0">Name</dt>
-                          <dd className="font-medium text-slate-800 min-w-0">
-                            {a.accountName}
-                          </dd>
-                        </div>
-                        <div className="flex flex-wrap gap-x-1 gap-y-0 items-baseline">
-                          <dt className="text-slate-400 shrink-0">Account</dt>
-                          <dd className="font-mono font-semibold text-slate-900 break-all">
-                            {a.accountNumber}
-                          </dd>
-                        </div>
-                        {(a.swiftBic || a.iban) && (
-                          <div className="text-[11px] text-slate-600 flex flex-wrap gap-x-2 gap-y-0.5">
-                            {a.swiftBic ? (
-                              <span>
-                                SWIFT{" "}
-                                <span className="font-mono">{a.swiftBic}</span>
-                              </span>
-                            ) : null}
-                            {a.iban ? (
-                              <span>
-                                IBAN{" "}
-                                <span className="font-mono break-all">
-                                  {a.iban}
-                                </span>
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                        {a.instructions ? (
-                          <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 line-clamp-2">
-                            {a.instructions}
-                          </p>
-                        ) : null}
-                      </dl>
-                    </li>
-                  ))}
-                </ul>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
 
-                <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 sm:p-4 w-full text-left">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
-                    <p className="text-xs text-slate-600 text-center sm:text-left flex-1 min-w-0">
-                      <span className="font-medium text-slate-800">
-                        Payment proof
-                      </span>{" "}
-                      <span className="block text-[11px] text-slate-500 mt-0.5">
-                        Receipts or screenshots help us match your payment faster.
-                      </span>
-                    </p>
-                    <div className="shrink-0 flex justify-center sm:justify-end">
-                      <input
-                        ref={bankProofInputRef}
-                        type="file"
-                        className="sr-only"
-                        accept={PAYMENT_PROOF_ACCEPT}
-                        multiple
-                        onChange={(e) => {
-                          void addBankPaymentProofFiles(e.target.files);
-                          e.target.value = "";
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => bankProofInputRef.current?.click()}
-                        className="h-8 w-full sm:w-auto px-3 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5"
-                      >
-                        <Upload className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                        Upload
-                      </button>
-                    </div>
+              <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 sm:p-4 w-full text-left">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
+                  <p className="text-xs text-slate-600 text-center sm:text-left flex-1 min-w-0">
+                    <span className="font-medium text-slate-800">
+                      Payment proof
+                    </span>{" "}
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Receipts or screenshots help us match your payment faster.
+                    </span>
+                  </p>
+                  <div className="shrink-0 flex justify-center sm:justify-end">
+                    <input
+                      ref={bankProofInputRef}
+                      type="file"
+                      className="sr-only"
+                      accept={PAYMENT_PROOF_ACCEPT}
+                      multiple
+                      onChange={(e) => {
+                        void addBankPaymentProofFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => bankProofInputRef.current?.click()}
+                      className="h-8 w-full sm:w-auto px-3 rounded-md border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Upload className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                      Upload
+                    </button>
                   </div>
-                  {bankPaymentProofs.length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {bankPaymentProofs.map((p) => (
-                        <li
-                          key={p.clientId}
-                          className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/80 p-1.5"
-                        >
-                          <div className="h-8 w-8 shrink-0 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
-                            {isImageMime(p.mimeType) && p.status !== "error" ? (
-                              <button
-                                type="button"
-                                onClick={() => viewBankProof(p)}
-                                disabled={p.status === "uploading"}
-                                className="h-full w-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:opacity-50"
-                                aria-label={`View ${p.fileName}`}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={p.displayUrl}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                />
-                              </button>
-                            ) : (
-                              <FileText
-                                className="w-4 h-4 text-slate-500"
-                                aria-hidden
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className="text-[11px] font-medium text-slate-800 truncate"
-                              title={p.fileName}
-                            >
-                              {p.fileName}
-                            </p>
-                            <p className="text-[10px] text-slate-500 tabular-nums">
-                              {p.status === "uploading" ? (
-                                <span className="text-teal-700">Uploading…</span>
-                              ) : p.status === "error" ? (
-                                <span className="text-red-600">
-                                  {p.errorMessage ?? "Upload failed"}
-                                </span>
-                              ) : p.fileSize >= 1024 * 1024 ? (
-                                `${(p.fileSize / (1024 * 1024)).toFixed(1)} MB`
-                              ) : (
-                                `${(p.fileSize / 1024).toFixed(1)} KB`
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
+                </div>
+                {bankPaymentProofs.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {bankPaymentProofs.map((p) => (
+                      <li
+                        key={p.clientId}
+                        className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/80 p-1.5"
+                      >
+                        <div className="h-8 w-8 shrink-0 rounded overflow-hidden bg-slate-200 flex items-center justify-center">
+                          {isImageMime(p.mimeType) && p.status !== "error" ? (
                             <button
                               type="button"
                               onClick={() => viewBankProof(p)}
-                              disabled={
-                                p.status === "uploading" || p.status === "error"
-                              }
-                              className="p-1 rounded text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40"
-                              aria-label="View file"
-                              title="View"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void removeBankProof(p)}
                               disabled={p.status === "uploading"}
-                              className="p-1 rounded text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
-                              aria-label="Remove file"
+                              className="h-full w-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:opacity-50"
+                              aria-label={`View ${p.fileName}`}
                             >
-                              <X className="w-3.5 h-3.5" />
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={p.displayUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
                             </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
+                          ) : (
+                            <FileText
+                              className="w-4 h-4 text-slate-500"
+                              aria-hidden
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-[11px] font-medium text-slate-800 truncate"
+                            title={p.fileName}
+                          >
+                            {p.fileName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 tabular-nums">
+                            {p.status === "uploading" ? (
+                              <span className="text-teal-700">Uploading…</span>
+                            ) : p.status === "error" ? (
+                              <span className="text-red-600">
+                                {p.errorMessage ?? "Upload failed"}
+                              </span>
+                            ) : p.fileSize >= 1024 * 1024 ? (
+                              `${(p.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                            ) : (
+                              `${(p.fileSize / 1024).toFixed(1)} KB`
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => viewBankProof(p)}
+                            disabled={
+                              p.status === "uploading" || p.status === "error"
+                            }
+                            className="p-1 rounded text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40"
+                            aria-label="View file"
+                            title="View"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removeBankProof(p)}
+                            disabled={p.status === "uploading"}
+                            className="p-1 rounded text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                            aria-label="Remove file"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
-            )}
+            </div>
+          )}
 
           {payInMethod === "MOBILE_MONEY" ||
-            transferRow?.payInMethod === "MOBILE_MONEY" ? (
+          transferRow?.payInMethod === "MOBILE_MONEY" ? (
             <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-teal-100 bg-teal-50/30 px-3 py-2 max-w-2xl mx-auto text-center">
               <span className="font-medium text-slate-800">Mobile money: </span>
               Approve the collection on{" "}
@@ -2338,12 +2345,12 @@ function SendMoneyPageContent() {
             payInMethod === "MOBILE_MONEY" ||
             transferRow?.payInMethod === "MOBILE_MONEY"
           ) && (
-              <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 max-w-2xl mx-auto text-center">
-                Once the funds are credited to our account, the transfer will be
-                automatically processed to your beneficiary account. The transfer
-                status will be updated on the transaction history page
-              </p>
-            )}
+            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 max-w-2xl mx-auto text-center">
+              Once the funds are credited to our account, the transfer will be
+              automatically processed to your beneficiary account. The transfer
+              status will be updated on the transaction history page
+            </p>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-stretch w-full max-w-md mx-auto">
             <button
