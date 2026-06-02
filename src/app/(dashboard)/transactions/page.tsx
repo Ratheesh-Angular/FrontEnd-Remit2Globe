@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { sessionApi as api } from "@/lib/api";
-import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
 import { ViewTransactionModal } from "@/components/transactions/ViewTransactionModal";
+import { RemittanceTransfersTable } from "@/components/transactions/RemittanceTransfersTable";
 import { Loader } from "@/components/ui/Loader";
 import { AppDialog } from "@/components/ui/AppDialog";
 import type { AppDialogProps } from "@/components/ui/AppDialog";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
-import { Eye, ArrowLeftRight, Send } from "lucide-react";
+import { ArrowLeftRight, Send } from "lucide-react";
+
+const TRANSACTIONS_PAGE_SIZE = 5;
 
 type DialogFields = Pick<
   AppDialogProps,
@@ -34,48 +36,6 @@ type Lookups = {
   transferPurpose: { value: string; label: string }[];
   relationship: { value: string; label: string }[];
 };
-
-function statusLabel(s: string) {
-  const map: Record<string, string> = {
-    PENDING_PAYMENT: "Pending payment",
-    PAYMENT_SUBMITTED: "Payment submitted",
-    UNDER_REVIEW: "Under review",
-    PROCESSING: "Processing",
-    COMPLETED: "Completed",
-    FAILED: "Failed",
-    CANCELLED: "Cancelled",
-  };
-  return map[s] ?? s.replace(/_/g, " ");
-}
-
-function statusBadgeClass(s: string) {
-  if (s === "COMPLETED") return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  if (s === "FAILED" || s === "CANCELLED")
-    return "bg-red-50 text-red-800 border-red-200";
-  if (s === "PENDING_PAYMENT") return "bg-amber-50 text-amber-900 border-amber-200";
-  if (s === "PROCESSING" || s === "UNDER_REVIEW" || s === "PAYMENT_SUBMITTED")
-    return "bg-sky-50 text-sky-800 border-sky-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function fmtListDate(iso: string | undefined) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 type DateRangePreset =
   | "ALL"
@@ -146,7 +106,10 @@ function computeDateRange(
     }
     case "THIS_MONTH": {
       const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      return { from: formatLocalYmd(firstDay), to: formatLocalYmd(startOfToday) };
+      return {
+        from: formatLocalYmd(firstDay),
+        to: formatLocalYmd(startOfToday),
+      };
     }
     case "LAST_MONTH": {
       const firstDayLastMonth = new Date(
@@ -154,7 +117,11 @@ function computeDateRange(
         today.getMonth() - 1,
         1,
       );
-      const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      const lastDayLastMonth = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        0,
+      );
       return {
         from: formatLocalYmd(firstDayLastMonth),
         to: formatLocalYmd(lastDayLastMonth),
@@ -180,7 +147,8 @@ export default function TransactionsPage() {
   /** Last applied reference (empty-state copy + refresh after modal). */
   const [appliedRef, setAppliedRef] = useState("");
 
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("ALL");
+  const [dateRangePreset, setDateRangePreset] =
+    useState<DateRangePreset>("ALL");
   const [customFromInput, setCustomFromInput] = useState("");
   const [customToInput, setCustomToInput] = useState("");
   const [customRangeError, setCustomRangeError] = useState("");
@@ -191,12 +159,18 @@ export default function TransactionsPage() {
 
   const [viewId, setViewId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogFields | null>(null);
+  const [tablePage, setTablePage] = useState(1);
 
   const appliedRefRef = useRef(appliedRef);
   appliedRefRef.current = appliedRef;
 
   const buildQueryParams = useCallback(
-    (ref: string, preset: DateRangePreset, customFrom: string, customTo: string) => {
+    (
+      ref: string,
+      preset: DateRangePreset,
+      customFrom: string,
+      customTo: string,
+    ) => {
       const p: Record<string, string> = { limit: "200" };
       if (ref.trim()) p.reference = ref.trim();
 
@@ -221,7 +195,10 @@ export default function TransactionsPage() {
         setRows(res.data.data.transfers);
       } catch (e) {
         console.error("Error loading transfers:", e);
-        const errorMsg = apiErrorMessage(e, "Check your connection and try again.");
+        const errorMsg = apiErrorMessage(
+          e,
+          "Check your connection and try again.",
+        );
         setDialog({
           variant: "error",
           title: "Could not load transactions",
@@ -350,10 +327,43 @@ export default function TransactionsPage() {
   };
 
   const refreshListWithAppliedFilters = useCallback(() => {
-    void loadTransfers(buildQueryParams(appliedRef, appliedDateRangePreset, appliedCustomFrom, appliedCustomTo), {
-      quiet: true,
-    });
-  }, [loadTransfers, buildQueryParams, appliedRef, appliedDateRangePreset, appliedCustomFrom, appliedCustomTo]);
+    void loadTransfers(
+      buildQueryParams(
+        appliedRef,
+        appliedDateRangePreset,
+        appliedCustomFrom,
+        appliedCustomTo,
+      ),
+      {
+        quiet: true,
+      },
+    );
+  }, [
+    loadTransfers,
+    buildQueryParams,
+    appliedRef,
+    appliedDateRangePreset,
+    appliedCustomFrom,
+    appliedCustomTo,
+  ]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [rows]);
+
+  const totalTablePages = Math.max(
+    1,
+    Math.ceil(rows.length / TRANSACTIONS_PAGE_SIZE),
+  );
+
+  const paginatedRows = useMemo(() => {
+    const start = (tablePage - 1) * TRANSACTIONS_PAGE_SIZE;
+    return rows.slice(start, start + TRANSACTIONS_PAGE_SIZE);
+  }, [rows, tablePage]);
+
+  useEffect(() => {
+    setTablePage((p) => Math.min(p, totalTablePages));
+  }, [totalTablePages]);
 
   const closeDialog = useCallback(() => {
     setDialog(null);
@@ -371,7 +381,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-10 relative">
+    <div className="max-w-4xl mx-auto space-y-8 pb-10 relative">
       {listRefreshing && (
         <div className="absolute top-0 right-0 z-10">
           <Loader variant="inline" size="sm" label="Updating…" />
@@ -428,11 +438,24 @@ export default function TransactionsPage() {
             </button>
           </div>
         </div>
-        
+
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-700">Date range</label>
+          <label className="text-xs font-medium text-slate-700">
+            Date range
+          </label>
           <div className="flex flex-wrap gap-1.5">
-            {(["ALL", "TODAY", "YESTERDAY", "LAST_7_DAYS", "LAST_30_DAYS", "THIS_MONTH", "LAST_MONTH", "CUSTOM"] as const).map((preset) => {
+            {(
+              [
+                "ALL",
+                "TODAY",
+                "YESTERDAY",
+                "LAST_7_DAYS",
+                "LAST_30_DAYS",
+                "THIS_MONTH",
+                "LAST_MONTH",
+                "CUSTOM",
+              ] as const
+            ).map((preset) => {
               const labels = {
                 ALL: "All time",
                 TODAY: "Today",
@@ -441,9 +464,9 @@ export default function TransactionsPage() {
                 LAST_30_DAYS: "Last 30 Days",
                 THIS_MONTH: "This month",
                 LAST_MONTH: "Last month",
-                CUSTOM: "Custom range"
+                CUSTOM: "Custom range",
               };
-              
+
               return (
                 <button
                   key={preset}
@@ -460,7 +483,7 @@ export default function TransactionsPage() {
               );
             })}
           </div>
-          
+
           {dateRangePreset === "CUSTOM" && (
             <div className="pt-2 space-y-2">
               <div className="flex flex-col sm:flex-row gap-2">
@@ -478,9 +501,7 @@ export default function TransactionsPage() {
                     onChange={(e) => setCustomFromInput(e.target.value)}
                     max={customToInput || undefined}
                     className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 ${
-                      customRangeError
-                        ? "border-red-300"
-                        : "border-slate-200"
+                      customRangeError ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                 </div>
@@ -498,9 +519,7 @@ export default function TransactionsPage() {
                     onChange={(e) => setCustomToInput(e.target.value)}
                     min={customFromInput || undefined}
                     className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 ${
-                      customRangeError
-                        ? "border-red-300"
-                        : "border-slate-200"
+                      customRangeError ? "border-red-300" : "border-slate-200"
                     }`}
                   />
                 </div>
@@ -526,8 +545,8 @@ export default function TransactionsPage() {
             <ArrowLeftRight className="w-7 h-7" />
           </div>
           <h3 className="text-base font-semibold text-slate-900">
-            {appliedRef || appliedDateRangePreset !== "ALL" 
-              ? "No transactions found" 
+            {appliedRef || appliedDateRangePreset !== "ALL"
+              ? "No transactions found"
               : "No transactions yet"}
           </h3>
           <p className="text-sm text-slate-500 mt-1 mb-6 max-w-sm mx-auto">
@@ -538,16 +557,19 @@ export default function TransactionsPage() {
                   if (appliedDateRangePreset !== "ALL") {
                     const labels = {
                       TODAY: "today",
-                      YESTERDAY: "yesterday", 
+                      YESTERDAY: "yesterday",
                       LAST_7_DAYS: "the last 7 days",
                       LAST_30_DAYS: "the last 30 days",
                       THIS_MONTH: "this month",
                       LAST_MONTH: "last month",
-                      CUSTOM: appliedCustomFrom && appliedCustomTo 
-                        ? `${appliedCustomFrom} to ${appliedCustomTo}`
-                        : "your custom date range"
+                      CUSTOM:
+                        appliedCustomFrom && appliedCustomTo
+                          ? `${appliedCustomFrom} to ${appliedCustomTo}`
+                          : "your custom date range",
                     };
-                    parts.push(labels[appliedDateRangePreset] || "your selected dates");
+                    parts.push(
+                      labels[appliedDateRangePreset] || "your selected dates",
+                    );
                   }
                   return `No transactions match ${parts.join(" and ")}. Try adjusting your filters or check back later.`;
                 })()
@@ -558,77 +580,53 @@ export default function TransactionsPage() {
             className="inline-flex items-center gap-2 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
           >
             <Send className="w-4 h-4" />
-            {appliedRef || appliedDateRangePreset !== "ALL" ? "Start new transfer" : "Send money"}
+            {appliedRef || appliedDateRangePreset !== "ALL"
+              ? "Start new transfer"
+              : "Send money"}
           </Link>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {rows.map((t) => {
-            const name = t.beneficiary
-              ? formatBeneficiaryName(t.beneficiary)
-              : "—";
-            const subtitle =
-              t.recipientCountryLabel?.trim() ||
-              t.beneficiary?.country?.trim() ||
-              "—";
-            const amountLine =
-              t.payCurrency && t.payAmount != null
-                ? `${fmtMoney(Number(t.payAmount))} ${t.payCurrency}`
-                : "—";
-            const nProofs = t.paymentProofs?.length ?? 0;
-
-            return (
-              <li key={t.id}>
-                <div className="group rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm hover:border-slate-300 hover:shadow-md transition-all">
-                  <div className="flex gap-4">
-                    <div
-                      className="shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center text-sm font-semibold shadow-inner"
-                      aria-hidden
-                    >
-                      <ArrowLeftRight className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-[15px] font-semibold text-slate-900 font-mono tracking-tight truncate">
-                            {t.referenceCode}
-                          </h3>
-                          <p className="text-sm text-slate-600 mt-0.5 truncate">
-                            {name} · {subtitle}
-                          </p>
-                          <p className="text-sm font-medium text-slate-800 mt-1.5 tabular-nums">
-                            {amountLine}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1.5">
-                            {fmtListDate(t.createdAt)}
-                            {nProofs > 0
-                              ? ` · ${nProofs} payment proof file${nProofs === 1 ? "" : "s"}`
-                              : ""}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 text-[10px] uppercase font-semibold tracking-wide px-2 py-1 rounded-md border max-w-[10rem] text-right leading-tight ${statusBadgeClass(t.status)}`}
-                        >
-                          {statusLabel(t.status)}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-100">
-                        <button
-                          type="button"
-                          onClick={() => setViewId(t.id)}
-                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-4">
+          <RemittanceTransfersTable
+            rows={paginatedRows}
+            onViewTransfer={(id) => setViewId(id)}
+          />
+          {totalTablePages > 1 ? (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-1">
+              <p className="text-sm text-slate-500 text-center sm:text-left">
+                Showing {(tablePage - 1) * TRANSACTIONS_PAGE_SIZE + 1}–
+                {Math.min(
+                  tablePage * TRANSACTIONS_PAGE_SIZE,
+                  rows.length,
+                )}{" "}
+                of {rows.length}
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                  disabled={tablePage <= 1}
+                  className="h-9 px-4 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-xs font-medium text-slate-500 tabular-nums px-2 min-w-[4.5rem] text-center">
+                  Page {tablePage} / {totalTablePages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTablePage((p) => Math.min(totalTablePages, p + 1))
+                  }
+                  disabled={tablePage >= totalTablePages}
+                  className="h-9 px-4 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       )}
 
       <ViewTransactionModal

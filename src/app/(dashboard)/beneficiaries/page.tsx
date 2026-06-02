@@ -35,13 +35,14 @@ import {
   matchFlexCountryByLabel,
 } from "@/lib/catalog-countries";
 
-type DeliveryChannel = "BANK_TRANSFER" | "MOBILE_MONEY";
+import type { BeneficiaryDeliveryChannel } from "@/lib/beneficiary-delivery-channels";
+import { getDeliveryChannelLabel } from "@/lib/beneficiary-delivery-channels";
 
 interface Beneficiary {
   id: string;
   firstName: string;
   lastName: string;
-  deliveryChannel: DeliveryChannel;
+  deliveryChannel: BeneficiaryDeliveryChannel;
   country?: string;
   bankName?: string;
   branchName?: string | null;
@@ -270,12 +271,17 @@ export default function BeneficiariesPage() {
           <ul className="space-y-3">
             {pageSlice.map((b) => {
               const isBank = b.deliveryChannel === "BANK_TRANSFER";
+              const isMobile = b.deliveryChannel === "MOBILE_MONEY";
               const subtitle = isBank
                 ? b.bankName?.trim() || "Bank account"
-                : b.mobileMoneyProvider?.trim() || "Mobile wallet";
+                : isMobile
+                  ? b.mobileMoneyProvider?.trim() || "Mobile wallet"
+                  : getDeliveryChannelLabel(b.deliveryChannel);
               const masked = isBank
                 ? maskAccountLast4(b.accountNumber)
-                : maskPhoneLast4(b.mobileNumber);
+                : isMobile
+                  ? maskPhoneLast4(b.mobileNumber)
+                  : "";
               const name = formatBeneficiaryName(b);
 
               const isActive = b.active !== false;
