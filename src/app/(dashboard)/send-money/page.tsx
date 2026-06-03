@@ -29,6 +29,8 @@ import {
 } from "@/lib/send-money-currencies";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import {
   ChevronRight,
   Check,
@@ -353,7 +355,11 @@ function SendMoneyPageContent() {
     relationship: LookupOpt[];
   } | null>(null);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
-  const { countries: catalogCountries } = useCatalogCountries(true);
+  const {
+    countries: catalogCountries,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(step === 1);
 
   const [payCurrency, setPayCurrency] = useState("");
   const [payAmount, setPayAmount] = useState("");
@@ -546,6 +552,26 @@ function SendMoneyPageContent() {
     [receiveCurrency, recipientCurrencyOptions],
   );
 
+  /** Resolve the selected recipient country from the catalog. */
+  const selectedRecipientCountry = useMemo(() => {
+    const raw = recipientCouName.trim();
+    if (!raw) return undefined;
+    return matchFlexCountryByLabel(dedupedCatalogCountries, raw);
+  }, [dedupedCatalogCountries, recipientCouName]);
+
+  /** Available payout currencies for the selected recipient country. */
+  const availableCurrenciesForCountry = useMemo(() => {
+    if (!selectedRecipientCountry?.couCode) return [];
+    const countryDefaultCurrency =
+      COU_CODE_TO_CURRENCY[selectedRecipientCountry.couCode];
+    const fallbackCurrencies = ["USD", "EUR", "GBP"];
+    const allCurrencies = countryDefaultCurrency
+      ? [countryDefaultCurrency, ...fallbackCurrencies]
+      : fallbackCurrencies;
+    // Deduplicate
+    return Array.from(new Set(allCurrencies));
+  }, [selectedRecipientCountry?.couCode]);
+
   const filteredPayCurrencyOptions = useMemo(() => {
     if (!ctx) return [] as string[];
     const q = payCurrencySearch.toLowerCase().trim();
@@ -561,6 +587,7 @@ function SendMoneyPageContent() {
 
   const filteredBeneficiaries = useMemo(() => {
     const cur = receiveCurrency.trim().toUpperCase();
+    const couCode = recipientCouCode.trim().toUpperCase();
     if (!cur) return beneficiaries;
     return beneficiaries.filter((b) => {
       const resolved = resolveRecipientFromBeneficiaryCountry(
@@ -568,9 +595,18 @@ function SendMoneyPageContent() {
         dedupedCatalogCountries,
       );
       if (!resolved) return false;
-      return receiveCurrencyForCouCode(resolved.couCode) === cur;
+      const benCurrency = receiveCurrencyForCouCode(resolved.couCode);
+      const benCountryMatch = couCode
+        ? resolved.couCode.toUpperCase() === couCode
+        : true;
+      return benCurrency === cur && benCountryMatch;
     });
-  }, [beneficiaries, receiveCurrency, dedupedCatalogCountries]);
+  }, [
+    beneficiaries,
+    receiveCurrency,
+    recipientCouCode,
+    dedupedCatalogCountries,
+  ]);
 
   const bankAccountsToShow = useMemo(() => {
     if (companyAccounts.length > 0) return companyAccounts;
@@ -655,6 +691,14 @@ function SendMoneyPageContent() {
       payerPhone,
     ],
   );
+
+  /** Auto-update receiveCurrency when country selection changes. */
+  useEffect(() => {
+    const currencies = availableCurrenciesForCountry;
+    if (currencies.length > 0 && !currencies.includes(receiveCurrency)) {
+      setReceiveCurrency(currencies[0]);
+    }
+  }, [availableCurrenciesForCountry, receiveCurrency]);
 
   useEffect(() => {
     if (step !== 3 || !ctx) return;
@@ -1302,6 +1346,36 @@ function SendMoneyPageContent() {
             //recipient country section
           }
 
+          {/* Recipient Country */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">
+              Recipient Country <span className="text-red-500">*</span>
+            </label>
+            <CatalogCountrySelect
+              value={recipientCouName}
+              onChange={(couName) => {
+                setRecipientCouName(couName);
+                const match = matchFlexCountryByLabel(
+                  dedupedCatalogCountries,
+                  couName,
+                );
+                if (match) {
+                  setRecipientCouCode(match.couCode);
+                }
+              }}
+              error={false}
+              placeholder="Select destination country…"
+              countries={dedupedCatalogCountries}
+              countriesLoading={catalogCountriesLoading}
+              countriesError={catalogCountriesError}
+            />
+            {catalogCountriesError && (
+              <p className="mt-1 text-xs text-red-500">
+                {catalogCountriesError}
+              </p>
+            )}
+          </div>
+
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               What you pay
@@ -1468,52 +1542,108 @@ function SendMoneyPageContent() {
                     <div className="p-2 border-b border-slate-100">
                       <input
                         autoFocus
-                        placeholder="Search currency or country…"
+                        placeholder={
+                          selectedRecipientCountry
+                            ? `Search currencies for ${selectedRecipientCountry.couName}…`
+                            : "Search currency or country…"
+                        }
                         value={recipientSearch}
                         onChange={(e) => setRecipientSearch(e.target.value)}
                         className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                       />
                     </div>
                     <ul className="max-h-52 overflow-y-auto py-1">
-                      {filteredRecipientCurrencyOptions.map((opt) => (
-                        <li key={opt.currency}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReceiveCurrency(opt.currency);
-                              setRecipientCouCode(opt.couCode);
-                              setRecipientCouName(opt.couName);
-                              setRecipientOpen(false);
-                            }}
-                            className={`flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
-                              receiveCurrency === opt.currency
-                                ? "bg-teal-50 text-teal-800 font-medium"
-                                : "text-slate-700"
-                            }`}
-                          >
-                            <Flag
-                              code={payCurrencyFlagCode(opt.currency)}
-                              className="w-6 h-4 rounded object-cover shrink-0 mt-0.5"
-                            />
-                            <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                              <span className="font-semibold leading-tight text-[13px] sm:text-sm">
-                                {opt.currency}
-                              </span>
-                              <span
-                                className={`text-[11px] leading-snug line-clamp-2 ${
+                      {selectedRecipientCountry &&
+                      availableCurrenciesForCountry.length > 0
+                        ? /* Country selected: show country currency + USD, EUR, GBP */
+                          availableCurrenciesForCountry
+                            .filter((cur) =>
+                              cur
+                                .toLowerCase()
+                                .includes(recipientSearch.toLowerCase()),
+                            )
+                            .map((cur) => (
+                              <li key={cur}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReceiveCurrency(cur);
+                                    setRecipientOpen(false);
+                                  }}
+                                  className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                                    receiveCurrency === cur
+                                      ? "bg-teal-50 text-teal-800 font-medium"
+                                      : "text-slate-700"
+                                  }`}
+                                >
+                                  <Flag
+                                    code={payCurrencyFlagCode(cur)}
+                                    className="w-6 h-4 rounded object-cover shrink-0"
+                                  />
+                                  <span className="font-semibold">{cur}</span>
+                                  {receiveCurrency === cur && (
+                                    <svg
+                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                </button>
+                              </li>
+                            ))
+                        : /* No country selected: show all available currencies */
+                          filteredRecipientCurrencyOptions.map((opt) => (
+                            <li key={opt.currency}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReceiveCurrency(opt.currency);
+                                  setRecipientCouCode(opt.couCode);
+                                  setRecipientCouName(opt.couName);
+                                  setRecipientOpen(false);
+                                }}
+                                className={`flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
                                   receiveCurrency === opt.currency
-                                    ? "text-teal-700/85"
-                                    : "text-slate-500"
+                                    ? "bg-teal-50 text-teal-800 font-medium"
+                                    : "text-slate-700"
                                 }`}
-                                title={opt.couName}
                               >
-                                {opt.couName}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                      {filteredRecipientCurrencyOptions.length === 0 && (
+                                <Flag
+                                  code={payCurrencyFlagCode(opt.currency)}
+                                  className="w-6 h-4 rounded object-cover shrink-0 mt-0.5"
+                                />
+                                <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                                  <span className="font-semibold leading-tight text-[13px] sm:text-sm">
+                                    {opt.currency}
+                                  </span>
+                                  <span
+                                    className={`text-[11px] leading-snug line-clamp-2 ${
+                                      receiveCurrency === opt.currency
+                                        ? "text-teal-700/85"
+                                        : "text-slate-500"
+                                    }`}
+                                    title={opt.couName}
+                                  >
+                                    {opt.couName}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                      {((selectedRecipientCountry &&
+                        availableCurrenciesForCountry.filter((cur) =>
+                          cur
+                            .toLowerCase()
+                            .includes(recipientSearch.toLowerCase()),
+                        ).length === 0) ||
+                        (!selectedRecipientCountry &&
+                          filteredRecipientCurrencyOptions.length === 0)) && (
                         <li className="px-3 py-3 text-sm text-slate-400 text-center">
                           No match
                         </li>
@@ -2404,6 +2534,7 @@ function SendMoneyPageContent() {
         open={showAddBeneficiaryModal}
         onClose={() => setShowAddBeneficiaryModal(false)}
         lockCountry={addBeneficiaryLock}
+        lockPayoutCurrency={receiveCurrency}
         onSuccess={async (created) => {
           try {
             const benRes = await api.get<{

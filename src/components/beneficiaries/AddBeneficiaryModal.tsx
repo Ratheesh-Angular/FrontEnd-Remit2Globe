@@ -5,6 +5,7 @@ import { sessionApi as api } from "@/lib/api";
 import {
   normalizeAba,
   normalizeIfsc,
+  normalizeIban,
   resolveBankIdentifierConfig,
   validateBankIdentifier,
 } from "@/lib/beneficiary-bank-identifier";
@@ -87,6 +88,8 @@ export type AddBeneficiaryModalProps = {
   onSuccess?: (beneficiary: CreatedBeneficiaryPayload) => void | Promise<void>;
   /** When set, destination country is fixed to this corridor (Flex list match). */
   lockCountry?: LockCountry | null;
+  /** When set, payout currency is fixed to this value. */
+  lockPayoutCurrency?: string | null;
   /** When set, modal loads this beneficiary and PATCHes on save instead of creating. */
   editBeneficiaryId?: string | null;
   /** If set, API errors are reported here instead of only inline `saveError`. */
@@ -165,11 +168,15 @@ export function AddBeneficiaryModal({
   onClose,
   onSuccess,
   lockCountry = null,
+  lockPayoutCurrency = null,
   editBeneficiaryId = null,
   onSubmitError,
 }: AddBeneficiaryModalProps) {
   const countryLocked = Boolean(
     lockCountry && (lockCountry.couName?.trim() || lockCountry.couCode?.trim()),
+  );
+  const currencyLocked = Boolean(
+    lockPayoutCurrency && lockPayoutCurrency.trim(),
   );
 
   const [formData, setFormData] = useState<FormData>(emptyForm);
@@ -366,6 +373,7 @@ export function AddBeneficiaryModal({
         ? {
             ...emptyForm,
             country: String(lockCountry.couName).trim(),
+            payoutCurrency: lockPayoutCurrency?.trim() || "",
           }
         : { ...emptyForm },
     );
@@ -378,7 +386,7 @@ export function AddBeneficiaryModal({
     setPayoutCurrencyOpen(false);
     setBankSearch("");
     setBankIdLookupStatus("idle");
-  }, [open, lockCountry?.couName, editBeneficiaryId]);
+  }, [open, lockCountry?.couName, lockPayoutCurrency, editBeneficiaryId]);
 
   useEffect(() => {
     if (!open || isEditMode || !destinationCouCode) return;
@@ -512,6 +520,7 @@ export function AddBeneficiaryModal({
           const res = await fetch(
             `/api/bank-lookup/aba/${encodeURIComponent(digits)}`,
           );
+
           if (!finish()) return;
           if (res.status === 404) {
             setBankIdLookupStatus("not_found");
@@ -815,10 +824,10 @@ export function AddBeneficiaryModal({
                         From transfer
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
+                    {/* <p className="mt-1 text-xs text-slate-500">
                       Country matches the recipient you selected for this
                       transfer.
-                    </p>
+                    </p> */}
                   </>
                 ) : (
                   <CatalogCountrySelect
@@ -840,89 +849,116 @@ export function AddBeneficiaryModal({
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">
                   Payout Currency <span className="text-red-500">*</span>
                 </label>
-                <div className="relative" data-payout-dropdown>
-                  <button
-                    type="button"
-                    disabled={!formData.country}
-                    onClick={() => setPayoutCurrencyOpen((v) => !v)}
-                    className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.payoutCurrency
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    } ${!formData.country ? "bg-slate-50 cursor-not-allowed opacity-50" : "bg-white"}`}
-                  >
-                    {formData.payoutCurrency ? (
-                      <>
-                        <Flag
-                          code={payCurrencyFlagCode(formData.payoutCurrency)}
-                          className="w-5 h-3.5 rounded object-cover shrink-0"
-                        />
-                        <span className="text-slate-900 truncate">
-                          {formData.payoutCurrency}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-slate-400">
-                        {!formData.country
-                          ? "Select country first"
-                          : "Select currency"}
+                {currencyLocked ? (
+                  <>
+                    <div className="flex items-center gap-2 w-full border border-slate-200 rounded-lg px-3 h-10 text-sm bg-slate-50 text-slate-800">
+                      {formData.payoutCurrency ? (
+                        <>
+                          <Flag
+                            code={payCurrencyFlagCode(formData.payoutCurrency)}
+                            className="w-5 h-3.5 rounded object-cover shrink-0"
+                          />
+                          <span className="font-medium">
+                            {formData.payoutCurrency}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-medium">—</span>
+                      )}
+                      <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-slate-400 shrink-0">
+                        From transfer
                       </span>
-                    )}
-                    <svg
-                      className="ml-auto w-4 h-4 text-slate-400 shrink-0"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-
-                  {payoutCurrencyOpen && payoutCurrencyOptions.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                      <ul className="max-h-52 overflow-y-auto py-1">
-                        {payoutCurrencyOptions.map((cur) => (
-                          <li key={cur}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleChange("payoutCurrency", cur);
-                                setPayoutCurrencyOpen(false);
-                              }}
-                              className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
-                                formData.payoutCurrency === cur
-                                  ? "bg-teal-50 text-teal-700 font-medium"
-                                  : "text-slate-700"
-                              }`}
-                            >
-                              <Flag
-                                code={payCurrencyFlagCode(cur)}
-                                className="w-5 h-3.5 rounded object-cover shrink-0"
-                              />
-                              <span className="truncate">{cur}</span>
-                              {formData.payoutCurrency === cur && (
-                                <svg
-                                  className="ml-auto w-4 h-4 shrink-0 text-teal-600"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  )}
-                </div>
+                    {/* <p className="mt-1 text-xs text-slate-500">
+                      Currency matches the payment method you selected for this
+                      transfer.
+                    </p> */}
+                  </>
+                ) : (
+                  <div className="relative" data-payout-dropdown>
+                    <button
+                      type="button"
+                      disabled={!formData.country}
+                      onClick={() => setPayoutCurrencyOpen((v) => !v)}
+                      className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        errors.payoutCurrency
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      } ${!formData.country ? "bg-slate-50 cursor-not-allowed opacity-50" : "bg-white"}`}
+                    >
+                      {formData.payoutCurrency ? (
+                        <>
+                          <Flag
+                            code={payCurrencyFlagCode(formData.payoutCurrency)}
+                            className="w-5 h-3.5 rounded object-cover shrink-0"
+                          />
+                          <span className="text-slate-900 truncate">
+                            {formData.payoutCurrency}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">
+                          {!formData.country
+                            ? "Select country first"
+                            : "Select currency"}
+                        </span>
+                      )}
+                      <svg
+                        className="ml-auto w-4 h-4 text-slate-400 shrink-0"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+
+                    {payoutCurrencyOpen && payoutCurrencyOptions.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                        <ul className="max-h-52 overflow-y-auto py-1">
+                          {payoutCurrencyOptions.map((cur) => (
+                            <li key={cur}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleChange("payoutCurrency", cur);
+                                  setPayoutCurrencyOpen(false);
+                                }}
+                                className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                                  formData.payoutCurrency === cur
+                                    ? "bg-teal-50 text-teal-700 font-medium"
+                                    : "text-slate-700"
+                                }`}
+                              >
+                                <Flag
+                                  code={payCurrencyFlagCode(cur)}
+                                  className="w-5 h-3.5 rounded object-cover shrink-0"
+                                />
+                                <span className="truncate">{cur}</span>
+                                {formData.payoutCurrency === cur && (
+                                  <svg
+                                    className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {errors.payoutCurrency && (
                   <p className="mt-1 text-xs text-red-500">
                     {errors.payoutCurrency}
@@ -1046,7 +1082,9 @@ export function AddBeneficiaryModal({
                             ? normalizeIfsc(raw)
                             : bankIdConfig.lookup === "aba"
                               ? normalizeAba(raw)
-                              : raw;
+                              : bankIdConfig.lookup === "iban"
+                                ? normalizeIban(raw)
+                                : raw;
                         handleChange("swiftBic", v);
                       }}
                       className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
@@ -1358,7 +1396,9 @@ export function AddBeneficiaryModal({
                             ? normalizeIfsc(raw)
                             : bankIdConfig.lookup === "aba"
                               ? normalizeAba(raw)
-                              : raw;
+                              : bankIdConfig.lookup === "iban"
+                                ? normalizeIban(raw)
+                                : raw;
                         handleChange("swiftBic", v);
                       }}
                       className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${

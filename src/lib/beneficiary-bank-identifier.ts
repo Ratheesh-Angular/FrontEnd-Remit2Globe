@@ -1,6 +1,6 @@
 /** Flex / ISO 3166-1 alpha-3 corridor codes → label + optional lookup strategy. */
 
-export type BankIdentifierLookupKind = "ifsc" | "aba" | "none";
+export type BankIdentifierLookupKind = "ifsc" | "aba" | "iban" | "none";
 
 export interface BankIdentifierCountryConfig {
   fieldLabel: string;
@@ -21,6 +21,63 @@ const DEFAULT_CONFIG: BankIdentifierCountryConfig = {
   hideFlexBankPicker: false,
   showIdentifierBeforeBankDetails: false,
 };
+
+const EUROPE_CONFIG: BankIdentifierCountryConfig = {
+  fieldLabel: "IBAN",
+  placeholder: "e.g. DE89370400440532013000",
+  hint: "International Bank Account Number (IBAN)",
+  lookup: "iban",
+  hideFlexBankPicker: false,
+  showIdentifierBeforeBankDetails: false,
+};
+
+/** European countries that use IBAN (ISO 3166-1 alpha-3 codes) */
+const EUROPEAN_COUNTRIES = new Set([
+  "ALB", // Albania
+  "AND", // Andorra
+  "AUT", // Austria
+  "BLR", // Belarus
+  "BEL", // Belgium
+  "BIH", // Bosnia and Herzegovina
+  "BGR", // Bulgaria
+  "HRV", // Croatia
+  "CYP", // Cyprus
+  "CZE", // Czechia
+  "DNK", // Denmark
+  "EST", // Estonia
+  "FIN", // Finland
+  "FRA", // France
+  "DEU", // Germany
+  "GRC", // Greece
+  "HUN", // Hungary
+  "ISL", // Iceland
+  "IRL", // Ireland
+  "ITA", // Italy
+  "LVA", // Latvia
+  "LIE", // Liechtenstein
+  "LTU", // Lithuania
+  "LUX", // Luxembourg
+  "MLT", // Malta
+  "MDA", // Moldova
+  "MCO", // Monaco
+  "MNE", // Montenegro
+  "NLD", // Netherlands
+  "MKD", // North Macedonia
+  "NOR", // Norway
+  "POL", // Poland
+  "PRT", // Portugal
+  "ROU", // Romania
+  "RUS", // Russia
+  "SMR", // San Marino
+  "SRB", // Serbia
+  "SVK", // Slovakia
+  "SVN", // Slovenia
+  "ESP", // Spain
+  "SWE", // Sweden
+  "CHE", // Switzerland
+  "UKR", // Ukraine
+  "VAT", // Vatican City
+]);
 
 const BY_ALPHA3 = new Map<string, BankIdentifierCountryConfig>([
   [
@@ -85,7 +142,16 @@ export function resolveBankIdentifierConfig(
 ): BankIdentifierCountryConfig {
   const u = couCode?.trim().toUpperCase();
   if (!u) return DEFAULT_CONFIG;
-  return BY_ALPHA3.get(u) ?? DEFAULT_CONFIG;
+
+  // Priority 1: Explicit country configuration
+  const explicit = BY_ALPHA3.get(u);
+  if (explicit) return explicit;
+
+  // Priority 2: European country → use IBAN
+  if (EUROPEAN_COUNTRIES.has(u)) return EUROPE_CONFIG;
+
+  // Priority 3: Default → SWIFT / BIC
+  return DEFAULT_CONFIG;
 }
 
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -96,6 +162,10 @@ export function normalizeIfsc(raw: string): string {
 
 export function normalizeAba(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 9);
+}
+
+export function normalizeIban(raw: string): string {
+  return raw.replace(/\s/g, "").toUpperCase();
 }
 
 export function validateBankIdentifier(
@@ -117,6 +187,14 @@ export function validateBankIdentifier(
     const d = normalizeAba(t);
     if (d.length !== 9) {
       return "Enter a valid 9-digit ABA routing number.";
+    }
+    return undefined;
+  }
+
+  if (lookup === "iban") {
+    const i = normalizeIban(t);
+    if (i.length < 15 || i.length > 34) {
+      return "Enter a valid IBAN (15–34 characters).";
     }
     return undefined;
   }
