@@ -12,7 +12,17 @@ import {
   buildTransferReceiptDataFromRow,
   type RemittanceTransferRow,
 } from "@/lib/transfer-receipt-from-transfer";
+import { PaymentProofLightbox } from "@/components/transactions/PaymentProofLightbox";
 import { Loader } from "@/components/ui/Loader";
+import {
+  PAYMENT_PROOF_ACCEPT,
+  canUploadMorePaymentProof,
+  getPaymentProofs,
+  isImageMime,
+  openPaymentProof,
+  paymentProofUploadErrorMessage,
+  uploadPaymentProof,
+} from "@/lib/payment-proof";
 import {
   X,
   Download,
@@ -21,9 +31,6 @@ import {
   Image as ImageIcon,
   Upload,
 } from "lucide-react";
-
-const PAYMENT_PROOF_ACCEPT =
-  "image/*,.pdf,.doc,.docx,.txt,.rtf,.odt,.xls,.xlsx,.ppt,.pptx,.csv,.heic,.heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/rtf";
 
 type Lookups = {
   sourceOfIncome: { value: string; label: string }[];
@@ -53,10 +60,6 @@ function Detail({
       </dd>
     </div>
   );
-}
-
-function isImageMime(m: string) {
-  return /^image\//i.test(m);
 }
 
 function statusLabel(s: string) {
@@ -171,31 +174,12 @@ export function ViewTransactionModal({
     if (!fileList?.length || !transferId) return;
     setUploadError("");
     setUploadBusy(true);
-    const formData = new FormData();
-    for (const f of Array.from(fileList)) {
-      formData.append("files", f);
-    }
     try {
-      await api.post<{
-        data: { proofs: { id: string; fileName: string }[] };
-      }>(`/remittance/transfers/${transferId}/payment-proof`, formData, {
-        transformRequest: [
-          (data, headers) => {
-            if (data instanceof FormData) {
-              delete headers["Content-Type"];
-            }
-            return data;
-          },
-        ],
-      });
+      await uploadPaymentProof(transferId, fileList, api);
       await reloadTransfer();
       onTransferUpdated?.();
     } catch (e: unknown) {
-      const msg =
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ??
-        "Upload failed. Try a smaller file or a different format.";
-      setUploadError(msg);
+      setUploadError(paymentProofUploadErrorMessage(e));
     } finally {
       setUploadBusy(false);
       if (proofInputRef.current) proofInputRef.current.value = "";
@@ -207,14 +191,9 @@ export function ViewTransactionModal({
     return buildTransferReceiptDataFromRow(row, lookups);
   }, [row, lookups]);
 
-  const paymentProofs = row?.paymentProofs;
-  type Proof = NonNullable<typeof paymentProofs>[number];
-  const proofs: Proof[] = Array.isArray(paymentProofs) ? paymentProofs : [];
+  const proofs = row ? getPaymentProofs(row) : [];
 
-  const canUploadMoreProof =
-    row &&
-    row.payInMethod === "BANK_TRANSFER" &&
-    row.status === "PENDING_PAYMENT";
+  const canUploadMoreProof = row && canUploadMorePaymentProof(row);
 
   const totalToPay =
     row && row.payCurrency && row.payAmount != null
@@ -552,17 +531,9 @@ export function ViewTransactionModal({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (isImageMime(p.mimeType)) {
-                                    setLightboxUrl(p.fileUrl);
-                                  } else {
-                                    window.open(
-                                      p.fileUrl,
-                                      "_blank",
-                                      "noopener,noreferrer",
-                                    );
-                                  }
-                                }}
+                                onClick={() =>
+                                  openPaymentProof(p, setLightboxUrl)
+                                }
                                 className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
@@ -604,22 +575,10 @@ export function ViewTransactionModal({
         </div>
       </div>
 
-      {lightboxUrl ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxUrl(null)}
-          aria-label="Close image preview"
-        >
-          <span className="sr-only">Close</span>
-          <img
-            src={lightboxUrl}
-            alt="Payment proof"
-            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </button>
-      ) : null}
+      <PaymentProofLightbox
+        url={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+      />
     </>
   );
 }

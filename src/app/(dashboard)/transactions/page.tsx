@@ -381,7 +381,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-10 relative">
+    <div className="max-w-6xl mx-auto space-y-8 pb-10 relative">
       {listRefreshing && (
         <div className="absolute top-0 right-0 z-10">
           <Loader variant="inline" size="sm" label="Updating…" />
@@ -590,16 +590,14 @@ export default function TransactionsPage() {
           <RemittanceTransfersTable
             rows={paginatedRows}
             onViewTransfer={(id) => setViewId(id)}
+            onTransferUpdated={refreshListWithAppliedFilters}
           />
           {totalTablePages > 1 ? (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-1">
               <p className="text-sm text-slate-500 text-center sm:text-left">
                 Showing {(tablePage - 1) * TRANSACTIONS_PAGE_SIZE + 1}–
-                {Math.min(
-                  tablePage * TRANSACTIONS_PAGE_SIZE,
-                  rows.length,
-                )}{" "}
-                of {rows.length}
+                {Math.min(tablePage * TRANSACTIONS_PAGE_SIZE, rows.length)} of{" "}
+                {rows.length}
               </p>
               <div className="flex items-center justify-center gap-2">
                 <button

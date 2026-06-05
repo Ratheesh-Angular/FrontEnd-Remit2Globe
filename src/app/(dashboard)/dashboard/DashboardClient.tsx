@@ -3,7 +3,15 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Lock, AlertCircle, Clock, ChevronRight } from "lucide-react";
+import {
+  Lock,
+  AlertCircle,
+  Clock,
+  ChevronRight,
+  Wallet,
+  Users,
+  Send,
+} from "lucide-react";
 import { sessionApi as api } from "@/lib/api";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
 import { RemittanceTransfersTable } from "@/components/transactions/RemittanceTransfersTable";
@@ -143,7 +151,7 @@ export default function DashboardClient({ user }: { user: User }) {
   const isKycRejected = user?.kycStatus === "REJECTED";
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
@@ -215,23 +223,32 @@ export default function DashboardClient({ user }: { user: User }) {
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <ActionCard
+          title="Wallet Balance"
+          description="$ 0.00"
+          locked={!isKycApproved}
+          onClick={() => router.push("/wallet")}
+          icon={<Wallet className="w-6 h-6" />}
+        />
+        <ActionCard
           title="Beneficiaries"
           description="Manage recipients"
           locked={!isKycApproved}
           onClick={() => router.push("/beneficiaries")}
+          icon={<Users className="w-6 h-6" />}
         />
         <ActionCard
           title="Send Money"
           description="Transfer funds internationally"
           locked={!isKycApproved}
           onClick={() => router.push("/send-money")}
+          icon={<Send className="w-6 h-6" />}
         />
-        <ActionCard
+        {/* <ActionCard
           title="Transactions"
           description="View your transfer history"
           locked={!isKycApproved}
           onClick={() => router.push("/transactions")}
-        />
+        /> */}
       </div>
 
       {/* Transaction history — reused table; no pagination, link to full list */}
@@ -263,11 +280,13 @@ function ActionCard({
   description,
   locked,
   onClick,
+  icon,
 }: {
   title: string;
   description: string;
   locked: boolean;
   onClick: () => void;
+  icon: React.ReactNode;
 }) {
   return (
     <div
@@ -281,7 +300,12 @@ function ActionCard({
         }
       `}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start align-center">
+        <div>
+          {icon && (
+            <div className="w-8 h-8 mr-1 text-teal-500 pt-1">{icon}</div>
+          )}
+        </div>
         <div>
           <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
           <p className="text-xs text-slate-500 mt-1">{description}</p>

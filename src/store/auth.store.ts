@@ -4,6 +4,7 @@ export interface AuthUser {
   id: string;
   email: string | null;
   phone: string | null;
+  name: string | null;
   role: "INDIVIDUAL" | "CORPORATE";
   kycStatus: "PENDING" | "SUBMITTED" | "APPROVED" | "REJECTED" | "SUSPENDED";
   createdAt: string;

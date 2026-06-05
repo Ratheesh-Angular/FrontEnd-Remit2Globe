@@ -10,8 +10,11 @@ import { sessionApi as api } from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../assets/logos/R2GLogo.png";
 
-import { Bell } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { useRef } from "react";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
+import { useNotifications } from "@/hooks/useNotifications";
+import type { Notification } from "@/types/notification";
 import {
   clearStaleAuthAndRedirect,
   extractAuthMeUser,
@@ -195,6 +198,11 @@ export default function DashboardLayoutClient({
 
   const [notifOpen, setNotifOpen] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement>(null);
+  const { count: unreadCount, refresh: refreshCount } = useUnreadCount();
+  const {
+    notifications: previewNotifs,
+    refresh: refreshNotifs,
+  } = useNotifications(1, 5);
 
   // Close on click outside
   useEffect(() => {
@@ -210,6 +218,38 @@ export default function DashboardLayoutClient({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [notifOpen]);
+
+  async function handleMarkNotifRead(id: string) {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      refreshCount();
+      refreshNotifs();
+    } catch {
+      /* silent */
+    }
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await api.patch("/notifications/read-all");
+      refreshCount();
+      refreshNotifs();
+    } catch {
+      /* silent */
+    }
+  }
+
+  function notifTimeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  console.log(user, "user");
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -315,21 +355,20 @@ export default function DashboardLayoutClient({
                 className="p-2 rounded-full hover:bg-teal-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-200 relative"
                 aria-label="Open notifications"
                 id="notif-icon-btn"
-                onClick={(e) => {
-                  // If menu is open and click is inside button, toggle off; otherwise, open.
-                  setNotifOpen((open) => !open);
-                }}
+                onClick={() => setNotifOpen((open) => !open)}
               >
                 <Bell className="w-6 h-6 text-teal-600" />
-                <span
-                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none border border-white shadow"
-                  style={{ minWidth: "20px", textAlign: "center" }}
-                >
-                  3
-                </span>
+                {unreadCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none border border-white shadow"
+                    style={{ minWidth: "20px", textAlign: "center" }}
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </button>
 
-              {/* Notification Menu */}
+              {/* Notification Dropdown */}
               <div
                 ref={notifMenuRef}
                 className={`
@@ -339,15 +378,70 @@ export default function DashboardLayoutClient({
                 `}
                 style={{ boxShadow: "0 8px 32px 0 rgba(0,0,0,0.14)" }}
               >
-                <div className="p-4">
-                  <div className="font-medium text-slate-900 mb-2">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                  <span className="font-semibold text-slate-900">
                     Notifications
-                  </div>
-                  <ul className="divide-y divide-slate-100">
-                    <li className="py-2 text-sm text-slate-800">
-                      No new notifications.
+                  </span>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 font-medium"
+                      title="Mark all as read"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5" />
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                {/* Notification items */}
+                <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                  {previewNotifs.length === 0 ? (
+                    <li className="py-6 text-center text-sm text-slate-400">
+                      No notifications yet.
                     </li>
-                  </ul>
+                  ) : (
+                    previewNotifs.map((n: Notification) => (
+                      <li key={n.id}>
+                        <Link
+                          href={`/notifications/${n.id}`}
+                          onClick={() => {
+                            if (!n.isRead) void handleMarkNotifRead(n.id);
+                            setNotifOpen(false);
+                          }}
+                          className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${!n.isRead ? "bg-teal-50/40" : ""}`}
+                        >
+                          {!n.isRead && (
+                            <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-teal-500" />
+                          )}
+                          <div className={`flex-1 min-w-0 ${n.isRead ? "ml-5" : ""}`}>
+                            <p className={`text-sm truncate ${!n.isRead ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                              {n.title}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate mt-0.5">
+                              {n.body}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {notifTimeAgo(n.createdAt)}
+                            </p>
+                          </div>
+                        </Link>
+                      </li>
+                    ))
+                  )}
+                </ul>
+
+                {/* Footer */}
+                <div className="border-t border-slate-100 px-4 py-2.5">
+                  <Link
+                    href="/notifications"
+                    onClick={() => setNotifOpen(false)}
+                    className="block text-center text-sm font-medium text-teal-600 hover:text-teal-800"
+                  >
+                    View all notifications
+                  </Link>
                 </div>
               </div>
             </div>
@@ -358,7 +452,7 @@ export default function DashboardLayoutClient({
               </div>
               <div className="min-w-0 hidden sm:block">
                 <p className="text-sm font-medium text-slate-900 truncate max-w-[12rem] md:max-w-[16rem]">
-                  {user?.email || user?.phone || "User"}
+                  {user?.name || user?.email || user?.phone || "User"}
                 </p>
                 <p className="text-xs text-slate-500 capitalize truncate">
                   {user?.role?.toLowerCase()}

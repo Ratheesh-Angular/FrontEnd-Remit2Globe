@@ -319,6 +319,7 @@ enum DocumentStatus {
 enum DeliveryChannel {
   BANK_TRANSFER
   MOBILE_MONEY
+  PAYOUT_IN_PERSON
 }
 
 enum OtpType {

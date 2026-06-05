@@ -1,7 +1,9 @@
 "use client";
 
+import { PaymentProofRowAction } from "@/components/transactions/PaymentProofRowAction";
 import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
+import { formatDate } from "date-fns";
 import { Eye } from "lucide-react";
 
 function statusLabel(s: string) {
@@ -56,6 +58,8 @@ function rowDisplay(t: RemittanceTransferRow) {
 export type RemittanceTransfersTableProps = {
   rows: RemittanceTransferRow[];
   onViewTransfer: (transferId: string) => void;
+  /** After payment proof upload from a row, refresh the list. */
+  onTransferUpdated?: () => void;
   /** Extra class on the outer bordered wrapper */
   className?: string;
 };
@@ -67,6 +71,7 @@ export type RemittanceTransfersTableProps = {
 export function RemittanceTransfersTable({
   rows,
   onViewTransfer,
+  onTransferUpdated,
   className = "",
 }: RemittanceTransfersTableProps) {
   return (
@@ -77,6 +82,9 @@ export function RemittanceTransfersTable({
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="text-left text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3">
+                Date
+              </th>
               <th className="text-left text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3">
                 Beneficiary Name
               </th>
@@ -92,7 +100,7 @@ export function RemittanceTransfersTable({
               <th className="text-left text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3">
                 Status
               </th>
-              <th className="text-center text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3 w-20">
+              <th className="text-center text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3 w-28">
                 Action
               </th>
             </tr>
@@ -106,6 +114,11 @@ export function RemittanceTransfersTable({
                   key={t.id}
                   className="hover:bg-slate-50/50 transition-colors group"
                 >
+                  <td className="px-4 py-4">
+                    <span className="text-sm text-slate-700">
+                      {formatDate(new Date(t.createdAt ?? ""), "MMM d, yyyy")}
+                    </span>
+                  </td>
                   <td className="px-4 py-4">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
@@ -139,14 +152,21 @@ export function RemittanceTransfersTable({
                     </span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => onViewTransfer(t.id)}
-                      className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                      title="View transaction"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onViewTransfer(t.id)}
+                        className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                        title="View transaction"
+                        aria-label="View transaction"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <PaymentProofRowAction
+                        transfer={t}
+                        onUploaded={onTransferUpdated}
+                      />
+                    </div>
                   </td>
                 </tr>
               );
@@ -170,14 +190,21 @@ export function RemittanceTransfersTable({
                     {t.referenceCode}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onViewTransfer(t.id)}
-                  className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                  title="View transaction"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
+                <div className="shrink-0 inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onViewTransfer(t.id)}
+                    className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                    title="View transaction"
+                    aria-label="View transaction"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <PaymentProofRowAction
+                    transfer={t}
+                    onUploaded={onTransferUpdated}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm">
