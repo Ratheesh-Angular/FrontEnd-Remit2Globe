@@ -31,13 +31,10 @@ export function extractAuthMeUser(payload: unknown): AuthUser | null {
   if (typeof id !== "string" || id.length === 0) return null;
 
   const email =
-    u.email === null || u.email === undefined
-      ? null
-      : String(u.email);
+    u.email === null || u.email === undefined ? null : String(u.email);
   const phone =
-    u.phone === null || u.phone === undefined
-      ? null
-      : String(u.phone);
+    u.phone === null || u.phone === undefined ? null : String(u.phone);
+  const name = u.name === null || u.name === undefined ? null : String(u.name);
 
   const createdAt =
     typeof u.createdAt === "string"
@@ -50,6 +47,7 @@ export function extractAuthMeUser(payload: unknown): AuthUser | null {
     id,
     email,
     phone,
+    name,
     role: (u.role as AuthUser["role"]) || "INDIVIDUAL",
     kycStatus: (u.kycStatus as AuthUser["kycStatus"]) || "PENDING",
     createdAt,

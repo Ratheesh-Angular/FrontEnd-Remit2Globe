@@ -1,3 +1,5 @@
+import countriesIso from "i18n-iso-countries";
+
 /** ISO 3166-1 alpha-3 → receive currency (full static catalog in send-money). */
 export const COU_CODE_TO_CURRENCY: Record<string, string> = {
   AFG: "AFN",
@@ -132,6 +134,22 @@ export const ALPHA2_TO_CURRENCY: Record<string, string> = {
   BD: "BDT",
   PH: "PHP",
 };
+
+/**
+ * Legal (local) receive/payout currency for a Flex ISO3 country code.
+ * Falls back to alpha-2 mapping, then USD when unknown.
+ */
+export function legalCurrencyForCouCode(couCode: string): string {
+  const a3 = couCode?.trim().toUpperCase();
+  if (!a3) return "USD";
+  const fromAlpha3 = COU_CODE_TO_CURRENCY[a3];
+  if (fromAlpha3) return fromAlpha3;
+  const a2 = countriesIso.alpha3ToAlpha2(a3);
+  if (typeof a2 === "string" && ALPHA2_TO_CURRENCY[a2]) {
+    return ALPHA2_TO_CURRENCY[a2];
+  }
+  return "USD";
+}
 
 /** ISO 4217 → flag (alpha-2) for display in currency selectors. */
 export const CURRENCY_TO_FLAG_ALPHA2: Record<string, string> = {
