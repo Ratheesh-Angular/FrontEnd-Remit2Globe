@@ -17,14 +17,5 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
             sudo chown -R ubuntu:ubuntu /var/www/payment-frontend
-            git config --global --add safe.directory /var/www/payment-frontend/FrontEnd-Remit2Globe
-            cd /var/www/payment-frontend/FrontEnd-Remit2Globe
-            git fetch origin main
-            git reset --hard origin/main
-            npm install
-            npm run build
-            pm2 restart payment-frontend || pm2 start ecosystem.config.js
-            pm2 save
-            sudo chown -R ubuntu:ubuntu /var/www/payment-frontend
+            sudo -u ubuntu bash /var/www/payment-frontend/deploy.sh
