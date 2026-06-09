@@ -1,0 +1,53 @@
+IBAN length could be useful for creating validations and avoiding unnecessary cancellations.		
+Country	ISO Code	IBAN Length
+Austria	AT	20
+Bahrain	BH	22
+Belgium	BE	16
+Benin	BJ	28
+Bulgaria	BG	22
+Burkina Faso	BF	28
+Cameroon	CM	27
+Central African Republic	CF	27
+Chad	TD	27
+Croatia	HR	21
+Côte d'Ivoire	CI	28
+Czech Republic	CZ	24
+Denmark	DK	18
+Egypt	EG	29
+Equatorial Guinea	GQ	27
+Estonia	EE	20
+Finland	FI	18
+France	FR	27
+Gabon	GA	27
+Germany	DE	22
+Guinea-Bissau	GW	25
+Hungary	HU	28
+Ireland	IE	22
+Italy	IT	27
+Jordan	JO	30
+Kuwait	KW	30
+Latvia	LV	21
+Lebanon	LB	28
+Lithuania	LT	20
+Luxembourg	LU	20
+Mali	ML	28
+Netherlands	NL	18
+Niger	NE	28
+Norway	NO	15
+Pakistan	PK	24
+Poland	PL	28
+Portugal	PT	25
+Qatar	QA	29
+Republic of the Congo	CG	27
+Romania	RO	24
+Saudi Arabia	SA	24
+Senegal	SN	28
+Slovakia	SK	24
+Slovenia	SI	19
+Spain	ES	24
+Sweden	SE	24
+Switzerland	CH	21
+Togo	TG	28
+Turkey	TR	26
+United Arab Emirates	AE	23
+United Kingdom	GB	22
