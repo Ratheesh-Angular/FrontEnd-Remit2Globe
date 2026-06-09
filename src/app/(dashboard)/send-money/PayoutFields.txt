@@ -1,0 +1,44 @@
+End Point : https://testbed.flex-money.tech/newPayment
+
+Parameter	Type	Mandatory	Description
+transactionReference	String	M	Unique reference identifying a transaction
+transferType	String	M	BankTransfer, MobileMoney, InPerson, Paybill, TillNumber
+payingAmount	double	M	Sending Amount
+payoutAmount	double	M	Receiving Amount
+receiverContactNo	String	M	For Mobile Money should be MSISDN
+purposeforFunds	String	M	Purpose for Funds
+bankName	String	O	Bank Name or Bank Code (from Banks API) for Bank Transfer. Mandatory for Bank Transfers
+swiftCode	String	O	Swift Code for Bank Transfer. Mandatory for USD Bank Transfers
+bankBranch	String	O	Bank Branch for Bank Transfer; Paybill Number for Paybill; Till Number for TillNumber
+ibanCode	String	O	IBAN for Bank Transfer. Mandatory for SEPA, Pakistani and UAE Bank Transfers
+ifscCode	String	O	IFSC Code for Bank Transfer. Mandatory for Indian Bank Transfers
+routingCode	String	O	Routing Code for Bank Transfer. Mandatory for Bangladesh Bank Transfers
+receiverBankAcc	String	O	Account Number for Bank Transfer or Paybill. Mandatory for Bank Transfers and Paybills
+remarks	String	O	Remarks
+receiverOthernames	String	M	Receiver Other names
+receiverSurname	String	M	Receiver Surname
+receiverDocument	String	O	Receiver Document Type
+receiverDocumentId	String	O	Receiver Document ID. Mandatory for UAE Transactions
+receiverIssueDate	String	O	Receiver Document ID Issue Date (dd-MM-yyyy). Mandatory for UAE Transactions
+receiverExpiryDate	String	O	Receiver Document ID Expiry Date (dd-MM-yyyy). Mandatory for UAE Transactions
+receiverEmail	String	O	Receiver Email Address. Mandatory for SA Transactions
+resultURL	String	M	Valid callback URL value
+originCountry	String	M	Origin Country ISO Code
+payoutCountry	String	M	Payout Country ISO Code
+tariff	String	M	Charge levied to customer
+currencyRate	String	M	Exchange rate for transaction
+currencyPair	String	M	Currency pair of transaction e.g. USD-KES
+senderOtherNames	String	M	Sender Other names
+senderSurname	String	M	Sender Surname
+senderTelephoneNo	String	M	Sender Phone Number
+senderNationality	String	M	Sender Nationality ISO Code
+senderDocType	String	M	Sender Document Type
+senderDocNumber	String	M	Sender Document Number
+senderDocDateOfIssue	String	O	Sender Document Issue Date (dd-MM-yyyy)
+senderDocExpiryDate	String	O	Sender Document Expiry Date (dd-MM-yyyy)
+senderDocPlaceOfIssue	String	O	Sender Document Place of Issue
+senderDob	String	M	Sender Date of Birth (dd-MM-yyyy)
+senderOccupation	String	O	Sender Occupation
+senderPhysicalAddress	String	O	Sender Physical Address
+sourceOfFundsDocumentation	String	O	Sender Source of Funds
+relationship	String	M	Relation between Sender and Receiver

@@ -1,3 +1,8 @@
+import countriesIso from "i18n-iso-countries";
+import enCountries from "i18n-iso-countries/langs/en.json";
+
+countriesIso.registerLocale(enCountries);
+
 /** Multi-field bank identifier configuration driven by payout currency. */
 
 export type BankFieldKey =
@@ -76,6 +81,15 @@ const FIELD_ROUTING: BankField = {
   maxLength: 9,
 };
 
+const FIELD_BANK_ROUTING: BankField = {
+  key: "routingNumber",
+  label: "Routing Code",
+  placeholder: "e.g. 123456789",
+  hint: "Bank routing code for this corridor",
+  required: true,
+  lookup: "none",
+};
+
 const FIELD_TRANSIT: BankField = {
   key: "transitNumber",
   label: "Transit Number",
@@ -129,7 +143,7 @@ const BY_CURRENCY = new Map<string, BankIdentifierConfig>([
   [
     "GBP",
     {
-      fields: [FIELD_IBAN, FIELD_SORT_CODE, FIELD_SWIFT_OPTIONAL],
+      fields: [FIELD_IBAN, FIELD_SORT_CODE, FIELD_SWIFT_REQUIRED],
       showIdentifiersFirst: false,
       hideFlexBankPicker: false,
     },
@@ -187,20 +201,47 @@ const BY_CURRENCY = new Map<string, BankIdentifierConfig>([
 
 // Currencies using Account Number + SWIFT (optional)
 for (const cur of [
-  "BDT", "PHP", "VND", "NPR", "MYR", "SGD",
-  "KES", "UGX", "TZS", "NGN", "GHS",
+  "BDT",
+  "PHP",
+  "VND",
+  "NPR",
+  "MYR",
+  "SGD",
+  "KES",
+  "UGX",
+  "TZS",
+  "NGN",
+  "GHS",
 ]) {
-  BY_CURRENCY.set(cur, {
-    fields: [FIELD_ACCOUNT, FIELD_SWIFT_OPTIONAL],
-    showIdentifiersFirst: false,
-    hideFlexBankPicker: false,
-  });
+  BY_CURRENCY.set(
+    cur,
+    cur === "BDT"
+      ? {
+          fields: [FIELD_ACCOUNT, FIELD_BANK_ROUTING, FIELD_SWIFT_OPTIONAL],
+          showIdentifiersFirst: false,
+          hideFlexBankPicker: false,
+        }
+      : {
+          fields: [FIELD_ACCOUNT, FIELD_SWIFT_OPTIONAL],
+          showIdentifiersFirst: false,
+          hideFlexBankPicker: false,
+        },
+  );
 }
 
 // Currencies using IBAN + SWIFT (required)
 for (const cur of [
-  "XOF", "XAF", "TRY", "SAR", "QAR", "BHD",
-  "JOD", "KWD", "LBP", "EGP", "TND",
+  "XOF",
+  "XAF",
+  "TRY",
+  "SAR",
+  "QAR",
+  "BHD",
+  "JOD",
+  "KWD",
+  "LBP",
+  "EGP",
+  "TND",
 ]) {
   BY_CURRENCY.set(cur, IBAN_SWIFT_REQUIRED);
 }
@@ -209,11 +250,50 @@ for (const cur of [
 
 /** European countries that use IBAN (ISO 3166-1 alpha-3 codes) */
 export const EUROPEAN_COUNTRIES = new Set([
-  "ALB", "AND", "AUT", "BLR", "BEL", "BIH", "BGR", "HRV", "CYP", "CZE",
-  "DNK", "EST", "FIN", "FRA", "DEU", "GRC", "HUN", "ISL", "IRL", "ITA",
-  "LVA", "LIE", "LTU", "LUX", "MLT", "MDA", "MCO", "MNE", "NLD", "MKD",
-  "NOR", "POL", "PRT", "ROU", "RUS", "SMR", "SRB", "SVK", "SVN", "ESP",
-  "SWE", "CHE", "UKR", "VAT",
+  "ALB",
+  "AND",
+  "AUT",
+  "BLR",
+  "BEL",
+  "BIH",
+  "BGR",
+  "HRV",
+  "CYP",
+  "CZE",
+  "DNK",
+  "EST",
+  "FIN",
+  "FRA",
+  "DEU",
+  "GRC",
+  "HUN",
+  "ISL",
+  "IRL",
+  "ITA",
+  "LVA",
+  "LIE",
+  "LTU",
+  "LUX",
+  "MLT",
+  "MDA",
+  "MCO",
+  "MNE",
+  "NLD",
+  "MKD",
+  "NOR",
+  "POL",
+  "PRT",
+  "ROU",
+  "RUS",
+  "SMR",
+  "SRB",
+  "SVK",
+  "SVN",
+  "ESP",
+  "SWE",
+  "CHE",
+  "UKR",
+  "VAT",
 ]);
 
 // ─── Default fallback ─────────────────────────────────────────────────────────
@@ -226,20 +306,58 @@ const DEFAULT_CONFIG: BankIdentifierConfig = {
 
 // ─── Main resolver ────────────────────────────────────────────────────────────
 
+export type BeneficiaryAccountType = "INDIVIDUAL" | "CORPORATE";
+
+function swiftMustBeRequired(
+  currency: string | undefined,
+  accountType: BeneficiaryAccountType,
+): boolean {
+  const cur = currency?.trim().toUpperCase() ?? "";
+  if (cur === "USD" || cur === "GBP") return true;
+  if (accountType === "CORPORATE" && cur === "EUR") return true;
+  return false;
+}
+
+function withSwiftRequired(config: BankIdentifierConfig): BankIdentifierConfig {
+  const hasRequiredSwift = config.fields.some(
+    (f) => f.key === "swiftBic" && f.required,
+  );
+  if (hasRequiredSwift) return config;
+
+  return {
+    ...config,
+    fields: config.fields.map((f) =>
+      f.key === "swiftBic" ? { ...FIELD_SWIFT_REQUIRED } : f,
+    ),
+  };
+}
+
 export function resolveBankIdentifierConfig(
   currency: string,
   couCode?: string | null,
+  accountType: BeneficiaryAccountType = "INDIVIDUAL",
 ): BankIdentifierConfig {
   const cur = currency?.trim().toUpperCase();
+  let config: BankIdentifierConfig;
+
   if (cur) {
     const byCurrency = BY_CURRENCY.get(cur);
-    if (byCurrency) return byCurrency;
+    if (byCurrency) config = byCurrency;
+    else {
+      const u = couCode?.trim().toUpperCase();
+      config =
+        u && EUROPEAN_COUNTRIES.has(u) ? IBAN_SWIFT_REQUIRED : DEFAULT_CONFIG;
+    }
+  } else {
+    const u = couCode?.trim().toUpperCase();
+    config =
+      u && EUROPEAN_COUNTRIES.has(u) ? IBAN_SWIFT_REQUIRED : DEFAULT_CONFIG;
   }
 
-  const u = couCode?.trim().toUpperCase();
-  if (u && EUROPEAN_COUNTRIES.has(u)) return IBAN_SWIFT_REQUIRED;
-
-  return DEFAULT_CONFIG;
+  if (swiftMustBeRequired(cur, accountType)) {
+    return withSwiftRequired(config);
+  }
+  return config;
 }
 
 // ─── Normalisation helpers ────────────────────────────────────────────────────
@@ -254,8 +372,12 @@ export function normalizeAba(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 9);
 }
 
-export function normalizeIban(raw: string): string {
-  return raw.replace(/\s/g, "").toUpperCase();
+export function normalizeIban(raw: string, maxLength?: number): string {
+  let s = raw.replace(/\s/g, "").toUpperCase();
+  if (maxLength != null && maxLength > 0) {
+    s = s.slice(0, maxLength);
+  }
+  return s;
 }
 
 export function normalizeSortCode(raw: string): string {
@@ -268,15 +390,139 @@ export function normalizeBsb(raw: string): string {
 
 // ─── IBAN length by country (ISO 3166-1 alpha-2) ─────────────────────────────
 
-const IBAN_LENGTH_BY_COUNTRY: Readonly<Record<string, number>> = {
-  AE: 23, AT: 20, BE: 16, BF: 28, BG: 22, BH: 22, BJ: 28, CF: 27,
-  CG: 27, CH: 21, CI: 28, CM: 27, CZ: 24, DE: 22, DK: 18, EE: 20,
-  EG: 29, ES: 24, FI: 18, FR: 27, GA: 27, GB: 22, GQ: 27, GW: 25,
-  HR: 21, HU: 28, IE: 22, IT: 27, JO: 30, KW: 30, LB: 28, LT: 20,
-  LU: 20, LV: 21, ML: 28, NE: 28, NL: 18, NO: 15, PK: 24, PL: 28,
-  PT: 25, QA: 29, RO: 24, SA: 24, SE: 24, SI: 19, SK: 24, SN: 28,
-  TD: 27, TG: 28, TR: 26,
+export const IBAN_LENGTH_BY_COUNTRY: Readonly<Record<string, number>> = {
+  AE: 23,
+  AT: 20,
+  BE: 16,
+  BF: 28,
+  BG: 22,
+  BH: 22,
+  BJ: 28,
+  CF: 27,
+  CG: 27,
+  CH: 21,
+  CI: 28,
+  CM: 27,
+  CZ: 24,
+  DE: 22,
+  DK: 18,
+  EE: 20,
+  EG: 29,
+  ES: 24,
+  FI: 18,
+  FR: 27,
+  GA: 27,
+  GB: 22,
+  GQ: 27,
+  GW: 25,
+  HR: 21,
+  HU: 28,
+  IE: 22,
+  IT: 27,
+  JO: 30,
+  KW: 30,
+  LB: 28,
+  LT: 20,
+  LU: 20,
+  LV: 21,
+  ML: 28,
+  NE: 28,
+  NL: 18,
+  NO: 15,
+  PK: 24,
+  PL: 28,
+  PT: 25,
+  QA: 29,
+  RO: 24,
+  SA: 24,
+  SE: 24,
+  SI: 19,
+  SK: 24,
+  SN: 28,
+  TD: 27,
+  TG: 28,
+  TR: 26,
 };
+
+const IBAN_BODY_RE = /^[A-Z]{2}[0-9A-Z]+$/;
+
+function ibanCountryLabel(alpha2: string): string {
+  const code = alpha2.trim().toUpperCase();
+  return countriesIso.getName(code, "en") || code;
+}
+
+/** Resolve expected IBAN length from typed prefix, else destination hint (ISO alpha-2). */
+export function expectedIbanLength(
+  value: string,
+  hintAlpha2?: string | null,
+): number | undefined {
+  const normalized = normalizeIban(value);
+  const prefix = normalized.slice(0, 2).toUpperCase();
+  if (/^[A-Z]{2}$/.test(prefix) && IBAN_LENGTH_BY_COUNTRY[prefix] != null) {
+    return IBAN_LENGTH_BY_COUNTRY[prefix];
+  }
+  const hint = hintAlpha2?.trim().toUpperCase();
+  if (hint && IBAN_LENGTH_BY_COUNTRY[hint] != null) {
+    return IBAN_LENGTH_BY_COUNTRY[hint];
+  }
+  return undefined;
+}
+
+export function validateIban(
+  value: string,
+  options?: { hintAlpha2?: string | null; required?: boolean },
+): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return options?.required ? "IBAN is required" : undefined;
+  }
+
+  const iban = normalizeIban(trimmed);
+  const prefix = iban.slice(0, 2).toUpperCase();
+  const hint = options?.hintAlpha2?.trim().toUpperCase();
+
+  let alpha2: string | undefined;
+  if (/^[A-Z]{2}$/.test(prefix) && IBAN_LENGTH_BY_COUNTRY[prefix] != null) {
+    alpha2 = prefix;
+  } else if (hint && IBAN_LENGTH_BY_COUNTRY[hint] != null) {
+    alpha2 = hint;
+  }
+
+  if (alpha2) {
+    if (
+      hint &&
+      /^[A-Z]{2}$/.test(prefix) &&
+      prefix !== hint &&
+      IBAN_LENGTH_BY_COUNTRY[hint] != null
+    ) {
+      return `This corridor expects a ${ibanCountryLabel(hint)} IBAN (${IBAN_LENGTH_BY_COUNTRY[hint]} characters).`;
+    }
+
+    const expectedLen = IBAN_LENGTH_BY_COUNTRY[alpha2]!;
+    const countryName = ibanCountryLabel(alpha2);
+    if (iban.length < expectedLen) {
+      return `IBAN for ${countryName} must be ${expectedLen} characters (${iban.length} of ${expectedLen} entered).`;
+    }
+    if (iban.length > expectedLen) {
+      return `IBAN for ${countryName} must be exactly ${expectedLen} characters.`;
+    }
+    if (!IBAN_BODY_RE.test(iban)) {
+      return "IBAN must start with a 2-letter country code followed by letters and numbers.";
+    }
+    return undefined;
+  }
+
+  if (iban.length < 15) {
+    return `Enter a valid IBAN (at least 15 characters; ${iban.length} entered).`;
+  }
+  if (iban.length > 34) {
+    return "IBAN cannot exceed 34 characters.";
+  }
+  if (!IBAN_BODY_RE.test(iban)) {
+    return "IBAN must start with a 2-letter country code followed by letters and numbers.";
+  }
+  return undefined;
+}
 
 // ─── Per-field validator ──────────────────────────────────────────────────────
 
@@ -305,19 +551,7 @@ export function validateBankField(
   }
 
   if (field.lookup === "iban") {
-    const i = normalizeIban(t);
-    const countryCode = i.slice(0, 2).toUpperCase();
-    const expectedLen = IBAN_LENGTH_BY_COUNTRY[countryCode];
-    if (expectedLen !== undefined) {
-      if (i.length !== expectedLen) {
-        return `IBAN for ${countryCode} must be exactly ${expectedLen} characters (entered ${i.length}).`;
-      }
-    } else {
-      if (i.length < 15 || i.length > 34) {
-        return "Enter a valid IBAN (15–34 characters).";
-      }
-    }
-    return undefined;
+    return validateIban(t, { required: field.required });
   }
 
   if (field.key === "sortCode") {
