@@ -18,6 +18,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
+            git config --global --add safe.directory /var/www/payment-frontend/FrontEnd-Remit2Globe
             sudo chown -R ubuntu:ubuntu /var/www/payment-frontend/FrontEnd-Remit2Globe
             cd /var/www/payment-frontend/FrontEnd-Remit2Globe
             git stash
