@@ -21,8 +21,8 @@ jobs:
             sudo chown -R ubuntu:ubuntu /var/www/payment-frontend
             git config --global --add safe.directory /var/www/payment-frontend/FrontEnd-Remit2Globe
             cd /var/www/payment-frontend/FrontEnd-Remit2Globe
-            git stash
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             npm install
             npm run build
             pm2 restart payment-frontend || pm2 start ecosystem.config.js
