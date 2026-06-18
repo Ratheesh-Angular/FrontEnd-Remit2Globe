@@ -14,6 +14,7 @@ import {
   parsePhoneNumberFromString,
 } from "libphonenumber-js/max";
 import { ALL_COUNTRIES, type Country } from "@/lib/phone-countries";
+import { FIELD_HEIGHT } from "@/lib/field-styles";
 
 /** E.164 validation using full lib metadata — the default `min` build can reject valid numbers. */
 export function isValidE164Phone(value: string): boolean {
@@ -97,9 +98,7 @@ export function PhoneCountryInput({
         const c = ALL_COUNTRIES.find((x) => x.code === iso);
         if (c) {
           setSelected(c);
-          setLocal(
-            pn?.nationalNumber != null ? String(pn.nationalNumber) : "",
-          );
+          setLocal(pn?.nationalNumber != null ? String(pn.nationalNumber) : "");
         }
       }
     } catch {
@@ -145,7 +144,7 @@ export function PhoneCountryInput({
   return (
     <div>
       <div
-        className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 bg-white ${wrapError} ${
+        className={`flex items-center ${FIELD_HEIGHT} border rounded-lg overflow-visible transition-all focus-within:ring-2 bg-white ${wrapError} ${
           disabled ? "bg-slate-50 opacity-70" : ""
         }`}
       >
@@ -158,7 +157,7 @@ export function PhoneCountryInput({
               setOpen((o) => !o);
               setQ("");
             }}
-            className="flex items-center gap-1.5 px-3 h-11 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg text-left min-w-[8.5rem] max-w-[11rem] hover:bg-slate-50 disabled:cursor-not-allowed"
+            className={`flex items-center gap-1.5 px-3 ${FIELD_HEIGHT} text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg text-left min-w-[8.5rem] max-w-[11rem] hover:bg-slate-50 disabled:cursor-not-allowed`}
           >
             {selected ? (
               <>
@@ -267,7 +266,9 @@ export function PhoneCountryInput({
       </div>
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
       {hint && !error ? (
-        <div className="mt-1.5 text-xs text-slate-600 leading-relaxed">{hint}</div>
+        <div className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+          {hint}
+        </div>
       ) : null}
     </div>
   );

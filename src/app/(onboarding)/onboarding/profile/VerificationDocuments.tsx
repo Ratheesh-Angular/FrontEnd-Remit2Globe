@@ -10,6 +10,8 @@ import {
   kycUploadMaxSizeLabelMb,
   parseKycUploadErrorMessage,
 } from "./kycUploadAllowed";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifyError } from "@/lib/notify";
 
 type DocumentType =
   | "PASSPORT_FRONT"
@@ -117,7 +119,6 @@ export function VerificationDocuments({
   const [uploads, setUploads] =
     useState<Record<DocumentType, UploadedDoc | null>>(emptyUploads);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [preview, setPreview] = useState<{
     url: string;
@@ -227,6 +228,9 @@ export function VerificationDocuments({
       onDocumentsSynced();
     } catch (err) {
       const serverMsg = parseKycUploadErrorMessage(err);
+      notifyError(
+        serverMsg ?? "Upload failed. Check your connection and try again.",
+      );
       setUploads((prev) => ({
         ...prev,
         [docType]: {
@@ -244,28 +248,18 @@ export function VerificationDocuments({
   const handleSubmitKyc = async () => {
     try {
       setIsSubmitting(true);
-      setSubmitError("");
       await api.post("/kyc/submit");
       onKycSubmitted();
     } catch (error: unknown) {
-      const msg =
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        (error as { response?: { data?: { message?: string } } }).response?.data
-          ?.message;
-      setSubmitError(
-        typeof msg === "string"
-          ? msg
-          : "Something went wrong. Please try again.",
-      );
+      notifyApiError(error, "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      <AppLoadingOverlay show={isSubmitting} label="Submitting application…" />
       {preview && (
         <DocumentPreviewModal
           open={Boolean(preview)}
@@ -427,12 +421,6 @@ export function VerificationDocuments({
           );
         })}
       </div>
-
-      {submitError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-          {submitError}
-        </div>
-      )}
 
       <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-5">
         <div className="flex items-start justify-between gap-4">

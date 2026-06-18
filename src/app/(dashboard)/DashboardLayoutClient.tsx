@@ -9,7 +9,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../assets/logos/R2GLogo.png";
-
+import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 import { useRef } from "react";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
@@ -83,7 +83,7 @@ export default function DashboardLayoutClient({
   const [sessionBanner, setSessionBanner] = useState<string | null>(null);
   const pathname = usePathname();
   const isKycApproved = user?.kycStatus === "APPROVED";
-
+  const router = useRouter();
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -448,8 +448,11 @@ export default function DashboardLayoutClient({
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 px-1">
-              <div className="w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
+            <div
+              onClick={() => router.push("/profile")}
+              className="cursor-pointer flex items-center gap-2.5 sm:gap-3 min-w-0 px-1"
+            >
+              <div className=" w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
                 {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
               </div>
               <div className="min-w-0 hidden sm:block">

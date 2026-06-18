@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  fieldDropdownOption,
+  fieldDropdownSearch,
+  fieldSelectTriggerBase,
+} from "@/lib/field-styles";
+import { FieldSelectChevron } from "@/components/ui/FieldSelectChevron";
 
 type StateSearchSelectProps = {
   /** Display name of the country of residence (must match Flex / Countries Now). */
@@ -95,7 +101,7 @@ export function StateSearchSelect({
             return next;
           });
         }}
-        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:bg-slate-50 disabled:cursor-not-allowed ${
+        className={`${fieldSelectTriggerBase} ${
           error ? "border-red-400" : "border-slate-200"
         } ${value ? "text-slate-900" : "text-slate-400"} ${className}`}
       >
@@ -104,18 +110,7 @@ export function StateSearchSelect({
             ? "Set country in Personal Info first"
             : value || placeholder}
         </span>
-        <svg
-          className="w-4 h-4 text-slate-400 shrink-0"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
+        <FieldSelectChevron className="ml-auto" />
       </button>
       {open && countryName.trim() && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
@@ -138,7 +133,7 @@ export function StateSearchSelect({
                   setOpen(false);
                 }
               }}
-              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className={fieldDropdownSearch}
             />
           </div>
           <ul className="max-h-52 overflow-y-auto py-1">
@@ -162,7 +157,7 @@ export function StateSearchSelect({
                       setOpen(false);
                       setSearch("");
                     }}
-                    className={`flex items-center w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                    className={`${fieldDropdownOption} ${
                       value === s
                         ? "bg-teal-50 text-teal-700 font-medium"
                         : "text-slate-700"

@@ -18,6 +18,7 @@ import {
   userFacingApiErrorMessage,
   userFacingApiMessageText,
 } from "@/lib/user-facing-api-error";
+import { notifyApiError, notifyError } from "@/lib/notify";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -149,11 +150,10 @@ export default function BeneficiariesPage() {
             message: "Your list has been updated.",
           });
         } catch (error: unknown) {
-          setDialog({
-            variant: "error",
-            title: "Could not remove beneficiary",
-            message: userFacingApiErrorMessage(error, "Please try again."),
-          });
+          notifyApiError(
+            error,
+            userFacingApiErrorMessage(error, "Please try again."),
+          );
         } finally {
           setDialogLoading(false);
         }
@@ -236,7 +236,7 @@ export default function BeneficiariesPage() {
             setEditId(null);
             setShowAddModal(true);
           }}
-          className="inline-flex items-center justify-center gap-2 h-11 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-teal-600/20 transition-colors shrink-0"
+          className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-teal-600/20 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" />
           Add beneficiary
@@ -260,7 +260,7 @@ export default function BeneficiariesPage() {
               setEditId(null);
               setShowAddModal(true);
             }}
-            className="inline-flex items-center gap-2 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
+            className="cursor-pointer inline-flex items-center gap-2 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add your first beneficiary
@@ -386,14 +386,13 @@ export default function BeneficiariesPage() {
                                 );
                               }}
                               onError={(message) => {
-                                setDialog({
-                                  variant: "error",
-                                  title: "Could not update status",
-                                  message: userFacingApiMessageText(
+                                notifyError(
+                                  userFacingApiMessageText(
                                     message,
                                     "Please try again.",
                                   ),
-                                });
+                                  "Could not update status",
+                                );
                               }}
                             />
                           </div>
@@ -430,8 +429,7 @@ export default function BeneficiariesPage() {
               <p className="text-sm text-slate-500 text-center sm:text-left order-2 sm:order-1">
                 Showing{" "}
                 <span className="font-medium text-slate-700">{rangeStart}</span>
-                –
-                <span className="font-medium text-slate-700">{rangeEnd}</span>{" "}
+                –<span className="font-medium text-slate-700">{rangeEnd}</span>{" "}
                 of{" "}
                 <span className="font-medium text-slate-700">
                   {beneficiaries.length}
@@ -471,9 +469,7 @@ export default function BeneficiariesPage() {
                 <button
                   type="button"
                   disabled={page >= totalPages}
-                  onClick={() =>
-                    setPage((p) => Math.min(totalPages, p + 1))
-                  }
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-sm font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                 >
                   <span className="hidden sm:inline">Next</span>
@@ -497,16 +493,13 @@ export default function BeneficiariesPage() {
           handleFormSuccess(editId !== null);
         }}
         onSubmitError={(message) => {
-          setDialog({
-            variant: "error",
-            title: editId
-              ? "Could not save changes"
-              : "Could not add beneficiary",
-            message: userFacingApiMessageText(
+          notifyError(
+            userFacingApiMessageText(
               message,
               "Something went wrong. Please try again.",
             ),
-          });
+            editId ? "Could not save changes" : "Could not add beneficiary",
+          );
         }}
       />
 

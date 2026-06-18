@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { FIELD_HEIGHT } from "@/lib/field-styles";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -44,7 +45,7 @@ export function Input({
           id={inputId}
           required={required}
           className={cn(
-            "border border-slate-200 rounded-lg px-3 h-10 text-sm w-full bg-white",
+            `border border-slate-200 rounded-lg px-3 ${FIELD_HEIGHT} text-sm w-full bg-white`,
             "outline-none transition-all",
             "focus:ring-2 focus:ring-primary focus:border-primary",
             "placeholder:text-slate-400 text-slate-900",

@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { FIELD_HEIGHT, fieldNativeSelectClasses } from "@/lib/field-styles";
+import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 
 interface SelectOption {
   value: string;
@@ -38,31 +40,34 @@ export function Select({
         </label>
       )}
 
-      <select
-        id={selectId}
-        required={required}
-        className={cn(
-          "border border-slate-200 rounded-lg px-3 h-10 text-sm w-full bg-white appearance-none",
-          "outline-none transition-all cursor-pointer",
-          "focus:ring-2 focus:ring-primary focus:border-primary",
-          "text-slate-900",
-          "disabled:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400",
-          error && "border-danger focus:ring-danger focus:border-danger",
-          className,
-        )}
-        {...props}
-      >
-        {placeholder && (
-          <option value="" disabled>
-            {placeholder}
-          </option>
-        )}
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <NativeSelectShell>
+        <select
+          id={selectId}
+          required={required}
+          className={cn(
+            `border border-slate-200 rounded-lg px-3 ${FIELD_HEIGHT} text-sm w-full`,
+            fieldNativeSelectClasses,
+            "outline-none transition-all",
+            "focus:ring-2 focus:ring-primary focus:border-primary",
+            "text-slate-900",
+            "disabled:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400",
+            error && "border-danger focus:ring-danger focus:border-danger",
+            className,
+          )}
+          {...props}
+        >
+          {placeholder && (
+            <option value="" disabled>
+              {placeholder}
+            </option>
+          )}
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </NativeSelectShell>
 
       {error && <p className="mt-1.5 text-sm text-danger">{error}</p>}
       {hint && !error && <p className="mt-1.5 text-sm text-slate-400">{hint}</p>}

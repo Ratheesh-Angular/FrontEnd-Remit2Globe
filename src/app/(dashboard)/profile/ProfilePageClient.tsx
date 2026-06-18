@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { sessionApi as api } from "@/lib/api";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifySuccess } from "@/lib/notify";
 import {
   getPasswordRequirementRows,
   getPasswordStrength,
@@ -377,7 +379,6 @@ function strengthBar(s: PasswordStrength): string {
 export default function ProfilePageClient() {
   const [tab, setTab] = useState<TabId>("account");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<{
     id: string;
     email: string | null;
@@ -393,7 +394,6 @@ export default function ProfilePageClient() {
   const [full, setFull] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
     setLoading(true);
     try {
       const [meRes, kycRes] = await Promise.all([
@@ -403,8 +403,7 @@ export default function ProfilePageClient() {
       setMe(meRes.data.data?.user ?? null);
       setFull(kycRes.data.data ?? null);
     } catch (e: unknown) {
-      const ax = e as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message ?? "Could not load profile.");
+      notifyApiError(e, "Could not load profile.");
     } finally {
       setLoading(false);
     }
@@ -436,12 +435,6 @@ export default function ProfilePageClient() {
           Your account details and verification information
         </p>
       </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="border-b border-slate-200">
@@ -933,8 +926,6 @@ function ChangePasswordPanel({
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState({ c: false, p: false, n: false });
-  const [error, setError] = useState("");
-  const [done, setDone] = useState("");
   const [loading, setLoading] = useState(false);
 
   const strength = getPasswordStrength(password);
@@ -949,8 +940,6 @@ function ChangePasswordPanel({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setDone("");
     if (!canSubmit) return;
     setLoading(true);
     try {
@@ -958,14 +947,13 @@ function ChangePasswordPanel({
         currentPassword,
         newPassword: password,
       });
-      setDone("Password updated successfully.");
+      notifySuccess("Password updated successfully.");
       setCurrentPassword("");
       setPassword("");
       setConfirm("");
       onSuccess();
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message ?? "Could not update password.");
+      notifyApiError(err, "Could not update password.");
     } finally {
       setLoading(false);
     }
@@ -991,7 +979,8 @@ function ChangePasswordPanel({
       title="Change password"
       description="Use a strong password you do not use elsewhere"
     >
-      <form onSubmit={submit} className="space-y-5 max-w-lg">
+      <form onSubmit={submit} className="space-y-5 max-w-lg relative">
+        <AppLoadingOverlay show={loading} label="Updating password…" />
         <div>
           <label className="text-sm font-medium text-slate-700 mb-1.5 block">
             Current password
@@ -1002,7 +991,7 @@ function ChangePasswordPanel({
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
             <button
               type="button"
@@ -1024,7 +1013,7 @@ function ChangePasswordPanel({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
             <button
               type="button"
@@ -1091,7 +1080,7 @@ function ChangePasswordPanel({
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               autoComplete="new-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
             <button
               type="button"
@@ -1105,17 +1094,6 @@ function ChangePasswordPanel({
             <p className="text-xs text-red-600 mt-1">Passwords do not match</p>
           )}
         </div>
-
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {error}
-          </div>
-        )}
-        {done && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            {done}
-          </div>
-        )}
 
         <button
           type="submit"

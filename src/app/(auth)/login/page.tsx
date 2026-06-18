@@ -4,23 +4,24 @@ import { useState } from "react";
 import api from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifyError } from "@/lib/notify";
+
 export default function LoginPage() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (!emailOrPhone) {
-      setError("Email or phone number is required");
+      notifyError("Email or phone number is required");
       return;
     }
     if (!password) {
-      setError("Password is required");
+      notifyError("Password is required");
       return;
     }
 
@@ -36,13 +37,12 @@ export default function LoginPage() {
 
       const token = response.data.data?.token as string | undefined;
       if (!token) {
-        setError(
+        notifyError(
           "Login succeeded but session setup failed. Deploy the latest API or contact support.",
         );
         return;
       }
 
-      /** Mirror backend JWT into an httpOnly cookie on the Next origin so middleware sees `token`. */
       const sessRes = await fetch("/api/auth/backend-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,14 +50,14 @@ export default function LoginPage() {
         body: JSON.stringify({ token }),
       });
       if (!sessRes.ok) {
-        setError("Could not save your session. Please try again.");
+        notifyError("Could not save your session. Please try again.");
         return;
       }
       await sessRes.json().catch(() => undefined);
 
       window.location.assign("/dashboard");
-    } catch (error: any) {
-      setError(error.response?.data?.message || "Something went wrong");
+    } catch (error: unknown) {
+      notifyApiError(error);
     } finally {
       setIsLoading(false);
     }
@@ -65,9 +65,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
+      <AppLoadingOverlay show={isLoading} label="Signing in…" />
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
         <div className="flex justify-center mb-6">
-          {" "}
           <Image
             src={R2GLogo}
             alt="Remit2Globe"
@@ -84,7 +84,6 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email or Phone */}
           <div>
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               Email or Phone Number
@@ -95,7 +94,7 @@ export default function LoginPage() {
               onChange={(e) => setEmailOrPhone(e.target.value)}
               placeholder="you@example.com or +1234567890"
               autoComplete="username"
-              className="border border-slate-200 rounded-lg px-3 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
           </div>
 
@@ -110,57 +109,24 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 autoComplete="current-password"
-                className="border border-slate-200 rounded-lg px-3 pr-14 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
+                className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
           </div>
 
-          {/* Error message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="cursor-pointer w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isLoading ? (
-              <>
-                <svg
-                  className="animate-spin w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                Signing in...
-              </>
-            ) : (
-              "Sign In"
-            )}
+            {isLoading ? "Signing in…" : "Sign In"}
           </button>
         </form>
 

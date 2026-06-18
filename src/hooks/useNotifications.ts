@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { sessionApi as api } from "@/lib/api";
+import { notifyError } from "@/lib/notify";
 import type { Notification, NotificationPagination } from "@/types/notification";
 
 interface UseNotificationsResult {
   notifications: Notification[];
   pagination: NotificationPagination | null;
   loading: boolean;
-  error: string;
   refresh: () => void;
 }
 
@@ -21,7 +21,6 @@ export function useNotifications(
     null,
   );
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
@@ -29,7 +28,6 @@ export function useNotifications(
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError("");
 
     api
       .get<{
@@ -47,7 +45,7 @@ export function useNotifications(
         }
       })
       .catch(() => {
-        if (!cancelled) setError("Failed to load notifications.");
+        if (!cancelled) notifyError("Failed to load notifications.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -58,5 +56,5 @@ export function useNotifications(
     };
   }, [page, limit, tick]);
 
-  return { notifications, pagination, loading, error, refresh };
+  return { notifications, pagination, loading, refresh };
 }

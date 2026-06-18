@@ -13,7 +13,9 @@ import {
   type RemittanceTransferRow,
 } from "@/lib/transfer-receipt-from-transfer";
 import { PaymentProofLightbox } from "@/components/transactions/PaymentProofLightbox";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
+import { notifyError } from "@/lib/notify";
 import {
   PAYMENT_PROOF_ACCEPT,
   canUploadMorePaymentProof,
@@ -123,23 +125,21 @@ export function ViewTransactionModal({
 }: ViewTransactionModalProps) {
   const [row, setRow] = useState<RemittanceTransferRow | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadError, setUploadError] = useState("");
   const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open || !transferId) {
       setRow(null);
-      setError("");
+      setLoadFailed(false);
       setLightboxUrl(null);
-      setUploadError("");
       return;
     }
     let cancelled = false;
     setLoading(true);
-    setError("");
+    setLoadFailed(false);
     void api
       .get<{
         data: { transfer: RemittanceTransferRow & { createdAt?: string } };
@@ -148,7 +148,10 @@ export function ViewTransactionModal({
         if (!cancelled) setRow(res.data.data.transfer as RemittanceTransferRow);
       })
       .catch(() => {
-        if (!cancelled) setError("Could not load transfer.");
+        if (!cancelled) {
+          setLoadFailed(true);
+          notifyError("Could not load transfer.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -172,14 +175,13 @@ export function ViewTransactionModal({
 
   async function handleProofFiles(fileList: FileList | null) {
     if (!fileList?.length || !transferId) return;
-    setUploadError("");
     setUploadBusy(true);
     try {
       await uploadPaymentProof(transferId, fileList, api);
       await reloadTransfer();
       onTransferUpdated?.();
     } catch (e: unknown) {
-      setUploadError(paymentProofUploadErrorMessage(e));
+      notifyError(paymentProofUploadErrorMessage(e));
     } finally {
       setUploadBusy(false);
       if (proofInputRef.current) proofInputRef.current.value = "";
@@ -206,6 +208,7 @@ export function ViewTransactionModal({
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
         <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200/80 relative sm:max-w-2xl">
+          <AppLoadingOverlay show={uploadBusy} label="Uploading proof…" />
           <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700 mb-1">
@@ -213,8 +216,10 @@ export function ViewTransactionModal({
               </p>
               {loading ? (
                 <div className="h-7 w-56 bg-slate-200 rounded animate-pulse" />
-              ) : error ? (
-                <h2 className="text-lg font-semibold text-red-600">{error}</h2>
+              ) : loadFailed ? (
+                <h2 className="text-lg font-semibold text-slate-600">
+                  Could not load transfer
+                </h2>
               ) : (
                 <>
                   <h2 className="text-lg font-semibold text-slate-900 font-mono tracking-tight">
@@ -264,7 +269,7 @@ export function ViewTransactionModal({
                 label="Loading transfer…"
               />
             )}
-            {!loading && !error && row && (
+            {!loading && !loadFailed && row && (
               <div className="space-y-2 pb-4">
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-3">
@@ -485,11 +490,6 @@ export function ViewTransactionModal({
                               </button>
                             </div>
                           </div>
-                          {uploadError ? (
-                            <p className="text-xs text-red-600 mt-2">
-                              {uploadError}
-                            </p>
-                          ) : null}
                         </div>
                       </div>
                     )}

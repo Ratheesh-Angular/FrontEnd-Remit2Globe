@@ -17,9 +17,17 @@ import {
   type BankFieldKey,
 } from "@/lib/beneficiary-bank-identifier";
 import { Loader } from "@/components/ui/Loader";
+import { notifyApiError } from "@/lib/notify";
+import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
+import { fieldNativeSelectClasses } from "@/lib/field-styles";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
+import {
+  nationalPhonePlaceholder,
+  validateNationalPhoneDigits,
+} from "@/lib/phone-validation";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import countriesIso from "i18n-iso-countries";
 import {
@@ -113,7 +121,7 @@ export type AddBeneficiaryModalProps = {
   lockPayoutCurrency?: string | null;
   /** When set, modal loads this beneficiary and PATCHes on save instead of creating. */
   editBeneficiaryId?: string | null;
-  /** If set, API errors are reported here instead of only inline `saveError`. */
+  /** If set, API errors are reported to the parent (e.g. toast) instead of locally. */
   onSubmitError?: (message: string) => void;
 };
 
@@ -232,7 +240,6 @@ export function AddBeneficiaryModal({
     {},
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
   const [isConfirmingAccount, setIsConfirmingAccount] = useState(false);
   const [isConfirmingIban, setIsConfirmingIban] = useState(false);
   const [localMobileNumber, setLocalMobileNumber] = useState("");
@@ -275,6 +282,12 @@ export function AddBeneficiaryModal({
       matchFlexCountryByLabel(flexCountries, raw)
     );
   }, [catalogCountryList, flexCountries, formData.country]);
+
+  const destinationPhoneCountry = useMemo(() => {
+    const code = selectedDestinationCountry?.couCode;
+    if (!code) return null;
+    return phoneCountryFromCouCode(code);
+  }, [selectedDestinationCountry?.couCode]);
 
   const destinationCouCode = useMemo(() => {
     if (selectedDestinationCountry?.couCode) {
@@ -402,7 +415,6 @@ export function AddBeneficiaryModal({
       setEditLoading(true);
       setEditLoadError("");
       setErrors({});
-      setSaveError("");
       setIsConfirmingAccount(false);
       setBankOpen(false);
       setPayoutCurrencyOpen(false);
@@ -446,7 +458,6 @@ export function AddBeneficiaryModal({
         : { ...emptyForm },
     );
     setErrors({});
-    setSaveError("");
     setIsConfirmingAccount(false);
     setLocalMobileNumber("");
     setFlexBanks([]);
@@ -657,7 +668,6 @@ export function AddBeneficiaryModal({
     const next = value == null ? "" : String(value);
     setFormData((prev) => ({ ...prev, [field]: next }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
-    setSaveError("");
   }
 
   function selectFlexBank(bank: FlexBank) {
@@ -725,7 +735,6 @@ export function AddBeneficiaryModal({
       payoutCurrency: undefined,
       deliveryChannel: undefined,
     }));
-    setSaveError("");
   }
 
   function applyDeliveryChannelChange(channel: BeneficiaryDeliveryChannel) {
@@ -754,7 +763,6 @@ export function AddBeneficiaryModal({
     }));
     if (channel !== "MOBILE_MONEY") setLocalMobileNumber("");
     setErrors((prev) => ({ ...prev, deliveryChannel: undefined }));
-    setSaveError("");
   }
 
   function getBankFieldValue(key: BankFieldKey): string {
@@ -880,12 +888,19 @@ export function AddBeneficiaryModal({
     if (formData.deliveryChannel === "MOBILE_MONEY") {
       if (!formData.mobileMoneyProvider.trim())
         errs.mobileMoneyProvider = "Provider is required";
-      if (!localMobileNumber.trim())
+      if (!localMobileNumber.trim()) {
         errs.mobileNumber = "Mobile number is required";
-      else {
+      } else if (destinationPhoneCountry) {
+        const mobileErr = validateNationalPhoneDigits(
+          destinationPhoneCountry,
+          localMobileNumber,
+        );
+        if (mobileErr) errs.mobileNumber = mobileErr;
+      } else {
         const digits = localMobileNumber.replace(/\D/g, "");
-        if (digits.length < 7 || digits.length > 15)
+        if (digits.length < 7 || digits.length > 15) {
           errs.mobileNumber = "Enter a valid mobile number (7–15 digits)";
+        }
       }
     }
 
@@ -899,7 +914,6 @@ export function AddBeneficiaryModal({
 
     try {
       setIsSaving(true);
-      setSaveError("");
 
       const payload: Record<string, unknown> = {
         deliveryChannel: formData.deliveryChannel,
@@ -962,7 +976,7 @@ export function AddBeneficiaryModal({
       if (onSubmitError) {
         onSubmitError(msg);
       } else {
-        setSaveError(msg);
+        notifyApiError(error, msg);
       }
     } finally {
       setIsSaving(false);
@@ -1371,32 +1385,34 @@ export function AddBeneficiaryModal({
               <label className="text-sm font-medium text-slate-700 block mb-1.5">
                 Delivery Channel <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.deliveryChannel}
-                disabled={
-                  isEditMode ||
-                  !formData.country.trim() ||
-                  availableDeliveryChannels.length === 0
-                }
-                onChange={(e) =>
-                  applyDeliveryChannelChange(
-                    e.target.value as BeneficiaryDeliveryChannel,
-                  )
-                }
-                className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
-              >
-                {!formData.country.trim() ? (
-                  <option value="BANK_TRANSFER">
-                    Select destination country first
-                  </option>
-                ) : (
-                  availableDeliveryChannels.map((ch) => (
-                    <option key={ch} value={ch}>
-                      {getDeliveryChannelLabel(ch)}
+              <NativeSelectShell>
+                <select
+                  value={formData.deliveryChannel}
+                  disabled={
+                    isEditMode ||
+                    !formData.country.trim() ||
+                    availableDeliveryChannels.length === 0
+                  }
+                  onChange={(e) =>
+                    applyDeliveryChannelChange(
+                      e.target.value as BeneficiaryDeliveryChannel,
+                    )
+                  }
+                  className={`w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed ${fieldNativeSelectClasses}`}
+                >
+                  {!formData.country.trim() ? (
+                    <option value="BANK_TRANSFER">
+                      Select destination country first
                     </option>
-                  ))
-                )}
-              </select>
+                  ) : (
+                    availableDeliveryChannels.map((ch) => (
+                      <option key={ch} value={ch}>
+                        {getDeliveryChannelLabel(ch)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </NativeSelectShell>
               {!formData.country.trim() ? (
                 <p className="mt-1 text-xs text-slate-500">
                   Choose a destination country to see available delivery
@@ -1420,7 +1436,10 @@ export function AddBeneficiaryModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  First name (as per bank account){" "}
+                  First name{" "}
+                  {formData.deliveryChannel === "BANK_TRANSFER"
+                    ? " (as per bank account)"
+                    : ""}{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1441,7 +1460,10 @@ export function AddBeneficiaryModal({
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  Last name (as per bank account){" "}
+                  Last name
+                  {formData.deliveryChannel === "BANK_TRANSFER"
+                    ? " (as per bank account)"
+                    : ""}{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1747,34 +1769,36 @@ export function AddBeneficiaryModal({
                     Mobile Money Provider{" "}
                     <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formData.mobileMoneyProvider}
-                    onChange={(e) =>
-                      handleChange("mobileMoneyProvider", e.target.value)
-                    }
-                    disabled={
-                      !formData.country ||
-                      availableMobileMoneyProviders.length === 0
-                    }
-                    className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
-                      errors.mobileMoneyProvider
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"} ${!formData.country || availableMobileMoneyProviders.length === 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
-                  >
-                    <option value="">
-                      {!formData.country
-                        ? "Select country first"
-                        : availableMobileMoneyProviders.length === 0
-                          ? "No providers available for this country"
-                          : "Select provider"}
-                    </option>
-                    {availableMobileMoneyProviders.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {provider}
+                  <NativeSelectShell>
+                    <select
+                      value={formData.mobileMoneyProvider}
+                      onChange={(e) =>
+                        handleChange("mobileMoneyProvider", e.target.value)
+                      }
+                      disabled={
+                        !formData.country ||
+                        availableMobileMoneyProviders.length === 0
+                      }
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${fieldNativeSelectClasses} ${
+                        errors.mobileMoneyProvider
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      } ${formData.mobileMoneyProvider ? "text-slate-900" : "text-slate-400"} ${!formData.country || availableMobileMoneyProviders.length === 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
+                    >
+                      <option value="">
+                        {!formData.country
+                          ? "Select country first"
+                          : availableMobileMoneyProviders.length === 0
+                            ? "No providers available for this country"
+                            : "Select provider"}
                       </option>
-                    ))}
-                  </select>
+                      {availableMobileMoneyProviders.map((provider) => (
+                        <option key={provider} value={provider}>
+                          {provider}
+                        </option>
+                      ))}
+                    </select>
+                  </NativeSelectShell>
                   {availableMobileMoneyProviders.length === 0 &&
                     formData.country && (
                       <p className="mt-1 text-xs text-amber-600">
@@ -1831,16 +1855,20 @@ export function AddBeneficiaryModal({
                       type="tel"
                       inputMode="numeric"
                       placeholder={
-                        formData.country && selectedDestinationCountry
-                          ? "National mobile number (7–15 digits)"
-                          : "Select country first"
+                        formData.country && destinationPhoneCountry
+                          ? nationalPhonePlaceholder(destinationPhoneCountry)
+                          : formData.country && selectedDestinationCountry
+                            ? "National mobile number (7–15 digits)"
+                            : "Select country first"
                       }
                       value={localMobileNumber}
                       onChange={(e) => {
                         if (!selectedDestinationCountry) return;
+                        const maxDigits =
+                          destinationPhoneCountry?.maxDigits ?? 15;
                         const digits = e.target.value
                           .replace(/\D/g, "")
-                          .slice(0, 15);
+                          .slice(0, maxDigits);
                         setLocalMobileNumber(digits);
                         setErrors((prev) => ({
                           ...prev,
@@ -1865,13 +1893,6 @@ export function AddBeneficiaryModal({
                 The beneficiary will collect funds in person in{" "}
                 {formData.country || "the selected country"}. No bank or mobile
                 wallet details are required.
-              </div>
-            )}
-
-            {/* Error */}
-            {saveError && !onSubmitError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                {saveError}
               </div>
             )}
 

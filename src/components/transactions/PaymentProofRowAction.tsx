@@ -14,6 +14,8 @@ import {
   uploadPaymentProof,
 } from "@/lib/payment-proof";
 import { PaymentProofLightbox } from "@/components/transactions/PaymentProofLightbox";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyError } from "@/lib/notify";
 import { FileText, Upload } from "lucide-react";
 
 export type PaymentProofRowActionProps = {
@@ -27,7 +29,6 @@ export function PaymentProofRowAction({
 }: PaymentProofRowActionProps) {
   const proofInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadError, setUploadError] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   if (!showPaymentProofRowAction(transfer)) return null;
@@ -38,13 +39,12 @@ export function PaymentProofRowAction({
 
   async function handleProofFiles(fileList: FileList | null) {
     if (!fileList?.length) return;
-    setUploadError("");
     setUploadBusy(true);
     try {
       await uploadPaymentProof(transfer.id, fileList, api);
       onUploaded?.();
     } catch (e: unknown) {
-      setUploadError(paymentProofUploadErrorMessage(e));
+      notifyError(paymentProofUploadErrorMessage(e));
     } finally {
       setUploadBusy(false);
       if (proofInputRef.current) proofInputRef.current.value = "";
@@ -54,10 +54,9 @@ export function PaymentProofRowAction({
   const buttonClass =
     "cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
-  const errorTitle = uploadError ? uploadError : undefined;
-
   return (
     <>
+      <AppLoadingOverlay show={uploadBusy} label="Uploading proof…" />
       {canUpload ? (
         <>
           <input
@@ -76,16 +75,11 @@ export function PaymentProofRowAction({
             disabled={uploadBusy}
             onClick={() => proofInputRef.current?.click()}
             className={buttonClass}
-            title={errorTitle ?? "Upload payment proof"}
+            title="Upload payment proof"
             aria-label="Upload payment proof"
           >
             <Upload className="w-4 h-4" aria-hidden />
           </button>
-          {uploadError ? (
-            <span className="sr-only" role="status">
-              {uploadError}
-            </span>
-          ) : null}
         </>
       ) : hasProof && latestProof ? (
         <button
