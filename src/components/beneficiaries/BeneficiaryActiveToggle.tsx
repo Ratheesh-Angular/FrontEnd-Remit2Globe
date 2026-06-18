@@ -19,7 +19,7 @@ export function BeneficiaryActiveToggle({
   disabled = false,
 }: BeneficiaryActiveToggleProps) {
   const [busy, setBusy] = useState(false);
-
+  //for deployment
   async function handleClick() {
     if (busy || disabled) return;
     const next = !active;
