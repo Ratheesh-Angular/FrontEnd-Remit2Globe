@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { sessionApi as api } from "@/lib/api";
+import { notifyError } from "@/lib/notify";
 import type { Notification, NotificationType } from "@/types/notification";
 import {
   ArrowLeft,
@@ -73,12 +74,12 @@ export default function NotificationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [notification, setNotification] = useState<Notification | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError("");
+    setLoadFailed(false);
 
     (async () => {
       try {
@@ -100,11 +101,15 @@ export default function NotificationDetailPage() {
               void api.patch(`/notifications/${id}/read`).catch(() => {});
             }
           } else {
-            setError("Notification not found.");
+            setLoadFailed(true);
+            notifyError("Notification not found.");
           }
         }
       } catch {
-        if (!cancelled) setError("Failed to load notification.");
+        if (!cancelled) {
+          setLoadFailed(true);
+          notifyError("Failed to load notification.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -123,12 +128,14 @@ export default function NotificationDetailPage() {
     );
   }
 
-  if (error || !notification) {
+  if (loadFailed || !notification) {
     return (
       <div className="max-w-xl mx-auto">
-        <div className="rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700 mb-4">
-          {error || "Notification not found."}
-        </div>
+        <p className="text-sm text-slate-600 mb-4">
+          {loadFailed
+            ? "This notification could not be loaded."
+            : "Notification not found."}
+        </p>
         <Link
           href="/notifications"
           className="flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800"

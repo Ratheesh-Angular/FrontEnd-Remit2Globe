@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import {
+  notifyApiError,
+  notifyError,
+  notifyInfo,
+  notifySuccess,
+} from "@/lib/notify";
 const PASSWORD_SETUP_SESSION_KEY = "passwordSetupToken";
 
 export default function VerifyContent() {
@@ -19,7 +26,6 @@ export default function VerifyContent() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
 
@@ -47,7 +53,6 @@ export default function VerifyContent() {
     const newOtp = [...emailOtp];
     newOtp[index] = value;
     setEmailOtp(newOtp);
-    setError("");
 
     // Auto-focus next input
     if (value && index < 5) {
@@ -70,7 +75,6 @@ export default function VerifyContent() {
     const newOtp = [...phoneOtp];
     newOtp[index] = value;
     setPhoneOtp(newOtp);
-    setError("");
 
     // Auto-focus next input
     if (value && index < 5) {
@@ -101,7 +105,7 @@ export default function VerifyContent() {
 
   const handleVerifyEmail = async (code: string) => {
     if (!userId) {
-      setError(
+      notifyError(
         "Missing account reference. Return to registration and try again.",
       );
       return;
@@ -116,8 +120,7 @@ export default function VerifyContent() {
         }, 300);
       }
     } catch (error: unknown) {
-      const ax = error as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Invalid email verification code");
+      notifyApiError(error, "Invalid email verification code");
       setEmailOtp(["", "", "", "", "", ""]);
       emailInputRefs.current[0]?.focus();
     } finally {
@@ -127,7 +130,7 @@ export default function VerifyContent() {
 
   const handleVerifyPhone = async (code: string) => {
     if (!userId) {
-      setError(
+      notifyError(
         "Missing account reference. Return to registration and try again.",
       );
       return;
@@ -141,6 +144,7 @@ export default function VerifyContent() {
           fullyVerified?: boolean;
           passwordSetupToken?: string;
         };
+        notifySuccess("Verification complete! Redirecting…");
         if (data?.fullyVerified && data.passwordSetupToken) {
           sessionStorage.setItem(
             PASSWORD_SETUP_SESSION_KEY,
@@ -152,8 +156,7 @@ export default function VerifyContent() {
         }
       }
     } catch (error: unknown) {
-      const ax = error as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Invalid phone verification code");
+      notifyApiError(error, "Invalid phone verification code");
       setPhoneOtp(["", "", "", "", "", ""]);
       phoneInputRefs.current[0]?.focus();
     } finally {
@@ -164,7 +167,7 @@ export default function VerifyContent() {
   const handleResendOtp = async (type: "email" | "phone") => {
     if (!canResend) return;
     if (!userId) {
-      setError(
+      notifyError(
         "Missing account reference. Return to registration and try again.",
       );
       return;
@@ -178,10 +181,9 @@ export default function VerifyContent() {
       });
       setResendTimer(60);
       setCanResend(false);
-      setError("");
+      notifyInfo("Verification code resent.");
     } catch (error: unknown) {
-      const ax = error as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Failed to resend code");
+      notifyApiError(error, "Failed to resend code");
     } finally {
       setIsLoading(false);
     }
@@ -200,6 +202,7 @@ export default function VerifyContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <AppLoadingOverlay show={isLoading} label="Verifying…" />
       {/* Card */}
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         {/* Logo */}
@@ -405,31 +408,6 @@ export default function VerifyContent() {
             </button>
           )}
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Success Message */}
-        {emailVerified && phoneVerified && (
-          <div className="mb-4 bg-teal-50 border border-teal-200 text-teal-700 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-teal-600"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Verification complete! Redirecting…
-          </div>
-        )}
 
         {/* Help Text */}
         <p className="text-xs text-center text-slate-500">

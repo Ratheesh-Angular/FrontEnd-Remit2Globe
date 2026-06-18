@@ -11,6 +11,9 @@ import {
 } from "@/lib/passwordStrength";
 import Image from "next/image";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { Loader } from "@/components/ui/Loader";
+import { notifyApiError, notifyError, notifySuccess } from "@/lib/notify";
 const SESSION_KEY = "passwordResetToken";
 
 function strengthLabel(s: PasswordStrength): string {
@@ -55,7 +58,6 @@ export default function ResetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -77,7 +79,6 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     if (!canSubmit) return;
 
     const token =
@@ -85,7 +86,7 @@ export default function ResetPasswordPage() {
         ? sessionStorage.getItem(SESSION_KEY)
         : null;
     if (!token) {
-      setError("Session expired. Start forgot password again.");
+      notifyError("Session expired. Start forgot password again.");
       return;
     }
 
@@ -96,21 +97,17 @@ export default function ResetPasswordPage() {
         password,
       });
       sessionStorage.removeItem(SESSION_KEY);
+      notifySuccess("Password updated. You can sign in now.");
       router.push("/login");
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Could not update password.");
+      notifyApiError(err, "Could not update password.");
     } finally {
       setIsLoading(false);
     }
   };
 
   if (!ready) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-500">Loading…</p>
-      </div>
-    );
+    return <Loader variant="page" label="Loading…" />;
   }
 
   const barWidth =
@@ -118,6 +115,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <AppLoadingOverlay show={isLoading} label="Updating password…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
           <Image
@@ -146,12 +144,9 @@ export default function ResetPasswordPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError("");
-                }}
+                onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-11 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
                 placeholder="Enter a strong password"
               />
               <button
@@ -274,12 +269,9 @@ export default function ResetPasswordPage() {
               <input
                 type={showConfirm ? "text" : "password"}
                 value={confirm}
-                onChange={(e) => {
-                  setConfirm(e.target.value);
-                  setError("");
-                }}
+                onChange={(e) => setConfirm(e.target.value)}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-11 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
                 placeholder="Confirm your password"
               />
               <button
@@ -296,12 +288,6 @@ export default function ResetPasswordPage() {
               </p>
             )}
           </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
-            </div>
-          )}
 
           <button
             type="submit"

@@ -7,8 +7,21 @@ import Flag from "react-world-flags";
 import { getSession, signIn, signOut } from "next-auth/react";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 import type { Country } from "@/lib/phone-countries";
+import {
+  nationalPhonePlaceholder,
+  validateNationalPhoneDigits,
+} from "@/lib/phone-validation";
 import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import {
+  fieldControlBase,
+  fieldControlError,
+  fieldNativeSelectClasses,
+  FIELD_HEIGHT,
+} from "@/lib/field-styles";
+import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifyError, notifySuccess } from "@/lib/notify";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import countriesIso from "i18n-iso-countries";
 
@@ -46,7 +59,6 @@ interface FormData {
 }
 
 interface FormErrors {
-  general?: string;
   email?: string;
   phone?: string;
   country?: string;
@@ -55,8 +67,6 @@ interface FormErrors {
 
 export default function RegisterPage() {
   const [accountType, setAccountType] = useState<AccountType>("individual");
-  const [successMessage, setSuccessMessage] = useState("");
-
   const [formData, setFormData] = useState<FormData>({
     email: "",
     phone: "",
@@ -81,6 +91,7 @@ export default function RegisterPage() {
     console.log("err_oauth", err);
     if (!err) return;
     setOauthErrorCode(err);
+    notifyError(oauthErrorMessage(err));
     const url = new URL(window.location.href);
     url.searchParams.delete("error");
     url.searchParams.delete("callbackUrl");
@@ -138,20 +149,12 @@ export default function RegisterPage() {
     }
     if (!selectedCountry) {
       errs.phone = "Please select a country first.";
-    } else if (!localPhone) {
-      errs.phone = "Phone number is required.";
     } else {
-      const min = selectedCountry?.minDigits ?? 7;
-      const max = selectedCountry?.maxDigits ?? 15;
-      if (localPhone.length < min || localPhone.length > max) {
-        const label = selectedCountry?.name ?? "this country";
-        const dial = selectedCountry?.dialCode ?? "";
-        const dialPart = dial ? ` (+${dial})` : "";
-        errs.phone =
-          min === max
-            ? `Enter exactly ${min} digits for ${label}${dialPart}.`
-            : `Enter ${min}–${max} digits for ${label}${dialPart}.`;
-      }
+      const phoneErr = validateNationalPhoneDigits(
+        selectedCountry,
+        localPhone,
+      );
+      if (phoneErr) errs.phone = phoneErr;
     }
     // if (!agreed) {
     //   errs.agreed = "You must agree to the Terms of Service.";
@@ -209,31 +212,26 @@ export default function RegisterPage() {
 
       if (response.data.success) {
         const userId = response.data.data?.user?.id as string | undefined;
-        setSuccessMessage("Account created! Redirecting to verification...");
+        notifySuccess("Account created! Redirecting to verification…");
         setTimeout(() => {
           const uid = userId ? `&userId=${encodeURIComponent(userId)}` : "";
           window.location.href = `/verify?email=${encodeURIComponent(formData.email)}&phone=${encodeURIComponent(`+${selectedCountry!.dialCode}${localPhone}`)}${uid}`;
         }, 2000);
       }
-    } catch (error: any) {
-      const message = error.response?.data?.message || "Something went wrong";
-      setErrors((prev) => ({ ...prev, general: message }));
+    } catch (error: unknown) {
+      notifyApiError(error);
     } finally {
       setIsLoading(false);
     }
   }
 
-  const inputBase =
-    "border border-slate-200 rounded-lg px-3 h-11 w-full text-sm outline-none transition-all " +
-    "focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 " +
-    "placeholder:text-slate-400 text-slate-900 bg-white " +
-    "disabled:bg-slate-50 disabled:cursor-not-allowed";
-
-  const inputError =
-    "border-red-400 focus:ring-2 focus:ring-red-400/20 focus:border-red-400";
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <AppLoadingOverlay
+        show={isLoading}
+        label={accountType === "individual" ? "Creating account…" : "Creating account…"}
+        sublabel="Please wait."
+      />
       {/* Card */}
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-8">
         {/* Logo */}
@@ -255,15 +253,6 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {oauthErrorCode && (
-          <div
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
-            role="alert"
-          >
-            {oauthErrorMessage(oauthErrorCode)}
-          </div>
-        )}
-
         {/* Account Type Selector */}
         <div className="mb-6">
           <label
@@ -272,16 +261,18 @@ export default function RegisterPage() {
           >
             Account Type
           </label>
-          <select
-            id="accountType"
-            value={accountType}
-            onChange={(e) => setAccountType(e.target.value as AccountType)}
-            disabled={isLoading}
-            className={`${inputBase} cursor-pointer`}
-          >
-            <option value="individual">Personal</option>
-            <option value="corporate">Business </option>
-          </select>
+          <NativeSelectShell>
+            <select
+              id="accountType"
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as AccountType)}
+              disabled={isLoading}
+              className={`${fieldControlBase} ${fieldNativeSelectClasses}`}
+            >
+              <option value="individual">Personal</option>
+              <option value="corporate">Business </option>
+            </select>
+          </NativeSelectShell>
         </div>
 
         {/* Country Selector (Flex API list, same as remittance) */}
@@ -339,7 +330,7 @@ export default function RegisterPage() {
               value={formData.email}
               onChange={handleChange}
               disabled={isLoading}
-              className={`${inputBase} ${errors.email ? inputError : ""}`}
+              className={`${fieldControlBase} ${errors.email ? fieldControlError : ""}`}
             />
             {errors.email && (
               <p className="mt-1.5 text-xs text-red-500">{errors.email}</p>
@@ -355,7 +346,7 @@ export default function RegisterPage() {
               Phone number
             </label>
             <div
-              className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+              className={`flex items-center ${FIELD_HEIGHT} border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
                 errors.phone
                   ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
                   : "border-slate-200"
@@ -363,7 +354,7 @@ export default function RegisterPage() {
             >
               {/* Dial-code display (disabled) */}
               <div className="flex-shrink-0">
-                <div className="flex items-center gap-1.5 px-3 h-11 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
+                <div className={`flex items-center gap-1.5 px-3 ${FIELD_HEIGHT} text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg`}>
                   {selectedCountry ? (
                     <>
                       <Flag
@@ -394,7 +385,7 @@ export default function RegisterPage() {
                 autoComplete="tel-national"
                 placeholder={
                   selectedCountry
-                    ? `${selectedCountry.minDigits} digit number`
+                    ? nationalPhonePlaceholder(selectedCountry)
                     : "Select country first"
                 }
                 value={localPhone}
@@ -408,7 +399,7 @@ export default function RegisterPage() {
                   }
                 }}
                 disabled={isLoading || !selectedCountry}
-                className="flex-1 h-11 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
+                className={`flex-1 ${FIELD_HEIGHT} px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide`}
               />
             </div>
             {errors.phone && (
@@ -434,7 +425,7 @@ export default function RegisterPage() {
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isLoading}
-                  className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="cursor-pointer w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg
                     width="18"
@@ -466,7 +457,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   disabled={isLoading}
-                  className="w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="cursor-pointer w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg
                     width="18"
@@ -517,18 +508,6 @@ export default function RegisterPage() {
               <p className="mt-1.5 text-xs text-red-500">{errors.agreed}</p>
             )}
           </div> */}
-
-          {successMessage && (
-            <div className="bg-teal-50 border border-teal-200 text-teal-700 rounded-lg px-4 py-3 text-sm">
-              {successMessage}
-            </div>
-          )}
-
-          {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {errors.general}
-            </div>
-          )}
 
           {/* Submit */}
           <button

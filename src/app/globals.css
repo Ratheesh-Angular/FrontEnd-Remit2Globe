@@ -7,6 +7,9 @@
    bg-primary, text-primary, border-danger, font-inter, etc.
 ─────────────────────────────────────────────────────────────────────────── */
 @theme {
+  /* Form control height: inputs, native selects, searchable select triggers (40px). */
+  --height-field: 2.5rem;
+
   --color-primary: #0f766e;
   --color-primary-hover: #0d9488;
   --color-primary-light: #f0fdfa;

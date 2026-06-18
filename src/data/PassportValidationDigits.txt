@@ -1,0 +1,112 @@
+Passport character counts and structures vary significantly depending on each country's internal formatting rules, ranging primarily between 7 to 9 alphanumeric characters.
+The list below details the standard format and character counts (including letters and numbers, as passports are alphanumeric) for the requested countries:
+Passport Length & Formats
+Afghanistan (AFG): 8 characters (Usually 2 letters + 6 digits)
+Albania (ALB): 9 characters (2 letters + 7 digits)
+Algeria (DZA): 9 digits
+Andorra (AND): 8 characters (Usually 2 letters + 6 digits)
+Armenia (ARM): 9 characters (2 letters + 7 digits)
+Australia (AUS): 9 characters (1 letter + 8 digits)
+Austria (AUT): 8 characters (1 letter + 7 digits)
+Azerbaijan (AZE): 9 characters (1 letter + 8 digits)
+Bahrain (BHR): 7 or 8 digits
+Bangladesh (BGD): 9 characters (2 letters + 7 digits)
+Belarus (BLR): 9 characters (2 letters + 7 digits)
+Belgium (BEL): 8 characters (2 letters + 6 digits)
+Benin (BEN): 8 characters (2 letters + 6 digits)
+Bermuda (BMU): 9 characters (Matches UK format)
+Bosnia and Herzegovina (BIH): 7 digits
+Bulgaria (BGR): 9 digits
+Burkina Faso (BFA): 8 characters (2 letters + 6 digits)
+Burundi (BDI): 8 characters (2 letters + 6 digits)
+Cambodia (KHM): 9 characters (1 letter + 8 digits)
+Cameroon (CMR): 7 digits
+Canada (CAN): 8 characters (2 letters + 6 digits)
+China (CHN): 9 characters (1 letter + 8 digits)
+Congo (COG): 7 digits
+Congo, DRC (COD): 7 digits
+Croatia (HRV): 9 digits
+Cyprus (CYP): 9 characters (2 letters + 7 digits)
+Czech Republic (CZE): 8 digits
+Denmark (DNK): 9 digits
+Egypt (EGY): 9 characters (2 letters + 7 digits)
+Eritrea (ERI): 7 digits
+Estonia (EST): 8 characters (2 letters + 6 digits)
+Ethiopia (ETH): 8 characters (1 letter + 7 digits)
+Finland (FIN): 9 characters (2 letters + 7 digits)
+France (FRA): 9 characters (2 letters + 7 digits)
+Georgia (GEO): 9 characters (2 letters + 7 digits)
+Germany (DEU): 9 characters (Alphanumeric combination)
+Ghana (GHA): 8 characters (2 letters + 6 digits)
+Greece (GRC): 9 characters (2 letters + 7 digits)
+Hong Kong (HKG): 9 characters (1 letter + 8 digits)
+Hungary (HUN): 8 characters (2 letters + 6 digits)
+Iceland (ISL): 8 or 9 digits
+India (IND): 8 characters (1 letter + 7 digits)
+Indonesia (IDN): 8 characters (1 letter + 7 digits)
+Ireland (IRL): 9 characters (2 letters + 7 digits)
+Italy (ITA): 9 characters (2 letters + 7 digits)
+Ivory Coast (CIV): 8 characters (2 letters + 6 digits)
+Japan (JPN): 7 or 9 characters (2 letters + 5 or 7 digits)
+Kazakhstan (KAZ): 9 characters (1 letter + 8 digits)
+Kenya (KEN): 9 characters (2 letters + 7 digits)
+Kuwait (KWT): 8 digits
+Kyrgyzstan (KGZ): 8 characters (2 letters + 6 digits)
+Latvia (LVA): 9 characters (2 letters + 7 digits)
+Lebanon (LBN): 7 or 8 digits
+Liberia (LBR): 7 digits
+Liechtenstein (LIE): 8 characters (1 letter + 7 digits)
+Lithuania (LTU): 8 digits
+Luxembourg (LUX): 8 characters (2 letters + 6 digits)
+Madagascar (MDG): 7 digits
+Malawi (MWI): 8 characters (2 letters + 6 digits)
+Malaysia (MYS): 9 characters (1 letter + 8 digits)
+Malta (MLT): 7 digits
+Martinique (MTQ): 9 characters (Matches French format)
+Moldova (MDA): 9 characters (1 letter + 8 digits)
+Monaco (MCO): 7 characters (2 letters + 5 digits)
+Montenegro (MNE): 7 digits
+Morocco (MAR): 8 characters (1 or 2 letters + digits)
+Namibia (NAM): 8 digits
+Nepal (NPL): 8 digits
+Netherlands (NLD): 9 characters (Alphanumeric combination)
+New Zealand (NZL): 8 or 9 digits
+Niger (NER): 8 characters (2 letters + 6 digits)
+Nigeria (NGA): 9 characters (1 letter + 8 digits)
+North Macedonia (MKD): 7 digits
+Norway (NOR): 8 digits
+Pakistan (PAK): 9 characters (2 letters + 7 digits)
+Philippines (PHL): 9 characters (1 letter + 8 digits)
+Poland (POL): 9 characters (2 letters + 7 digits)
+Portugal (PRT): 7 or 8 characters (1 or 2 letters + digits)
+Qatar (QAT): 9 characters (2 letters + 7 digits)
+Romania (ROU): 9 digits
+Russian Federation (RUS): 9 digits
+Rwanda (RWA): 8 characters (2 letters + 6 digits)
+San Marino (SMR): 7 characters (2 letters + 5 digits)
+Senegal (SEN): 8 characters (2 letters + 6 digits)
+Serbia (SRB): 9 digits
+Sierra Leone (SLE): 7 digits
+Singapore (SGP): 9 characters (1 letter + 7 digits + 1 letter)
+Slovakia (SVK): 7 or 8 characters (2 letters + digits)
+Slovenia (SVN): 8 digits
+Somalia (SOM): 8 characters (1 letter + 7 digits)
+South Africa (ZAF): 9 digits
+South Sudan (SSD): 8 characters (2 letters + 6 digits)
+Spain (ESP): 9 characters (3 letters + 6 digits)
+Sri Lanka (LKA): 8 characters (1 letter + 7 digits)
+Sweden (SWE): 8 digits
+Switzerland (CHE): 8 characters (1 letter + 7 digits)
+Tajikistan (TJK): 9 characters (1 letter + 8 digits)
+Tanzania (TZA): 9 characters (2 letters + 7 digits)
+Thailand (THA): 9 characters (2 letters + 7 digits)
+Uganda (UGA): 9 characters (2 letters + 7 digits)
+Ukraine (UKR): 9 digits (Or 8 characters for older formats)
+United Arab Emirates (ARE): 9 digits
+United Kingdom (GBR): 9 digits
+United States (USA): 9 digits (Newer NextGen series use 1 letter + 8 digits)
+Uzbekistan (UZB): 9 characters (2 letters + 7 digits)
+Vatican City (VAT): 7 digits
+Vietnam (VNM): 8 characters (1 letter + 7 digits)
+Zambia (ZMB): 8 digits
+Zimbabwe (ZWE): 7 or 8 characters (1 letter + digits)

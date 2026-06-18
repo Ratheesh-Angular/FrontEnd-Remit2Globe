@@ -9,7 +9,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../assets/logos/R2GLogo.png";
-
+import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 import { useRef } from "react";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
@@ -83,7 +83,7 @@ export default function DashboardLayoutClient({
   const [sessionBanner, setSessionBanner] = useState<string | null>(null);
   const pathname = usePathname();
   const isKycApproved = user?.kycStatus === "APPROVED";
-
+  const router = useRouter();
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -199,10 +199,8 @@ export default function DashboardLayoutClient({
   const [notifOpen, setNotifOpen] = useState(false);
   const notifMenuRef = useRef<HTMLDivElement>(null);
   const { count: unreadCount, refresh: refreshCount } = useUnreadCount();
-  const {
-    notifications: previewNotifs,
-    refresh: refreshNotifs,
-  } = useNotifications(1, 5);
+  const { notifications: previewNotifs, refresh: refreshNotifs } =
+    useNotifications(1, 5);
 
   // Close on click outside
   useEffect(() => {
@@ -360,7 +358,7 @@ export default function DashboardLayoutClient({
                 <Bell className="w-6 h-6 text-teal-600" />
                 {unreadCount > 0 && (
                   <span
-                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none border border-white shadow"
+                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full min-w-5 h-5 px-1 flex items-center justify-center text-xs font-semibold border border-white shadow"
                     style={{ minWidth: "20px", textAlign: "center" }}
                   >
                     {unreadCount > 99 ? "99+" : unreadCount}
@@ -416,8 +414,12 @@ export default function DashboardLayoutClient({
                           {!n.isRead && (
                             <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-teal-500" />
                           )}
-                          <div className={`flex-1 min-w-0 ${n.isRead ? "ml-5" : ""}`}>
-                            <p className={`text-sm truncate ${!n.isRead ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                          <div
+                            className={`flex-1 min-w-0 ${n.isRead ? "ml-5" : ""}`}
+                          >
+                            <p
+                              className={`text-sm truncate ${!n.isRead ? "font-semibold text-slate-900" : "text-slate-700"}`}
+                            >
                               {n.title}
                             </p>
                             <p className="text-xs text-slate-500 truncate mt-0.5">
@@ -446,8 +448,11 @@ export default function DashboardLayoutClient({
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 px-1">
-              <div className="w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
+            <div
+              onClick={() => router.push("/profile")}
+              className="cursor-pointer flex items-center gap-2.5 sm:gap-3 min-w-0 px-1"
+            >
+              <div className=" w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
                 {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
               </div>
               <div className="min-w-0 hidden sm:block">
@@ -462,7 +467,7 @@ export default function DashboardLayoutClient({
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center gap-2 px-2.5 sm:px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors shrink-0"
+              className="cursor-pointer flex items-center gap-2 px-2.5 sm:px-3 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors shrink-0"
             >
               <LogOut className="w-5 h-5 shrink-0" />
               <span className="hidden sm:inline">Sign out</span>

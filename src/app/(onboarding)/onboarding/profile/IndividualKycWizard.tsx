@@ -18,7 +18,17 @@ import {
 } from "./VerificationDocuments";
 import { KycSubmittedPanel } from "./KycSubmittedPanel";
 import { AppDialog } from "@/components/ui/AppDialog";
+import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
+import { fieldNativeSelectClasses } from "@/lib/field-styles";
 import { Field, SectionLabel } from "./KycFormPrimitives";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError } from "@/lib/notify";
+import {
+  getPassportRuleForIssuingCountry,
+  passportFormatHint,
+  sanitizePassportNumber,
+  validatePassportNumber,
+} from "@/lib/passport-validation";
 
 type Section = "personal" | "identity" | "address" | "documents" | "submitted";
 
@@ -380,7 +390,6 @@ export function IndividualKycWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedSections, setSavedSections] = useState<Section[]>([]);
   const [persistedSignature, setPersistedSignature] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [kycDocuments, setKycDocuments] = useState<KycDocumentRow[]>([]);
   const [kycLifecycleStatus, setKycLifecycleStatus] = useState<
     string | undefined
@@ -407,6 +416,20 @@ export function IndividualKycWizard() {
     loading: catalogCountriesLoading,
     error: catalogCountriesError,
   } = useCatalogCountries(true);
+
+  const passportRule = useMemo(
+    () =>
+      getPassportRuleForIssuingCountry(
+        form.passportIssuingCountry,
+        catalogCountryList,
+      ),
+    [form.passportIssuingCountry, catalogCountryList],
+  );
+
+  const passportHint = useMemo(
+    () => passportFormatHint(passportRule, form.passportIssuingCountry),
+    [passportRule, form.passportIssuingCountry],
+  );
 
   useEffect(() => {
     setForm((prev) => {
@@ -620,7 +643,6 @@ export function IndividualKycWizard() {
   function handleIsNationalChange(nextNational: boolean) {
     const prevNational = form.isNational;
     if (nextNational === prevNational) return;
-    setSaveError(null);
     setForm((p) => ({
       ...p,
       isNational: nextNational,
@@ -654,16 +676,58 @@ export function IndividualKycWizard() {
     field: Exclude<keyof IndividualForm, "residenceAddress">,
     value: string | boolean,
   ) => {
-    setSaveError(null);
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handlePassportIssuingCountryChange = (name: string) => {
+    const rule = getPassportRuleForIssuingCountry(name, catalogCountryList);
+    const sanitized = form.passportNumber
+      ? sanitizePassportNumber(form.passportNumber, rule)
+      : "";
+    setForm((prev) => ({
+      ...prev,
+      passportIssuingCountry: name,
+      passportNumber: sanitized,
+    }));
+    const formatError = sanitized
+      ? validatePassportNumber(name, sanitized, {
+          countries: catalogCountryList,
+        })
+      : null;
+    setErrors((prev) => ({
+      ...prev,
+      passportIssuingCountry: "",
+      passportNumber: formatError ?? "",
+    }));
+  };
+
+  const handlePassportNumberChange = (raw: string) => {
+    const sanitized = sanitizePassportNumber(raw, passportRule);
+    setForm((prev) => ({ ...prev, passportNumber: sanitized }));
+    if (!form.passportIssuingCountry.trim()) {
+      setErrors((prev) => ({ ...prev, passportNumber: "" }));
+      return;
+    }
+    const formatError = validatePassportNumber(
+      form.passportIssuingCountry,
+      sanitized,
+      {
+        countries: catalogCountryList,
+        allowEmpty: true,
+        allowIncomplete: true,
+      },
+    );
+    setErrors((prev) => ({
+      ...prev,
+      passportNumber: formatError ?? "",
+    }));
   };
 
   const setResidenceField = (
     sub: keyof ResidenceAddressForm,
     value: string,
   ) => {
-    setSaveError(null);
     setForm((prev) => ({
       ...prev,
       residenceAddress: { ...prev.residenceAddress, [sub]: value },
@@ -729,13 +793,26 @@ export function IndividualKycWizard() {
       }
     }
 
+    const applyPassportFieldValidation = () => {
+      if (!form.passportIssuingCountry.trim()) {
+        newErrors.passportIssuingCountry =
+          "Passport issuing country is required";
+      }
+      if (!form.passportNumber.trim()) {
+        newErrors.passportNumber = "Passport number is required";
+      } else if (form.passportIssuingCountry.trim()) {
+        const formatError = validatePassportNumber(
+          form.passportIssuingCountry,
+          form.passportNumber,
+          { countries: catalogCountryList },
+        );
+        if (formatError) newErrors.passportNumber = formatError;
+      }
+    };
+
     if (section === "identity") {
       if (!form.isNational) {
-        if (!form.passportNumber.trim())
-          newErrors.passportNumber = "Passport number is required";
-        if (!form.passportIssuingCountry.trim())
-          newErrors.passportIssuingCountry =
-            "Passport issuing country is required";
+        applyPassportFieldValidation();
         if (!form.passportIssue)
           newErrors.passportIssue = "Issue date is required";
         if (!form.passportExpiry)
@@ -746,11 +823,7 @@ export function IndividualKycWizard() {
             "Select whether you are using a passport or national ID";
         }
         if (form.citizenPrimaryDocumentType === "PASSPORT") {
-          if (!form.passportNumber.trim())
-            newErrors.passportNumber = "Passport number is required";
-          if (!form.passportIssuingCountry.trim())
-            newErrors.passportIssuingCountry =
-              "Passport issuing country is required";
+          applyPassportFieldValidation();
           if (!form.passportIssue)
             newErrors.passportIssue = "Issue date is required";
           if (!form.passportExpiry)
@@ -809,7 +882,6 @@ export function IndividualKycWizard() {
     if (!validateSection(section)) return;
     try {
       setIsSaving(true);
-      setSaveError(null);
       const basePayload = buildSanitizedKycPayload(form);
       const payload: Record<string, unknown> = { ...basePayload };
       if (
@@ -845,21 +917,7 @@ export function IndividualKycWizard() {
       }
     } catch (error: unknown) {
       console.error(error);
-      const msg =
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object" &&
-        "data" in error.response &&
-        error.response.data &&
-        typeof error.response.data === "object" &&
-        "message" in error.response.data &&
-        typeof (error.response.data as { message: unknown }).message ===
-          "string"
-          ? (error.response.data as { message: string }).message
-          : "Save failed. Please try again.";
-      setSaveError(msg);
+      notifyApiError(error, "Save failed. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -899,7 +957,6 @@ export function IndividualKycWizard() {
     setForm(formFromSignature(persistedSignature));
     setRegistrationLocalPhone("");
     setErrors({});
-    setSaveError(null);
     setActiveSection(target);
   };
 
@@ -925,7 +982,8 @@ export function IndividualKycWizard() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 relative">
+      <AppLoadingOverlay show={isSaving} label="Saving…" />
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
           Identity Verification
@@ -1088,14 +1146,14 @@ export function IndividualKycWizard() {
                       use for account verification.
                     </p> */}
                     <div
-                      className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+                      className={`flex items-center h-10 border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
                         errors.registrationPhone
                           ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
                           : "border-slate-200"
                       } ${isSaving ? "bg-slate-50" : ""}`}
                     >
                       <div className="flex-shrink-0">
-                        <div className="flex items-center gap-1.5 px-3 h-11 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
+                        <div className="flex items-center gap-1.5 px-3 h-10 text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg">
                           {registrationPhoneCountry ? (
                             <>
                               <Flag
@@ -1141,7 +1199,7 @@ export function IndividualKycWizard() {
                           }
                         }}
                         disabled={isSaving || !registrationPhoneCountry}
-                        className="flex-1 h-11 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
+                        className="flex-1 h-10 px-3 text-sm outline-none bg-transparent placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed font-mono tracking-wide"
                       />
                     </div>
                     {errors.registrationPhone && (
@@ -1241,35 +1299,42 @@ export function IndividualKycWizard() {
                 <SectionLabel>Passport Details</SectionLabel>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field
-                    label="Passport Number"
-                    required
-                    error={errors.passportNumber}
-                  >
-                    <input
-                      className={inputClass("passportNumber")}
-                      placeholder="e.g. A12345678"
-                      value={form.passportNumber}
-                      onChange={(e) =>
-                        setField("passportNumber", e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field
                     label="Passport issuing country"
                     required
                     error={errors.passportIssuingCountry}
                   >
                     <CatalogCountrySelect
                       value={form.passportIssuingCountry}
-                      onChange={(name) =>
-                        setField("passportIssuingCountry", name)
-                      }
+                      onChange={handlePassportIssuingCountryChange}
                       error={Boolean(errors.passportIssuingCountry)}
                       placeholder="Select issuing country…"
                       countries={catalogCountryList}
                       countriesLoading={catalogCountriesLoading}
                       countriesError={catalogCountriesError}
                     />
+                  </Field>
+                  <Field
+                    label="Passport Number"
+                    required
+                    error={errors.passportNumber}
+                  >
+                    <input
+                      className={inputClass("passportNumber")}
+                      placeholder={
+                        passportHint ? "Enter passport number" : "e.g. A12345678"
+                      }
+                      value={form.passportNumber}
+                      onChange={(e) =>
+                        handlePassportNumberChange(e.target.value)
+                      }
+                      maxLength={passportRule?.maxLength}
+                      inputMode={passportRule?.digitsOnly ? "numeric" : "text"}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                    />
+                    {passportHint && !errors.passportNumber ? (
+                      <p className="text-xs text-slate-500">{passportHint}</p>
+                    ) : null}
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1353,20 +1418,22 @@ export function IndividualKycWizard() {
                   required
                   error={errors.citizenPrimaryDocumentType}
                 >
-                  <select
-                    className={inputClass("citizenPrimaryDocumentType")}
-                    value={form.citizenPrimaryDocumentType}
-                    onChange={(e) =>
-                      setField(
-                        "citizenPrimaryDocumentType",
-                        e.target.value as CitizenDocType,
-                      )
-                    }
-                  >
-                    <option value="">Select document type…</option>
-                    <option value="PASSPORT">Passport</option>
-                    <option value="NATIONAL_ID">National ID</option>
-                  </select>
+                  <NativeSelectShell>
+                    <select
+                      className={`${inputClass("citizenPrimaryDocumentType")} ${fieldNativeSelectClasses} bg-white`}
+                      value={form.citizenPrimaryDocumentType}
+                      onChange={(e) =>
+                        setField(
+                          "citizenPrimaryDocumentType",
+                          e.target.value as CitizenDocType,
+                        )
+                      }
+                    >
+                      <option value="">Select document type…</option>
+                      <option value="PASSPORT">Passport</option>
+                      <option value="NATIONAL_ID">National ID</option>
+                    </select>
+                  </NativeSelectShell>
                 </Field>
 
                 {form.citizenPrimaryDocumentType === "PASSPORT" && (
@@ -1380,12 +1447,27 @@ export function IndividualKycWizard() {
                       >
                         <input
                           className={inputClass("passportNumber")}
-                          placeholder="e.g. A12345678"
+                          placeholder={
+                            passportHint
+                              ? "Enter passport number"
+                              : "e.g. A12345678"
+                          }
                           value={form.passportNumber}
                           onChange={(e) =>
-                            setField("passportNumber", e.target.value)
+                            handlePassportNumberChange(e.target.value)
                           }
+                          maxLength={passportRule?.maxLength}
+                          inputMode={
+                            passportRule?.digitsOnly ? "numeric" : "text"
+                          }
+                          autoCapitalize="characters"
+                          spellCheck={false}
                         />
+                        {passportHint && !errors.passportNumber ? (
+                          <p className="text-xs text-slate-500">
+                            {passportHint}
+                          </p>
+                        ) : null}
                       </Field>
                       <Field
                         label="Passport issuing country"
@@ -1394,9 +1476,7 @@ export function IndividualKycWizard() {
                       >
                         <CatalogCountrySelect
                           value={form.passportIssuingCountry}
-                          onChange={(name) =>
-                            setField("passportIssuingCountry", name)
-                          }
+                          onChange={handlePassportIssuingCountryChange}
                           error={Boolean(errors.passportIssuingCountry)}
                           placeholder="Select issuing country…"
                           countries={catalogCountryList}
@@ -1633,12 +1713,6 @@ export function IndividualKycWizard() {
             onDocumentsSynced={syncDocumentsFromServer}
             onKycSubmitted={handleKycSubmitted}
           />
-        )}
-
-        {saveError && activeSection !== "submitted" && (
-          <p className="text-sm text-red-600 whitespace-pre-wrap">
-            {saveError}
-          </p>
         )}
 
         {/* Buttons */}

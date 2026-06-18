@@ -124,12 +124,7 @@ export const ASIA_COUNTRIES = [
   "YEM",
 ] as const;
 
-export const PAYOUT_IN_PERSON_COUNTRIES = [
-  "ARE",
-  "UGA",
-  "SSD",
-  "KEN",
-] as const;
+export const PAYOUT_IN_PERSON_COUNTRIES = ["ARE", "UGA", "SSD", "KEN"] as const;
 
 const AFRICA_COUNTRY_CODES = new Set<string>(AFRICA_COUNTRIES);
 const ASIA_COUNTRY_CODES = new Set<string>(ASIA_COUNTRIES);
@@ -170,7 +165,7 @@ export const DELIVERY_CHANNEL_LABELS: Record<
 > = {
   BANK_TRANSFER: "Bank Transfer",
   MOBILE_MONEY: "Mobile Money",
-  PAYOUT_IN_PERSON: "Payout In Person",
+  PAYOUT_IN_PERSON: "Payout In Person (cash collection)",
 };
 
 export function getDeliveryChannelLabel(

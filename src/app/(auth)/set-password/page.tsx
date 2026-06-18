@@ -11,6 +11,9 @@ import {
 } from "@/lib/passwordStrength";
 import Image from "next/image";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { Loader } from "@/components/ui/Loader";
+import { notifyApiError, notifyError, notifySuccess } from "@/lib/notify";
 const SESSION_KEY = "passwordSetupToken";
 
 function strengthLabel(s: PasswordStrength): string {
@@ -55,7 +58,6 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -77,7 +79,6 @@ export default function SetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     if (!canSubmit) return;
 
     const token =
@@ -85,7 +86,7 @@ export default function SetPasswordPage() {
         ? sessionStorage.getItem(SESSION_KEY)
         : null;
     if (!token) {
-      setError("Session expired. Complete verification again.");
+      notifyError("Session expired. Complete verification again.");
       return;
     }
 
@@ -96,21 +97,17 @@ export default function SetPasswordPage() {
         password,
       });
       sessionStorage.removeItem(SESSION_KEY);
+      notifySuccess("Password saved. You can sign in now.");
       router.push("/login");
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Could not save password.");
+      notifyApiError(err, "Could not save password.");
     } finally {
       setIsLoading(false);
     }
   };
 
   if (!ready) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm text-slate-500">Loading…</p>
-      </div>
-    );
+    return <Loader variant="page" label="Loading…" />;
   }
 
   const barWidth =
@@ -118,6 +115,7 @@ export default function SetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <AppLoadingOverlay show={isLoading} label="Saving password…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
           <Image
@@ -148,16 +146,15 @@ export default function SetPasswordPage() {
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  setError("");
                 }}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-11 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
                 placeholder="Enter a strong password"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
+                className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
@@ -282,16 +279,15 @@ export default function SetPasswordPage() {
                 value={confirm}
                 onChange={(e) => {
                   setConfirm(e.target.value);
-                  setError("");
                 }}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-11 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
                 placeholder="Confirm your password"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
+                className="cursor-pointer absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-700 px-1"
               >
                 {showConfirm ? "Hide" : "Show"}
               </button>
@@ -303,16 +299,10 @@ export default function SetPasswordPage() {
             )}
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="cursor-pointer w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>

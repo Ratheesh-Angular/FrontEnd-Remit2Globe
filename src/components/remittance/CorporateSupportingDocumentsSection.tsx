@@ -10,6 +10,7 @@ import {
   kycUploadMaxSizeLabelMb,
   parseKycUploadErrorMessage,
 } from "@/app/(onboarding)/onboarding/profile/kycUploadAllowed";
+import { notifyError } from "@/lib/notify";
 
 export type RemittanceSupportingDocKind = "INVOICE" | "BILL_OF_LADING";
 
@@ -121,10 +122,12 @@ export function CorporateSupportingDocumentsSection({
       });
     } catch (err) {
       const serverMsg = parseKycUploadErrorMessage(err);
+      const message =
+        serverMsg ?? "Upload failed. Check your connection and try again.";
+      notifyError(message);
       setSlotErrors((prev) => ({
         ...prev,
-        [docType]:
-          serverMsg ?? "Upload failed. Check your connection and try again.",
+        [docType]: message,
       }));
     } finally {
       setUploadingType(null);

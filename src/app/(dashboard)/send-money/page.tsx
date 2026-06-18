@@ -16,6 +16,7 @@ import {
   PhoneCountryInput,
   isValidE164Phone,
 } from "@/components/PhoneCountryInput";
+import { validateE164Phone } from "@/lib/phone-validation";
 import Flag from "react-world-flags";
 import countriesIso from "i18n-iso-countries";
 import enCountries from "i18n-iso-countries/langs/en.json";
@@ -33,7 +34,6 @@ import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import {
   ChevronRight,
   Check,
-  Loader2,
   ChevronDown,
   UserPlus,
   Download,
@@ -45,6 +45,11 @@ import {
 } from "lucide-react";
 import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
 import { CorporateSupportingDocumentsSection } from "@/components/remittance/CorporateSupportingDocumentsSection";
+import { FIELD_HEIGHT, fieldNativeSelectClasses } from "@/lib/field-styles";
+import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { Loader } from "@/components/ui/Loader";
+import { notifyApiError, notifyError } from "@/lib/notify";
 
 interface FlexCountry {
   couCode: string;
@@ -230,8 +235,7 @@ const STEPS = [
   "Confirmation",
 ];
 
-const SELECT_FIELD =
-  "w-full border border-slate-200 rounded-lg px-3 h-10 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors";
+const SELECT_FIELD = `w-full border border-slate-200 rounded-lg px-3 ${FIELD_HEIGHT} text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${fieldNativeSelectClasses}`;
 
 /** Images + common documents for bank payment proof (browser/OS may still filter by picker). */
 const PAYMENT_PROOF_ACCEPT =
@@ -278,10 +282,13 @@ function evaluateStep3ContinueGate(opts: {
     );
   }
   if (mobilePhoneInvalidWhenRequired) {
-    hintLines.push(
+    const phoneErr =
       opts.payerPhone.trim().length > 0
-        ? "Enter a valid mobile number for the selected country (check length and digits)."
-        : "Enter your mobile number with country code (e.g. +254712345678).",
+        ? validateE164Phone(opts.payerPhone)
+        : "Enter your mobile number with country code (e.g. +254712345678).";
+    hintLines.push(
+      phoneErr ??
+        "Enter your mobile number with country code (e.g. +254712345678).",
     );
   }
 
@@ -337,7 +344,6 @@ function SendMoneyPageContent() {
   const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const [ctx, setCtx] = useState<SenderContext | null>(null);
   const [lookups, setLookups] = useState<{
@@ -704,7 +710,6 @@ function SendMoneyPageContent() {
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
-    setError("");
     try {
       const [ctxRes, lookRes, benRes] = await Promise.all([
         api.get<{ data: SenderContext }>("/remittance/context"),
@@ -733,7 +738,7 @@ function SendMoneyPageContent() {
       });
       setBeneficiaries(benRes.data.data.beneficiaries);
     } catch (e: unknown) {
-      setError("Could not load send-money data. Try again later.");
+      notifyApiError(e, "Could not load send-money data. Try again later.");
       console.error(e);
     } finally {
       setLoading(false);
@@ -857,10 +862,9 @@ function SendMoneyPageContent() {
         },
       });
       setQuote(data.data);
-      setError("");
     } catch {
       setQuote(null);
-      setError(
+      notifyError(
         "No rate for this corridor yet. Try another currency pair or contact support.",
       );
     } finally {
@@ -895,7 +899,6 @@ function SendMoneyPageContent() {
   async function handleStep1Next() {
     if (!quote || !ctx) return;
     setSubmitting(true);
-    setError("");
     try {
       const { data } = await api.post<{ data: { transfer: TransferRow } }>(
         "/remittance/transfers",
@@ -920,7 +923,7 @@ function SendMoneyPageContent() {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Failed to save";
-      setError(msg);
+      notifyApiError(e, msg);
     } finally {
       setSubmitting(false);
     }
@@ -929,7 +932,6 @@ function SendMoneyPageContent() {
   async function handleStep2Next() {
     if (!transferId || !beneficiaryId) return;
     setSubmitting(true);
-    setError("");
     try {
       const { data } = await api.patch<{ data: { transfer: TransferRow } }>(
         `/remittance/transfers/${transferId}`,
@@ -941,7 +943,7 @@ function SendMoneyPageContent() {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Failed";
-      setError(msg);
+      notifyApiError(e, msg);
     } finally {
       setSubmitting(false);
     }
@@ -951,41 +953,41 @@ function SendMoneyPageContent() {
     if (!transferId || !ctx) return;
     if (!sourceOfIncome || !transferPurpose || !relationship) return;
     if (!payInMethod) {
-      setError("Choose how you will pay us — bank transfer or mobile money.");
+      notifyError(
+        "Choose how you will pay us — bank transfer or mobile money.",
+      );
       return;
     }
     if (payInMethod === "MOBILE_MONEY") {
       if (!ctx.canUseMobilePayIn) {
-        setError(
+        notifyError(
           "Mobile money pay-in is not available for your profile country.",
         );
         return;
       }
       const p = payerPhone.trim();
       if (!p) {
-        setError(
+        notifyError(
           "Enter your mobile number with country code (e.g. +254712345678).",
         );
         return;
       }
-      if (!isValidE164Phone(p)) {
-        setError(
-          "Enter a valid mobile number for the selected country (check length and digits).",
-        );
+      const phoneErr = validateE164Phone(p);
+      if (phoneErr) {
+        notifyError(phoneErr);
         return;
       }
     }
     if (ctx.userRole === "CORPORATE") {
       const docCount = transferRow?.supportingDocuments?.length ?? 0;
       if (docCount < 1) {
-        setError(
+        notifyError(
           "Corporate transfers require supporting documentation: upload either an invoice or a bill of lading.",
         );
         return;
       }
     }
     setSubmitting(true);
-    setError("");
     try {
       const { data: data3 } = await api.patch<{
         data: { transfer: TransferRow };
@@ -1010,7 +1012,7 @@ function SendMoneyPageContent() {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Failed";
-      setError(msg);
+      notifyApiError(e, msg);
     } finally {
       setSubmitting(false);
     }
@@ -1020,7 +1022,6 @@ function SendMoneyPageContent() {
     if (!transferId) return;
     if (!payReviewTermsAccepted) return;
     setSubmitting(true);
-    setError("");
     setPostConfirmMessage("");
     try {
       const res = await api.post<{
@@ -1037,7 +1038,7 @@ function SendMoneyPageContent() {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Failed";
-      setError(msg);
+      notifyApiError(e, msg);
     } finally {
       setSubmitting(false);
     }
@@ -1045,7 +1046,10 @@ function SendMoneyPageContent() {
 
   async function addBankPaymentProofFiles(fileList: FileList | null) {
     if (!fileList?.length || !transferId) {
-      if (!transferId) setError("Missing transfer. Refresh and try again.");
+      if (!transferId) {
+        notifyError("Missing transfer. Refresh and try again.");
+        return;
+      }
       return;
     }
     const files = Array.from(fileList);
@@ -1105,7 +1109,6 @@ function SendMoneyPageContent() {
           ? { ...row, paymentProofs: [...(row.paymentProofs ?? []), ...proofs] }
           : row,
       );
-      setError("");
     } catch (e: unknown) {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -1117,7 +1120,7 @@ function SendMoneyPageContent() {
             : p,
         ),
       );
-      setError(msg);
+      notifyApiError(e, msg);
     }
   }
 
@@ -1141,7 +1144,7 @@ function SendMoneyPageContent() {
         const msg =
           (e as { response?: { data?: { message?: string } } })?.response?.data
             ?.message ?? "Could not remove file";
-        setError(msg);
+        notifyApiError(e, msg);
         return;
       }
     }
@@ -1151,7 +1154,6 @@ function SendMoneyPageContent() {
     setBankPaymentProofs((prev) =>
       prev.filter((p) => p.clientId !== row.clientId),
     );
-    setError("");
   }
 
   function viewBankProof(p: BankProofRow) {
@@ -1187,7 +1189,6 @@ function SendMoneyPageContent() {
     setPayCurrencySearch("");
     setRecipientSearch("");
     setShowAddBeneficiaryModal(false);
-    setError("");
     proofHydratedForTransferRef.current = null;
     setBankPaymentProofs((prev) => {
       prev.forEach((p) => {
@@ -1274,15 +1275,12 @@ function SendMoneyPageContent() {
   }
 
   if (!mounted || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
-      </div>
-    );
+    return <Loader variant="page" label="Loading send money…" />;
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-16">
+    <div className="max-w-5xl mx-auto pb-16 relative">
+      <AppLoadingOverlay show={submitting} label="Processing…" />
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-slate-900">Send money</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -1316,12 +1314,6 @@ function SendMoneyPageContent() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-          {error}
         </div>
       )}
 
@@ -1404,7 +1396,7 @@ function SendMoneyPageContent() {
                     setPayCurrencySearch("");
                     setRecipientOpen(false);
                   }}
-                  className="flex items-center gap-2 h-11 sm:h-12 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors cursor-pointer"
+                  className="flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors cursor-pointer"
                 >
                   <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                     <Flag
@@ -1465,7 +1457,7 @@ function SendMoneyPageContent() {
 
           <div className="flex justify-end min-h-[2rem] items-center">
             {quoteLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
+              <Loader variant="inline" />
             ) : quote ? (
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-50/90 pl-1.5 pr-2.5 py-1 border border-slate-100 shadow-sm">
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
@@ -1519,7 +1511,7 @@ function SendMoneyPageContent() {
                     setRecipientSearch("");
                     setPayCurrencyOpen(false);
                   }}
-                  className="cursor-pointer flex items-center gap-2 h-11 sm:h-12 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
+                  className="cursor-pointer flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
                 >
                   <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                     <Flag
@@ -1667,7 +1659,9 @@ function SendMoneyPageContent() {
             onClick={() => void handleStep1Next()}
             className="cursor-pointer w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {submitting ? (
+              <Loader variant="inline" className="w-4 h-4" />
+            ) : null}
             Send money
           </button>
         </div>
@@ -1691,12 +1685,11 @@ function SendMoneyPageContent() {
               }
               onClick={() => {
                 if (!receiveCurrency.trim()) {
-                  setError(
+                  notifyError(
                     "Choose a receive currency before adding a beneficiary.",
                   );
                   return;
                 }
-                setError("");
                 setShowAddBeneficiaryModal(true);
               }}
               className="cursor-pointer inline-flex items-center justify-center gap-2 h-10 shrink-0 px-4 rounded-lg border border-teal-200 bg-teal-50/70 text-teal-900 text-sm font-medium hover:bg-teal-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1728,38 +1721,50 @@ function SendMoneyPageContent() {
                         : "border-slate-200 hover:border-slate-300 cursor-pointer"
                     }`}
                   >
-                    <p className="text-sm font-semibold text-slate-900">
-                      {formatBeneficiaryName(b)}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
-                      {b.country && (
-                        <>
-                          <span className="inline-flex items-center gap-1">
-                            {(() => {
-                              const fc = dedupedCatalogCountries.find(
-                                (x) =>
-                                  x.couName.trim().toLowerCase() ===
-                                  (b.country ?? "").trim().toLowerCase(),
-                              );
-                              return fc ? (
-                                <FlexCountryFlag couCode={fc.couCode} />
-                              ) : null;
-                            })()}
-                            {b.country}
-                          </span>
-                          <span>·</span>
-                        </>
-                      )}
-                      {b.deliveryChannel === "BANK_TRANSFER" ? (
-                        <span>
-                          {b.bankName} · {b.accountNumber}
-                        </span>
-                      ) : (
-                        <span>
-                          {b.mobileMoneyProvider} · {b.mobileNumber}
-                        </span>
-                      )}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <Flag
+                          code={payCurrencyFlagCode(
+                            recipientDisplayCurrency || "USD",
+                          )}
+                          className="h-8 w-8 object-cover shrink-0 rounded-full"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {formatBeneficiaryName(b)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
+                          {b.country && (
+                            <>
+                              <span className="inline-flex items-center gap-1">
+                                {(() => {
+                                  const fc = dedupedCatalogCountries.find(
+                                    (x) =>
+                                      x.couName.trim().toLowerCase() ===
+                                      (b.country ?? "").trim().toLowerCase(),
+                                  );
+                                  return fc ? (
+                                    <FlexCountryFlag couCode={fc.couCode} />
+                                  ) : null;
+                                })()}
+                                {b.country}
+                              </span>
+                              <span>·</span>
+                            </>
+                          )}
+                          {b.deliveryChannel === "BANK_TRANSFER" ? (
+                            <span>
+                              {b.bankName} · {b.accountNumber}
+                            </span>
+                          ) : (
+                            <span>
+                              {b.mobileMoneyProvider} · {b.mobileNumber}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
                   </button>
                 </li>
               ))}
@@ -1790,54 +1795,60 @@ function SendMoneyPageContent() {
         <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-1">
-              Source of income
+              Source of income <span className="text-red-500">*</span>
             </label>
-            <select
-              value={sourceOfIncome}
-              onChange={(e) => setSourceOfIncome(e.target.value)}
-              className={SELECT_FIELD}
-            >
-              <option value="">Source of income</option>
-              {lookups.sourceOfIncome.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <NativeSelectShell>
+              <select
+                value={sourceOfIncome}
+                onChange={(e) => setSourceOfIncome(e.target.value)}
+                className={SELECT_FIELD}
+              >
+                <option value="">Source of income</option>
+                {lookups.sourceOfIncome.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </NativeSelectShell>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-1">
-              Purpose of transfer
+              Purpose of transfer <span className="text-red-500">*</span>
             </label>
-            <select
-              value={transferPurpose}
-              onChange={(e) => setTransferPurpose(e.target.value)}
-              className={SELECT_FIELD}
-            >
-              <option value="">Purpose of transfer</option>
-              {lookups.transferPurpose.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <NativeSelectShell>
+              <select
+                value={transferPurpose}
+                onChange={(e) => setTransferPurpose(e.target.value)}
+                className={SELECT_FIELD}
+              >
+                <option value="">Purpose of transfer</option>
+                {lookups.transferPurpose.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </NativeSelectShell>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-1">
-              Relationship to recipient
+              Relationship to recipient <span className="text-red-500">*</span>
             </label>
-            <select
-              value={relationship}
-              onChange={(e) => setRelationship(e.target.value)}
-              className={SELECT_FIELD}
-            >
-              <option value="">Relationship to recipient</option>
-              {lookups.relationship.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <NativeSelectShell>
+              <select
+                value={relationship}
+                onChange={(e) => setRelationship(e.target.value)}
+                className={SELECT_FIELD}
+              >
+                <option value="">Relationship to recipient</option>
+                {lookups.relationship.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </NativeSelectShell>
           </div>
 
           <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -1926,19 +1937,13 @@ function SendMoneyPageContent() {
                   onChange={setPayerPhone}
                   disabled={submitting}
                   defaultIso2={ctx.senderCountryIso2}
-                  error={
-                    payerPhone.trim().length > 0 &&
-                    !isValidE164Phone(payerPhone)
-                      ? "Enter a valid mobile number for the selected country (check length and digits)."
-                      : undefined
-                  }
-                  hint={
-                    <>
-                      Search and pick your country code (same as on
-                      registration), then enter your number without the leading
-                      zero.
-                    </>
-                  }
+                  // hint={
+                  //   <>
+                  //     Search and pick your country code (same as on
+                  //     registration), then enter your number without the leading
+                  //     zero.
+                  //   </>
+                  // }
                 />
               </div>
             )}
@@ -1953,7 +1958,7 @@ function SendMoneyPageContent() {
             )}
           </div>
 
-          {!submitting && step3ContinueGate.hintLines.length > 0 && (
+          {/* {!submitting && step3ContinueGate.hintLines.length > 0 && (
             <div
               role="status"
               className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-amber-950"
@@ -1967,7 +1972,7 @@ function SendMoneyPageContent() {
                 ))}
               </ul>
             </div>
-          )}
+          )} */}
 
           <div className="flex gap-2 pt-2">
             <button
@@ -2556,13 +2561,7 @@ function SendMoneyPageContent() {
 
 export default function SendMoneyPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-[40vh]">
-          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
-        </div>
-      }
-    >
+    <Suspense fallback={<Loader variant="page" label="Loading send money…" />}>
       <SendMoneyPageContent />
     </Suspense>
   );

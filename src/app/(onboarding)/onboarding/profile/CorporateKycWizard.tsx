@@ -19,6 +19,8 @@ import {
 import { KycSubmittedPanel } from "./KycSubmittedPanel";
 import { AppDialog } from "@/components/ui/AppDialog";
 import { Field, SectionLabel } from "./KycFormPrimitives";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError } from "@/lib/notify";
 import { Plus, Trash2 } from "lucide-react";
 
 type CorporateSection =
@@ -586,7 +588,6 @@ export function CorporateKycWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedSections, setSavedSections] = useState<CorporateSection[]>([]);
   const [persistedSignature, setPersistedSignature] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [kycDocuments, setKycDocuments] = useState<KycDocumentRow[]>([]);
   const [kycLifecycleStatus, setKycLifecycleStatus] = useState<
     string | undefined
@@ -991,7 +992,6 @@ export function CorporateKycWizard() {
     if (!validateSection(section)) return;
     try {
       setIsSaving(true);
-      setSaveError(null);
       const payload = buildCorporatePayload(form);
       await api.post("/kyc/corporate/profile", payload);
       setPersistedSignature(formSignature(form));
@@ -1004,21 +1004,7 @@ export function CorporateKycWizard() {
       }
     } catch (error: unknown) {
       console.error(error);
-      const msg =
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object" &&
-        "data" in error.response &&
-        error.response.data &&
-        typeof error.response.data === "object" &&
-        "message" in error.response.data &&
-        typeof (error.response.data as { message: unknown }).message ===
-          "string"
-          ? (error.response.data as { message: string }).message
-          : "Save failed. Please try again.";
-      setSaveError(msg);
+      notifyApiError(error, "Save failed. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -1056,7 +1042,6 @@ export function CorporateKycWizard() {
       setForm(corporateFormFromPersisted(persistedSignature));
     }
     setErrors({});
-    setSaveError(null);
     setActiveSection(target);
   };
 
@@ -1074,7 +1059,6 @@ export function CorporateKycWizard() {
     sub: keyof BusinessPremisesAddressForm,
     value: string,
   ) => {
-    setSaveError(null);
     setForm((prev) => ({
       ...prev,
       businessPremises: { ...prev.businessPremises, [sub]: value },
@@ -1114,7 +1098,8 @@ export function CorporateKycWizard() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 relative">
+      <AppLoadingOverlay show={isSaving} label="Saving…" />
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
           Business verification
@@ -1861,11 +1846,6 @@ export function CorporateKycWizard() {
           />
         )}
 
-        {saveError && activeSection !== "submitted" && (
-          <p className="text-sm text-red-600 whitespace-pre-wrap">
-            {saveError}
-          </p>
-        )}
 
         {activeSection !== "documents" && activeSection !== "submitted" && (
           <div className="flex justify-between items-center pt-2">

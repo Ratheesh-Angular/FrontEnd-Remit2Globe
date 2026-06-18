@@ -5,20 +5,19 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifyError, notifyInfo } from "@/lib/notify";
+
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setInfo("");
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !trimmed.includes("@")) {
-      setError("Enter a valid email address");
+      notifyError("Enter a valid email address");
       return;
     }
 
@@ -31,7 +30,7 @@ export default function ForgotPasswordPage() {
       }>("/auth/forgot-password", { email: trimmed });
 
       if (!res.data?.success) {
-        setError(res.data?.message || "Something went wrong");
+        notifyError(res.data?.message || "Something went wrong");
         return;
       }
 
@@ -43,14 +42,13 @@ export default function ForgotPasswordPage() {
         });
         router.push(`/forgot-password/verify?${q.toString()}`);
       } else {
-        setInfo(
+        notifyInfo(
           res.data.message ??
             "If an account with a password exists for that email, check your inbox. Otherwise you may need to register or use another sign-in method.",
         );
       }
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Something went wrong");
+      notifyApiError(err);
     } finally {
       setIsLoading(false);
     }
@@ -58,9 +56,9 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4">
+      <AppLoadingOverlay show={isLoading} label="Sending code…" />
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
         <div className="flex justify-center mb-6">
-          {" "}
           <Image
             src={R2GLogo}
             alt="Remit2Globe"
@@ -86,53 +84,16 @@ export default function ForgotPasswordPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
-              className="border border-slate-200 rounded-lg px-3 h-11 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
           </div>
-
-          {info && (
-            <div className="bg-slate-50 border border-slate-200 text-slate-700 rounded-lg px-4 py-3 text-sm">
-              {info}
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-              {error}
-            </div>
-          )}
 
           <button
             type="submit"
             disabled={isLoading}
             className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isLoading ? (
-              <>
-                <svg
-                  className="animate-spin w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                Sending…
-              </>
-            ) : (
-              "Continue"
-            )}
+            {isLoading ? "Sending…" : "Continue"}
           </button>
         </form>
 

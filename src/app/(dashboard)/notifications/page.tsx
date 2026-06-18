@@ -51,8 +51,10 @@ function timeLabel(iso: string) {
 
 export default function NotificationsPage() {
   const [page, setPage] = useState(1);
-  const { notifications, pagination, loading, error, refresh } =
-    useNotifications(page, PAGE_SIZE);
+  const { notifications, pagination, loading, refresh } = useNotifications(
+    page,
+    PAGE_SIZE,
+  );
   const { count: unreadCount, refresh: refreshCount } = useUnreadCount();
 
   const handleMarkAllRead = useCallback(async () => {
@@ -115,13 +117,7 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {!loading && error && (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && notifications.length === 0 && (
+      {!loading && notifications.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <Bell className="w-12 h-12 mb-3 text-slate-200" />
           <p className="text-base font-medium">No notifications yet</p>
@@ -131,7 +127,7 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {!loading && !error && groups.length > 0 && (
+      {!loading && groups.length > 0 && (
         <div className="space-y-6">
           {groups.map((group) => (
             <section key={group.label}>

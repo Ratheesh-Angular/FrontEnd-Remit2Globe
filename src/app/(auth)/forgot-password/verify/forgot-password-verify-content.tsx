@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../../../assets/logos/R2GLogo.png";
+import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { notifyApiError, notifyInfo } from "@/lib/notify";
+
 const PASSWORD_RESET_SESSION_KEY = "passwordResetToken";
 
 function maskEmail(email: string) {
@@ -21,7 +24,6 @@ export default function ForgotPasswordVerifyContent() {
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -37,7 +39,6 @@ export default function ForgotPasswordVerifyContent() {
 
   const verify = async (code: string) => {
     setIsLoading(true);
-    setError("");
     try {
       const res = await api.post<{
         success: boolean;
@@ -46,7 +47,10 @@ export default function ForgotPasswordVerifyContent() {
       }>("/auth/forgot-password/verify", { userId, code });
 
       if (!res.data?.success || !res.data.data?.passwordResetToken) {
-        setError(res.data?.message || "Invalid or expired code");
+        notifyApiError(
+          { response: { data: { message: res.data?.message } } },
+          "Invalid or expired code",
+        );
         setOtp(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
         return;
@@ -58,8 +62,7 @@ export default function ForgotPasswordVerifyContent() {
       );
       router.push("/reset-password");
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Invalid or expired code");
+      notifyApiError(err, "Invalid or expired code");
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } finally {
@@ -74,7 +77,6 @@ export default function ForgotPasswordVerifyContent() {
     const next = [...otp];
     next[index] = value;
     setOtp(next);
-    setError("");
 
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
@@ -94,14 +96,13 @@ export default function ForgotPasswordVerifyContent() {
   const handleResend = async () => {
     if (!canResend || !userId) return;
     setIsLoading(true);
-    setError("");
     try {
       await api.post("/auth/forgot-password/resend", { userId });
       setResendTimer(60);
       setCanResend(false);
+      notifyInfo("Verification code resent.");
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      setError(ax.response?.data?.message || "Failed to resend code");
+      notifyApiError(err, "Failed to resend code");
     } finally {
       setIsLoading(false);
     }
@@ -127,6 +128,7 @@ export default function ForgotPasswordVerifyContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+      <AppLoadingOverlay show={isLoading} label="Verifying…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
           <Image
@@ -165,12 +167,6 @@ export default function ForgotPasswordVerifyContent() {
             />
           ))}
         </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
-            {error}
-          </div>
-        )}
 
         <p className="text-center text-sm text-slate-500 mb-2">
           Didn&apos;t receive a code?{" "}
