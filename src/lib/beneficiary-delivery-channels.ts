@@ -4,6 +4,11 @@
  * ARE, UGA, SSD, KEN also get payout in person.
  */
 
+import {
+  isFlexBankServiceTypeAllowed,
+  isFlexMobileWalletServiceType,
+} from "@/lib/beneficiary-flex-banks";
+
 export type BeneficiaryDeliveryChannel =
   | "BANK_TRANSFER"
   | "MOBILE_MONEY"
@@ -126,6 +131,20 @@ export const ASIA_COUNTRIES = [
 
 export const PAYOUT_IN_PERSON_COUNTRIES = ["ARE", "UGA", "SSD", "KEN"] as const;
 
+/** Flex corridors that only support mobile wallet (no bank account service). */
+export const MOBILE_WALLET_ONLY_COUNTRY_CODES = new Set([
+  "CHN",
+  "BDI",
+  "SLE",
+  "ZMB",
+]);
+
+/**
+ * Flex lists cash-collection agents as serviceType "Bank" — not bank transfer.
+ * Map those rows to PAYOUT_IN_PERSON instead of BANK_TRANSFER.
+ */
+export const FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES = new Set(["ZWE"]);
+
 const AFRICA_COUNTRY_CODES = new Set<string>(AFRICA_COUNTRIES);
 const ASIA_COUNTRY_CODES = new Set<string>(ASIA_COUNTRIES);
 const PAYOUT_IN_PERSON_COUNTRY_CODES = new Set<string>(
@@ -159,6 +178,63 @@ export function getDeliveryChannels(
   return channels;
 }
 
+/**
+ * Derive delivery channels from Flex `/banks/{couCode}` service types.
+ * Mobile-wallet-only corridors (e.g. CHN) return only MOBILE_MONEY.
+ */
+export function getDeliveryChannelsFromFlexServices(
+  countryCode: string,
+  services: { serviceType?: string }[],
+): BeneficiaryDeliveryChannel[] {
+  const code = countryCode.trim().toUpperCase();
+  if (!code) return [];
+
+  if (services.length === 0) {
+    if (MOBILE_WALLET_ONLY_COUNTRY_CODES.has(code)) {
+      return ["MOBILE_MONEY"];
+    }
+    return getDeliveryChannels(code);
+  }
+
+  let hasBank = false;
+  let hasMobileWallet = false;
+  for (const row of services) {
+    const t = String(row.serviceType ?? "").trim();
+    if (!t) continue;
+    if (isFlexBankServiceTypeAllowed(t)) hasBank = true;
+    if (isFlexMobileWalletServiceType(t)) hasMobileWallet = true;
+  }
+
+  if (!hasBank && hasMobileWallet) {
+    const channels: BeneficiaryDeliveryChannel[] = ["MOBILE_MONEY"];
+    if (PAYOUT_IN_PERSON_COUNTRY_CODES.has(code)) {
+      channels.push("PAYOUT_IN_PERSON");
+    }
+    return channels;
+  }
+
+  if (FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES.has(code)) {
+    const channels: BeneficiaryDeliveryChannel[] = [];
+    if (hasMobileWallet) channels.push("MOBILE_MONEY");
+    if (hasBank) channels.push("PAYOUT_IN_PERSON");
+    return channels.length > 0 ? channels : getDeliveryChannels(code);
+  }
+
+  const channels: BeneficiaryDeliveryChannel[] = [];
+  if (hasBank) channels.push("BANK_TRANSFER");
+  if (hasMobileWallet) channels.push("MOBILE_MONEY");
+
+  if (channels.length === 0) {
+    return getDeliveryChannels(code);
+  }
+
+  if (PAYOUT_IN_PERSON_COUNTRY_CODES.has(code)) {
+    channels.push("PAYOUT_IN_PERSON");
+  }
+
+  return channels;
+}
+
 export const DELIVERY_CHANNEL_LABELS: Record<
   BeneficiaryDeliveryChannel,
   string
@@ -167,6 +243,49 @@ export const DELIVERY_CHANNEL_LABELS: Record<
   MOBILE_MONEY: "Mobile Money",
   PAYOUT_IN_PERSON: "Payout In Person (cash collection)",
 };
+
+/** UAE payout-in-person corridors collect Emirates ID; others use passport/national ID. */
+export const PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE = "ARE" as const;
+
+export function payoutInPersonNameSuffix(
+  destinationCouCode: string | undefined,
+): string {
+  if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
+    return " (as per emirates id)";
+  }
+  return " (as per passport/ national id)";
+}
+
+export function payoutInPersonIdFieldLabel(
+  destinationCouCode: string | undefined,
+): string {
+  if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
+    return "Emirates Id Number";
+  }
+  return "Passport/national Id number";
+}
+
+export function beneficiaryNameLabelSuffix(
+  channel: BeneficiaryDeliveryChannel,
+  destinationCouCode: string | undefined,
+): string {
+  if (channel === "BANK_TRANSFER") return " (as per bank account)";
+  if (channel === "PAYOUT_IN_PERSON") {
+    return payoutInPersonNameSuffix(destinationCouCode);
+  }
+  return "";
+}
+
+export function payoutInPersonCollectionNotice(
+  destinationCouCode: string | undefined,
+  countryName: string,
+): string {
+  if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
+    return "The beneficiary will collect funds in person at any Alfardan Exchange House branch in the United Arab Emirates.";
+  }
+  const place = countryName.trim() || "the selected country";
+  return `The beneficiary will collect funds in person in ${place}. No bank or mobile wallet details are required.`;
+}
 
 export function getDeliveryChannelLabel(
   channel: BeneficiaryDeliveryChannel,
