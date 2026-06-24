@@ -118,12 +118,13 @@ export default function ResetPasswordPage() {
       <AppLoadingOverlay show={isLoading} label="Updating password…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
-          <Image
+          {/* <Image
             src={R2GLogo}
             alt="Remit2Globe"
             priority
             className="object-contain w-[125px]"
-          />
+          /> */}
+          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
 
         <div className="mb-8 text-center">
