@@ -121,7 +121,8 @@ export default function OnboardingLayoutClient({
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Image src={R2GLogo} alt="Remit2Globe" width={100} height={100} />
+          {/* <Image src={R2GLogo} alt="Remit2Globe" width={100} height={100} />   */}
+          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
 
         <Link

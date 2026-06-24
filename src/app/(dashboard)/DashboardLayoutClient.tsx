@@ -263,13 +263,14 @@ export default function DashboardLayoutClient({
         {/* Logo */}
         <div className="border-b border-slate-200">
           <div className="flex justify-center mb-4 mt-4 ">
-            <Image
+            {/* <Image
               src={R2GLogo}
               alt="Remit2Globe"
               priority
               className="object-contain w-[125px]"
-            />
+            /> */}
           </div>
+          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
 
         {/* Nav */}

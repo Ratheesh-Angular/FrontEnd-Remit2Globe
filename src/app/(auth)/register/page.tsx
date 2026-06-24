@@ -158,10 +158,7 @@ export default function RegisterPage() {
     if (!selectedCountry) {
       errs.phone = "Please select a country first.";
     } else {
-      const phoneErr = validateNationalPhoneDigits(
-        selectedCountry,
-        localPhone,
-      );
+      const phoneErr = validateNationalPhoneDigits(selectedCountry, localPhone);
       if (phoneErr) errs.phone = phoneErr;
     }
     // if (!agreed) {
@@ -237,19 +234,24 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
       <AppLoadingOverlay
         show={isLoading}
-        label={accountType === "individual" ? "Creating account…" : "Creating account…"}
+        label={
+          accountType === "individual"
+            ? "Creating account…"
+            : "Creating account…"
+        }
         sublabel="Please wait."
       />
       {/* Card */}
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-8">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          <Image
+          {/* <Image
             src={R2GLogo}
             alt="Remit2Globe"
             priority
             className="object-contain w-[125px]"
-          />
+          /> */}
+          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
         {/* Heading */}
         <div className="mb-6">
@@ -358,7 +360,9 @@ export default function RegisterPage() {
             >
               {/* Dial-code display (disabled) */}
               <div className="flex-shrink-0">
-                <div className={`flex items-center gap-1.5 px-3 ${FIELD_HEIGHT} text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg`}>
+                <div
+                  className={`flex items-center gap-1.5 px-3 ${FIELD_HEIGHT} text-sm bg-slate-100 border-r border-slate-200 rounded-l-lg`}
+                >
                   {selectedCountry ? (
                     <>
                       <Flag

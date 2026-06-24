@@ -59,12 +59,13 @@ export default function ForgotPasswordPage() {
       <AppLoadingOverlay show={isLoading} label="Sending code…" />
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
         <div className="flex justify-center mb-6">
-          <Image
+          {/* <Image
             src={R2GLogo}
             alt="Remit2Globe"
             priority
             className="object-contain w-[125px]"
-          />
+          /> */}
+          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
         <h1 className="text-xl font-semibold text-slate-900 mb-1">
           Forgot password
