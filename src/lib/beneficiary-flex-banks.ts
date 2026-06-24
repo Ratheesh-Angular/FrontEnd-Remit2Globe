@@ -44,6 +44,12 @@ export function isFlexBankServiceTypeAllowed(serviceType: string | undefined): b
   return FLEX_BANK_SERVICE_TYPES.has(t);
 }
 
+export function isFlexMobileWalletServiceType(
+  serviceType: string | undefined,
+): boolean {
+  return (serviceType ?? "").trim().toLowerCase() === "mobile wallet";
+}
+
 export function isAllBanksCountry(couCode: string | undefined | null): boolean {
   const code = (couCode ?? "").trim().toUpperCase();
   return code.length > 0 && ALL_BANKS_COUNTRY_CODES.has(code);

@@ -69,6 +69,13 @@ export const ALL_COUNTRIES: Country[] = [
   { code: "IT", name: "Italy", dialCode: "39", minDigits: 9, maxDigits: 10 },
   { code: "JP", name: "Japan", dialCode: "81", minDigits: 10, maxDigits: 10 },
   { code: "KE", name: "Kenya", dialCode: "254", minDigits: 9, maxDigits: 9 },
+  {
+    code: "SS",
+    name: "South Sudan",
+    dialCode: "211",
+    minDigits: 9,
+    maxDigits: 9,
+  },
   { code: "KW", name: "Kuwait", dialCode: "965", minDigits: 8, maxDigits: 8 },
   { code: "LB", name: "Lebanon", dialCode: "961", minDigits: 7, maxDigits: 8 },
   { code: "LY", name: "Libya", dialCode: "218", minDigits: 9, maxDigits: 9 },

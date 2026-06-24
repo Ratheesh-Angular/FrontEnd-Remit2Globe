@@ -44,10 +44,22 @@ import {
   CURRENCY_TO_FLAG_ALPHA2,
 } from "@/lib/send-money-currencies";
 import {
+  beneficiaryNameLabelSuffix,
   getDeliveryChannelLabel,
   getDeliveryChannels,
+  getDeliveryChannelsFromFlexServices,
+  MOBILE_WALLET_ONLY_COUNTRY_CODES,
+  FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES,
+  PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE,
+  payoutInPersonCollectionNotice,
+  payoutInPersonIdFieldLabel,
   type BeneficiaryDeliveryChannel,
 } from "@/lib/beneficiary-delivery-channels";
+import {
+  emiratesIdFormatHint,
+  sanitizeEmiratesId,
+  validateEmiratesId,
+} from "@/lib/emirates-id-validation";
 import {
   isAllBanksCountry,
   isFlexBankServiceTypeAllowed,
@@ -101,6 +113,7 @@ export interface CreatedBeneficiaryPayload {
   ifsc?: string | null;
   mobileMoneyProvider?: string | null;
   mobileNumber?: string | null;
+  payoutInPersonIdNumber?: string | null;
   payoutCurrency?: string | null;
   active?: boolean;
 }
@@ -149,6 +162,8 @@ interface FormData {
   // Mobile Money
   mobileMoneyProvider: string;
   mobileNumber: string;
+  // Payout in person
+  payoutInPersonIdNumber: string;
 }
 
 const emptyForm: FormData = {
@@ -173,6 +188,7 @@ const emptyForm: FormData = {
   payoutCurrency: "",
   mobileMoneyProvider: "",
   mobileNumber: "",
+  payoutInPersonIdNumber: "",
 };
 
 function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
@@ -204,6 +220,7 @@ function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
     payoutCurrency: String(b.payoutCurrency ?? ""),
     mobileMoneyProvider: String(b.mobileMoneyProvider ?? ""),
     mobileNumber: "",
+    payoutInPersonIdNumber: String(b.payoutInPersonIdNumber ?? ""),
   };
 }
 
@@ -250,7 +267,7 @@ export function AddBeneficiaryModal({
     loading: catalogCountriesLoading,
     error: catalogCountriesError,
   } = useCatalogCountries(open);
-  const [flexBanks, setFlexBanks] = useState<FlexBank[]>([]);
+  const [flexBankCatalog, setFlexBankCatalog] = useState<FlexBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [payoutCurrencyOpen, setPayoutCurrencyOpen] = useState(false);
@@ -262,6 +279,14 @@ export function AddBeneficiaryModal({
   const isEditMode = Boolean(editBeneficiaryId);
   const [editLoading, setEditLoading] = useState(false);
   const [editLoadError, setEditLoadError] = useState("");
+
+  const flexBanks = useMemo(
+    () =>
+      flexBankCatalog.filter((b) =>
+        isFlexBankServiceTypeAllowed(b.serviceType),
+      ),
+    [flexBankCatalog],
+  );
 
   const filteredFlexBanks = useMemo(() => {
     const q = bankSearch.toLowerCase().trim();
@@ -305,19 +330,6 @@ export function AddBeneficiaryModal({
     return countriesIso.alpha3ToAlpha2(destinationCouCode) || undefined;
   }, [destinationCouCode]);
 
-  const availableDeliveryChannels = useMemo(
-    () => getDeliveryChannels(destinationCouCode),
-    [destinationCouCode],
-  );
-
-  const payoutCurrencyOptions = useMemo(() => {
-    const defaultOptions = ["USD", "EUR", "GBP"];
-    const code = selectedDestinationCountry?.couCode;
-    const local = code ? legalCurrencyForCouCode(code) : "";
-    const all = local ? [local, ...defaultOptions] : defaultOptions;
-    return Array.from(new Set(all));
-  }, [selectedDestinationCountry?.couCode]);
-
   const bankIdConfig = useMemo(
     () =>
       resolveBankIdentifierConfig(
@@ -328,6 +340,46 @@ export function AddBeneficiaryModal({
     [formData.payoutCurrency, selectedDestinationCountry?.couCode, userRole],
   );
 
+  /** When false (e.g. production without Flex IP allowlisting), bank name is a plain text field. */
+  const useFlexBankListUi = useMemo(() => {
+    const flexBankListFromApiEnabled =
+      process.env.NEXT_PUBLIC_ENABLE_FLEX_BANK_LIST !== "false";
+    return !bankIdConfig.hideFlexBankPicker && flexBankListFromApiEnabled;
+  }, [bankIdConfig.hideFlexBankPicker]);
+
+  const availableDeliveryChannels = useMemo(() => {
+    if (!destinationCouCode) return [];
+    if (!useFlexBankListUi) {
+      return getDeliveryChannels(destinationCouCode);
+    }
+    if (banksLoading) {
+      if (MOBILE_WALLET_ONLY_COUNTRY_CODES.has(destinationCouCode)) {
+        return ["MOBILE_MONEY"] as BeneficiaryDeliveryChannel[];
+      }
+      if (
+        FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES.has(destinationCouCode)
+      ) {
+        return [
+          "MOBILE_MONEY",
+          "PAYOUT_IN_PERSON",
+        ] as BeneficiaryDeliveryChannel[];
+      }
+      return getDeliveryChannels(destinationCouCode);
+    }
+    return getDeliveryChannelsFromFlexServices(
+      destinationCouCode,
+      flexBankCatalog,
+    );
+  }, [destinationCouCode, useFlexBankListUi, banksLoading, flexBankCatalog]);
+
+  const payoutCurrencyOptions = useMemo(() => {
+    const defaultOptions = ["USD", "EUR", "GBP"];
+    const code = selectedDestinationCountry?.couCode;
+    const local = code ? legalCurrencyForCouCode(code) : "";
+    const all = local ? [local, ...defaultOptions] : defaultOptions;
+    return Array.from(new Set(all));
+  }, [selectedDestinationCountry?.couCode]);
+
   const showActualBankNameInput = useMemo(
     () =>
       requiresActualBankNameInput(destinationCouCode, formData.flexBankName),
@@ -337,13 +389,6 @@ export function AddBeneficiaryModal({
   const bankPickerDisplayName = showActualBankNameInput
     ? formData.flexBankName
     : formData.bankName;
-
-  /** When false (e.g. production without Flex IP allowlisting), bank name is a plain text field. */
-  const useFlexBankListUi = useMemo(() => {
-    const flexBankListFromApiEnabled =
-      process.env.NEXT_PUBLIC_ENABLE_FLEX_BANK_LIST !== "false";
-    return !bankIdConfig.hideFlexBankPicker && flexBankListFromApiEnabled;
-  }, [bankIdConfig.hideFlexBankPicker]);
 
   /** Dropdown only while loading or when we have banks; otherwise allow manual entry so users are not blocked. */
   const showFlexBankDropdown = useMemo(
@@ -420,7 +465,7 @@ export function AddBeneficiaryModal({
       setPayoutCurrencyOpen(false);
       setBankSearch("");
       setBankIdLookupStatus("idle");
-      setFlexBanks([]);
+      setFlexBankCatalog([]);
 
       void api
         .get<{ data: { beneficiary: CreatedBeneficiaryPayload } }>(
@@ -460,7 +505,7 @@ export function AddBeneficiaryModal({
     setErrors({});
     setIsConfirmingAccount(false);
     setLocalMobileNumber("");
-    setFlexBanks([]);
+    setFlexBankCatalog([]);
     setBankOpen(false);
     setPayoutCurrencyOpen(false);
     setBankSearch("");
@@ -469,34 +514,37 @@ export function AddBeneficiaryModal({
 
   useEffect(() => {
     if (!open || isEditMode || !destinationCouCode) return;
-    const channels = getDeliveryChannels(destinationCouCode);
+    if (useFlexBankListUi && banksLoading) return;
+    const channels = availableDeliveryChannels;
     if (channels.length === 0) return;
     setFormData((prev) => {
       if (channels.includes(prev.deliveryChannel)) return prev;
       return { ...prev, deliveryChannel: channels[0] };
     });
-  }, [open, destinationCouCode, isEditMode]);
+  }, [
+    open,
+    destinationCouCode,
+    isEditMode,
+    availableDeliveryChannels,
+    useFlexBankListUi,
+    banksLoading,
+  ]);
 
   useEffect(() => {
     if (!open) {
-      setFlexBanks([]);
-      setBanksLoading(false);
-      return;
-    }
-    if (formData.deliveryChannel !== "BANK_TRANSFER") {
-      setFlexBanks([]);
+      setFlexBankCatalog([]);
       setBanksLoading(false);
       return;
     }
     if (!useFlexBankListUi) {
-      setFlexBanks([]);
+      setFlexBankCatalog([]);
       setBanksLoading(false);
       setBankOpen(false);
       return;
     }
     const couCode = selectedDestinationCountry?.couCode;
     if (!couCode) {
-      setFlexBanks([]);
+      setFlexBankCatalog([]);
       setBanksLoading(false);
       return;
     }
@@ -509,36 +557,29 @@ export function AddBeneficiaryModal({
       .then((r) => r.json())
       .then((json) => {
         const rows = Array.isArray(json?.data) ? json.data : [];
-        const banks: FlexBank[] = [];
+        const catalog: FlexBank[] = [];
         for (const row of rows as {
           serviceType?: string;
           bankCode?: string;
           bankName?: string;
         }[]) {
           const serviceType = String(row?.serviceType ?? "").trim();
-          if (!isFlexBankServiceTypeAllowed(serviceType)) continue;
           const bankCode = String(row?.bankCode ?? "").trim();
           const bankName = String(row?.bankName ?? "").trim();
           if (bankCode && bankName) {
-            banks.push({ serviceType, bankCode, bankName });
+            catalog.push({ serviceType, bankCode, bankName });
           }
         }
-        setFlexBanks(banks);
+        setFlexBankCatalog(catalog);
       })
       .catch(() => {
-        if (!ac.signal.aborted) setFlexBanks([]);
+        if (!ac.signal.aborted) setFlexBankCatalog([]);
       })
       .finally(() => {
         if (!ac.signal.aborted) setBanksLoading(false);
       });
     return () => ac.abort();
-  }, [
-    open,
-    formData.deliveryChannel,
-    formData.country,
-    selectedDestinationCountry?.couCode,
-    useFlexBankListUi,
-  ]);
+  }, [open, selectedDestinationCountry?.couCode, useFlexBankListUi]);
 
   useEffect(() => {
     if (!open || formData.deliveryChannel !== "BANK_TRANSFER") return;
@@ -670,6 +711,27 @@ export function AddBeneficiaryModal({
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   }
 
+  function handlePayoutInPersonIdChange(raw: string) {
+    const isUae =
+      destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE;
+    const next = isUae ? sanitizeEmiratesId(raw) : raw;
+    setFormData((prev) => ({ ...prev, payoutInPersonIdNumber: next }));
+
+    if (!isUae) {
+      setErrors((prev) => ({ ...prev, payoutInPersonIdNumber: undefined }));
+      return;
+    }
+
+    const formatError = validateEmiratesId(next, {
+      allowEmpty: true,
+      allowIncomplete: true,
+    });
+    setErrors((prev) => ({
+      ...prev,
+      payoutInPersonIdNumber: formatError ?? undefined,
+    }));
+  }
+
   function selectFlexBank(bank: FlexBank) {
     const needsActual = requiresActualBankNameInput(
       destinationCouCode,
@@ -693,38 +755,32 @@ export function AddBeneficiaryModal({
     const match =
       matchFlexCountryByLabel(catalogCountryList, couName) ??
       matchFlexCountryByLabel(flexCountries, couName);
-    const channels = getDeliveryChannels(match?.couCode ?? "");
 
     const defaultPayoutCurrency = match?.couCode
       ? legalCurrencyForCouCode(match.couCode)
       : "";
 
-    setFormData((prev) => {
-      const nextChannel = channels.includes(prev.deliveryChannel)
-        ? prev.deliveryChannel
-        : (channels[0] ?? "BANK_TRANSFER");
-      return {
-        ...prev,
-        country: couName,
-        deliveryChannel: nextChannel,
-        payoutCurrency: defaultPayoutCurrency,
-        bankName: "",
-        flexBankName: "",
-        flexBankCode: "",
-        branchName: "",
-        accountNumber: "",
-        confirmAccountNumber: "",
-        swiftBic: "",
-        iban: "",
-        confirmIban: "",
-        sortCode: "",
-        routingNumber: "",
-        transitNumber: "",
-        bsb: "",
-        ifsc: "",
-        mobileMoneyProvider: "",
-      };
-    });
+    setFormData((prev) => ({
+      ...prev,
+      country: couName,
+      payoutCurrency: defaultPayoutCurrency,
+      bankName: "",
+      flexBankName: "",
+      flexBankCode: "",
+      branchName: "",
+      accountNumber: "",
+      confirmAccountNumber: "",
+      swiftBic: "",
+      iban: "",
+      confirmIban: "",
+      sortCode: "",
+      routingNumber: "",
+      transitNumber: "",
+      bsb: "",
+      ifsc: "",
+      mobileMoneyProvider: "",
+      payoutInPersonIdNumber: "",
+    }));
     setLocalMobileNumber("");
     setBankIdLookupStatus("idle");
     setBankSearch("");
@@ -760,6 +816,7 @@ export function AddBeneficiaryModal({
           }
         : {}),
       ...(channel !== "MOBILE_MONEY" ? { mobileMoneyProvider: "" } : {}),
+      ...(channel !== "PAYOUT_IN_PERSON" ? { payoutInPersonIdNumber: "" } : {}),
     }));
     if (channel !== "MOBILE_MONEY") setLocalMobileNumber("");
     setErrors((prev) => ({ ...prev, deliveryChannel: undefined }));
@@ -904,6 +961,17 @@ export function AddBeneficiaryModal({
       }
     }
 
+    if (formData.deliveryChannel === "PAYOUT_IN_PERSON") {
+      if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
+        const formatError = validateEmiratesId(
+          formData.payoutInPersonIdNumber,
+        );
+        if (formatError) errs.payoutInPersonIdNumber = formatError;
+      } else if (!formData.payoutInPersonIdNumber.trim()) {
+        errs.payoutInPersonIdNumber = `${payoutInPersonIdFieldLabel(destinationCouCode)} is required`;
+      }
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -949,6 +1017,8 @@ export function AddBeneficiaryModal({
         const digits = localMobileNumber.replace(/\D/g, "");
         payload.mobileNumber =
           dial && digits ? `+${dial}${digits}` : digits || localMobileNumber;
+      } else if (formData.deliveryChannel === "PAYOUT_IN_PERSON") {
+        payload.payoutInPersonIdNumber = formData.payoutInPersonIdNumber.trim();
       }
 
       if (editBeneficiaryId) {
@@ -1391,7 +1461,10 @@ export function AddBeneficiaryModal({
                   disabled={
                     isEditMode ||
                     !formData.country.trim() ||
-                    availableDeliveryChannels.length === 0
+                    availableDeliveryChannels.length === 0 ||
+                    (useFlexBankListUi &&
+                      banksLoading &&
+                      Boolean(destinationCouCode))
                   }
                   onChange={(e) =>
                     applyDeliveryChannelChange(
@@ -1418,6 +1491,10 @@ export function AddBeneficiaryModal({
                   Choose a destination country to see available delivery
                   channels.
                 </p>
+              ) : useFlexBankListUi && banksLoading ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Loading delivery options…
+                </p>
               ) : null}
               {isEditMode && (
                 <p className="mt-1 text-xs text-slate-500">
@@ -1436,10 +1513,11 @@ export function AddBeneficiaryModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  First name{" "}
-                  {formData.deliveryChannel === "BANK_TRANSFER"
-                    ? " (as per bank account)"
-                    : ""}{" "}
+                  First name
+                  {beneficiaryNameLabelSuffix(
+                    formData.deliveryChannel,
+                    destinationCouCode,
+                  )}{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1461,9 +1539,10 @@ export function AddBeneficiaryModal({
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1.5">
                   Last name
-                  {formData.deliveryChannel === "BANK_TRANSFER"
-                    ? " (as per bank account)"
-                    : ""}{" "}
+                  {beneficiaryNameLabelSuffix(
+                    formData.deliveryChannel,
+                    destinationCouCode,
+                  )}{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1889,11 +1968,56 @@ export function AddBeneficiaryModal({
             )}
 
             {formData.deliveryChannel === "PAYOUT_IN_PERSON" && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                The beneficiary will collect funds in person in{" "}
-                {formData.country || "the selected country"}. No bank or mobile
-                wallet details are required.
-              </div>
+              <>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                    {payoutInPersonIdFieldLabel(destinationCouCode)}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode={
+                      destinationCouCode ===
+                      PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE
+                        ? "numeric"
+                        : "text"
+                    }
+                    placeholder={
+                      destinationCouCode ===
+                      PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE
+                        ? emiratesIdFormatHint()
+                        : payoutInPersonIdFieldLabel(destinationCouCode)
+                    }
+                    autoComplete="off"
+                    value={formData.payoutInPersonIdNumber}
+                    onChange={(e) =>
+                      handlePayoutInPersonIdChange(e.target.value)
+                    }
+                    className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      errors.payoutInPersonIdNumber
+                        ? "border-red-400"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {destinationCouCode ===
+                    PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      15 digits starting with 784 (e.g. {emiratesIdFormatHint()})
+                    </p>
+                  )}
+                  {errors.payoutInPersonIdNumber && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {errors.payoutInPersonIdNumber}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {payoutInPersonCollectionNotice(
+                    destinationCouCode,
+                    formData.country,
+                  )}
+                </div>
+              </>
             )}
 
             {/* Actions */}

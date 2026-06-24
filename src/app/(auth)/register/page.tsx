@@ -1,17 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import api from "@/lib/api";
 import Flag from "react-world-flags";
 import { getSession, signIn, signOut } from "next-auth/react";
 import R2GLogo from "../../../../assets/logos/R2GLogo.png";
-import type { Country } from "@/lib/phone-countries";
 import {
   nationalPhonePlaceholder,
   validateNationalPhoneDigits,
 } from "@/lib/phone-validation";
 import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
 import {
   fieldControlBase,
@@ -78,11 +78,21 @@ export default function RegisterPage() {
 
   const { countries: flexCountries, loading: flexCountriesLoading } =
     useFlexCountries(true);
-  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const countryDetectDone = useRef(false);
 
   const [localPhone, setLocalPhone] = useState("");
   const [oauthErrorCode, setOauthErrorCode] = useState<string | null>(null);
+
+  const selectedFlexCountry = useMemo(() => {
+    const raw = formData.country.trim();
+    if (!raw || flexCountries.length === 0) return undefined;
+    return matchFlexCountryByLabel(flexCountries, raw);
+  }, [formData.country, flexCountries]);
+
+  const selectedCountry = useMemo(() => {
+    if (!selectedFlexCountry?.couCode) return null;
+    return phoneCountryFromCouCode(selectedFlexCountry.couCode);
+  }, [selectedFlexCountry]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -121,13 +131,11 @@ export default function RegisterPage() {
           );
         const pick = match ?? flexCountries[0];
         if (pick && !cancelled) {
-          setSelectedCountry(phoneCountryFromCouCode(pick.couCode));
           setFormData((prev) => ({ ...prev, country: pick.couName }));
         }
       } catch {
         const pick = flexCountries[0];
         if (pick && !cancelled) {
-          setSelectedCountry(phoneCountryFromCouCode(pick.couCode));
           setFormData((prev) => ({ ...prev, country: pick.couName }));
         }
       }
@@ -286,11 +294,7 @@ export default function RegisterPage() {
           <FlexCountrySelect
             value={formData.country}
             onChange={(couName) => {
-              const fc = flexCountries.find((c) => c.couName === couName);
               setFormData((prev) => ({ ...prev, country: couName }));
-              setSelectedCountry(
-                fc ? phoneCountryFromCouCode(fc.couCode) : null,
-              );
               setLocalPhone("");
               setErrors((prev) => ({
                 ...prev,
