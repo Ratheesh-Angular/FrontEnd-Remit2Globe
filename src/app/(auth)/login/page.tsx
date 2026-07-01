@@ -70,7 +70,7 @@ export default function LoginPage() {
         <div className="flex justify-center mb-6">
           {/*   <Image
             src={R2GLogo}
-            alt="Remit2Globe"
+            alt="Amigo"
             priority
             className="object-contain w-[125px]"
           /> */}
@@ -81,7 +81,7 @@ export default function LoginPage() {
           Welcome back
         </h1>
         <p className="text-sm text-slate-500 mb-6">
-          Sign in to your Remit2Globe account
+          Sign in to your Amigo account
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

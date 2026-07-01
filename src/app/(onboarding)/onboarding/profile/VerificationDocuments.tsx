@@ -16,8 +16,7 @@ import { notifyApiError, notifyError } from "@/lib/notify";
 type DocumentType =
   | "PASSPORT_FRONT"
   | "PASSPORT_BACK"
-  | "WORK_PERMIT_FRONT"
-  | "WORK_PERMIT_BACK"
+  | "WORK_PERMIT"
   | "NATIONAL_ID_FRONT"
   | "NATIONAL_ID_BACK"
   | "OTHER_GOVT_ID";
@@ -60,16 +59,9 @@ const DOC_CONFIG: DocConfig[] = [
     requiredFor: "foreigner",
   },
   {
-    type: "WORK_PERMIT_FRONT",
-    label: "Work Permit (Front)",
-    description: "Upload front side of your valid work permit ",
-    required: true,
-    requiredFor: "foreigner",
-  },
-  {
-    type: "WORK_PERMIT_BACK",
-    label: "Work Permit (Back)",
-    description: "Upload back side of your valid work permit",
+    type: "WORK_PERMIT",
+    label: "Work Permit / Foreign Card",
+    description: "Upload your work permit or foreign card document",
     required: true,
     requiredFor: "foreigner",
   },
@@ -92,12 +84,20 @@ const DOC_CONFIG: DocConfig[] = [
 const emptyUploads = (): Record<DocumentType, UploadedDoc | null> => ({
   PASSPORT_FRONT: null,
   PASSPORT_BACK: null,
-  WORK_PERMIT_FRONT: null,
-  WORK_PERMIT_BACK: null,
+  WORK_PERMIT: null,
   NATIONAL_ID_FRONT: null,
   NATIONAL_ID_BACK: null,
   OTHER_GOVT_ID: null,
 });
+
+function normalizeDocumentType(raw: string): DocumentType | null {
+  if (raw === "WORK_PERMIT_FRONT" || raw === "WORK_PERMIT_BACK") {
+    return "WORK_PERMIT";
+  }
+  const uploadedMap = emptyUploads();
+  if (raw in uploadedMap) return raw as DocumentType;
+  return null;
+}
 
 type CitizenDocType = "" | "PASSPORT" | "NATIONAL_ID";
 
@@ -129,14 +129,14 @@ export function VerificationDocuments({
   useEffect(() => {
     const uploadedMap = emptyUploads();
     documents.forEach((doc) => {
-      if (doc.documentType in uploadedMap) {
-        uploadedMap[doc.documentType as DocumentType] = {
-          type: doc.documentType as DocumentType,
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          status: "done",
-        };
-      }
+      const type = normalizeDocumentType(doc.documentType);
+      if (!type) return;
+      uploadedMap[type] = {
+        type,
+        fileName: doc.fileName,
+        fileUrl: doc.fileUrl,
+        status: "done",
+      };
     });
     setUploads(uploadedMap);
   }, [documents]);
@@ -146,8 +146,7 @@ export function VerificationDocuments({
 
     const isPassportSlot =
       doc.type === "PASSPORT_FRONT" || doc.type === "PASSPORT_BACK";
-    const isWorkPermit =
-      doc.type === "WORK_PERMIT_FRONT" || doc.type === "WORK_PERMIT_BACK";
+    const isWorkPermit = doc.type === "WORK_PERMIT";
 
     if (isPassportSlot) {
       if (!isNational) return true;

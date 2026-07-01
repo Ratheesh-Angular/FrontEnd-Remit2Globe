@@ -247,7 +247,7 @@ export default function RegisterPage() {
         <div className="flex justify-center mb-6">
           {/* <Image
             src={R2GLogo}
-            alt="Remit2Globe"
+            alt="Amigo"
             priority
             className="object-contain w-[125px]"
           /> */}

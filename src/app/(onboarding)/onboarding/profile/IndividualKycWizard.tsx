@@ -241,7 +241,10 @@ function inferSavedSectionsFromForm(f: IndividualForm): Section[] {
       f.passportNumber.trim() &&
       f.passportIssuingCountry.trim() &&
       f.passportIssue &&
-      f.passportExpiry,
+      f.passportExpiry &&
+      f.workPermitNumber.trim() &&
+      f.workPermitIssue &&
+      f.workPermitExpiry,
     );
   } else if (f.citizenPrimaryDocumentType === "PASSPORT") {
     identityComplete = Boolean(
@@ -290,12 +293,11 @@ function inferDocumentsSectionFromApi(
     }
   }
   if (needsWorkPermit) {
-    if (
-      !uploaded.has("WORK_PERMIT_FRONT") ||
-      !uploaded.has("WORK_PERMIT_BACK")
-    ) {
-      return false;
-    }
+    const hasWorkPermit =
+      uploaded.has("WORK_PERMIT") ||
+      uploaded.has("WORK_PERMIT_FRONT") ||
+      uploaded.has("WORK_PERMIT_BACK");
+    if (!hasWorkPermit) return false;
   }
   if (needsNationalId) {
     if (
@@ -817,6 +819,12 @@ export function IndividualKycWizard() {
           newErrors.passportIssue = "Issue date is required";
         if (!form.passportExpiry)
           newErrors.passportExpiry = "Expiry date is required";
+        if (!form.workPermitNumber.trim())
+          newErrors.workPermitNumber = "Work permit number is required";
+        if (!form.workPermitIssue)
+          newErrors.workPermitIssue = "Work permit issue date is required";
+        if (!form.workPermitExpiry)
+          newErrors.workPermitExpiry = "Work permit expiry date is required";
       } else {
         if (!form.citizenPrimaryDocumentType) {
           newErrors.citizenPrimaryDocumentType =
@@ -1372,9 +1380,10 @@ export function IndividualKycWizard() {
 
             {!form.isNational && (
               <div className="space-y-4">
-                <SectionLabel>Work Permit (if applicable)</SectionLabel>
+                <SectionLabel>Work Permit</SectionLabel>
                 <Field
                   label="Work Permit Number"
+                  required
                   error={errors.workPermitNumber}
                 >
                   <input
@@ -1387,7 +1396,11 @@ export function IndividualKycWizard() {
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Issue Date" error={errors.workPermitIssue}>
+                  <Field
+                    label="Issue Date"
+                    required
+                    error={errors.workPermitIssue}
+                  >
                     <input
                       type="date"
                       className={inputClass("workPermitIssue")}
@@ -1397,7 +1410,11 @@ export function IndividualKycWizard() {
                       }
                     />
                   </Field>
-                  <Field label="Expiry Date" error={errors.workPermitExpiry}>
+                  <Field
+                    label="Expiry Date"
+                    required
+                    error={errors.workPermitExpiry}
+                  >
                     <input
                       type="date"
                       className={inputClass("workPermitExpiry")}

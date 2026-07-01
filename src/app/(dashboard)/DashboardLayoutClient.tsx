@@ -6,6 +6,7 @@ import { getSession, signOut as nextAuthSignOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
+import type { AuthUser } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 import Image from "next/image";
 import R2GLogo from "../../../assets/logos/R2GLogo.png";
@@ -23,6 +24,7 @@ import {
   isStaleAuthHttpStatus,
   safeGetSession,
 } from "@/lib/load-session-client";
+import { mergeAuthUser } from "@/lib/auth-user";
 import {
   LayoutDashboard,
   Send,
@@ -74,17 +76,31 @@ const navItems: {
 export default function DashboardLayoutClient({
   children,
   initialSession,
+  initialUser,
 }: {
   children: React.ReactNode;
   initialSession: Session | null;
+  initialUser: AuthUser | null;
 }) {
   const { user, setUser, setLoading } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sessionBanner, setSessionBanner] = useState<string | null>(null);
   const pathname = usePathname();
-  const isKycApproved = user?.kycStatus === "APPROVED";
+  const effectiveUser = user ?? initialUser;
+  const isKycApproved = effectiveUser?.kycStatus === "APPROVED";
   const router = useRouter();
   useEffect(() => {
+    if (initialUser) {
+      const current = useAuthStore.getState().user;
+      if (
+        !current ||
+        current.id !== initialUser.id ||
+        current.kycStatus !== initialUser.kycStatus
+      ) {
+        setUser(initialUser);
+      }
+    }
+
     const fetchUser = async () => {
       try {
         const naSession = initialSession ?? (await safeGetSession());
@@ -114,10 +130,11 @@ export default function DashboardLayoutClient({
             await clearStaleAuthAndRedirect("/register");
             return;
           }
+          if (initialUser) setUser(initialUser);
           setSessionBanner("");
           return;
         }
-        setUser(u);
+        setUser(mergeAuthUser(useAuthStore.getState().user ?? initialUser, u));
       } catch (e) {
         const status = getHttpErrorStatus(e);
         if (isStaleAuthHttpStatus(status)) {
@@ -130,7 +147,9 @@ export default function DashboardLayoutClient({
             const res = await api.get("/auth/me");
             const u = extractAuthMeUser(res.data);
             if (u) {
-              setUser(u);
+              setUser(
+                mergeAuthUser(useAuthStore.getState().user ?? initialUser, u),
+              );
               return;
             }
           } catch {
@@ -173,7 +192,14 @@ export default function DashboardLayoutClient({
       }
     };
     fetchUser();
-  }, [setUser, setLoading, initialSession]);
+  }, [
+    setUser,
+    setLoading,
+    initialSession,
+    initialUser?.id,
+    initialUser?.kycStatus,
+    pathname,
+  ]);
 
   const handleLogout = async () => {
     const session = await getSession();
@@ -247,8 +273,6 @@ export default function DashboardLayoutClient({
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
-  console.log(user, "user");
-
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
@@ -265,12 +289,12 @@ export default function DashboardLayoutClient({
           <div className="flex justify-center mb-4 mt-4 ">
             {/* <Image
               src={R2GLogo}
-              alt="Remit2Globe"
+              alt="Amigo"
               priority
               className="object-contain w-[125px]"
             /> */}
+            <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
           </div>
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
         </div>
 
         {/* Nav */}
@@ -454,14 +478,19 @@ export default function DashboardLayoutClient({
               className="cursor-pointer flex items-center gap-2.5 sm:gap-3 min-w-0 px-1"
             >
               <div className=" w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
-                {user?.email?.[0]?.toUpperCase() || user?.phone?.[0] || "U"}
+                {effectiveUser?.email?.[0]?.toUpperCase() ||
+                  effectiveUser?.phone?.[0] ||
+                  "U"}
               </div>
               <div className="min-w-0 hidden sm:block">
                 <p className="text-sm font-medium text-slate-900 truncate max-w-[12rem] md:max-w-[16rem]">
-                  {user?.name || user?.email || user?.phone || "User"}
+                  {effectiveUser?.name ||
+                    effectiveUser?.email ||
+                    effectiveUser?.phone ||
+                    "User"}
                 </p>
                 <p className="text-xs text-slate-500 capitalize truncate">
-                  {user?.role?.toLowerCase()}
+                  {effectiveUser?.role?.toLowerCase()}
                 </p>
               </div>
             </div>

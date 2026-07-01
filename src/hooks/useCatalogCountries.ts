@@ -1,32 +1,59 @@
-import { useMemo } from "react";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
 import type { FlexCountry } from "@/types/flex-country";
-import { getCatalogCountries } from "@/lib/catalog-countries";
+import { fetchCatalogCountries } from "@/lib/catalog-countries";
 
 /**
- * Static full-country list for KYC / issuing-country fields (not admin Flex allowlist).
+ * Platform country catalog (admin-managed). Fetches from API at runtime.
  * Same ergonomic shape as {@link useFlexCountries} for easy reuse.
  */
 export function useCatalogCountries(enabled = true): {
   countries: FlexCountry[];
   loading: boolean;
   error: string;
+  reload: () => Promise<void>;
 } {
-  return useMemo(() => {
-    if (!enabled) {
-      return { countries: [], loading: false, error: "" };
-    }
+  const [countries, setCountries] = useState<FlexCountry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      return {
-        countries: getCatalogCountries(),
-        loading: false,
-        error: "",
-      };
+      const list = await fetchCatalogCountries();
+      setCountries(list);
     } catch {
-      return {
-        countries: [],
-        loading: false,
-        error: "Could not load countries",
-      };
+      setCountries([]);
+      setError("Could not load countries");
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    fetchCatalogCountries()
+      .then((list) => {
+        if (!cancelled) setCountries(list);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCountries([]);
+          setError("Could not load countries");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [enabled]);
+
+  return { countries, loading, error, reload };
 }
