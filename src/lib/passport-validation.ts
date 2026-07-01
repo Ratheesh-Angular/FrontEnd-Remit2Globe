@@ -1,8 +1,5 @@
 import rulesRaw from "@/data/passport-validation-rules.json";
-import {
-  getCatalogCountries,
-  matchFlexCountryByLabel,
-} from "@/lib/catalog-countries";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import type { FlexCountry } from "@/types/flex-country";
 
 export type PassportValidationRule = {
@@ -24,7 +21,7 @@ export function getPassportRuleByCountryCode(
 
 export function getPassportRuleForIssuingCountry(
   issuingCountryLabel: string,
-  countries: FlexCountry[] = getCatalogCountries(),
+  countries: FlexCountry[] = [],
 ): PassportValidationRule | undefined {
   const label = issuingCountryLabel.trim();
   if (!label) return undefined;

@@ -14,7 +14,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Remit2Globe - Cross Border Payments",
+  title: "Amigo - Cross Border Payments",
   description: "Fast, secure international money transfers",
 };
 

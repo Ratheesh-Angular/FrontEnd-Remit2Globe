@@ -2,8 +2,9 @@
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   PASSPORT_FRONT: "Passport (front)",
   PASSPORT_BACK: "Passport (back)",
-  WORK_PERMIT_FRONT: "Work permit (front)",
-  WORK_PERMIT_BACK: "Work permit (back)",
+  WORK_PERMIT: "Work Permit / Foreign Card",
+  WORK_PERMIT_FRONT: "Work Permit / Foreign Card",
+  WORK_PERMIT_BACK: "Work Permit / Foreign Card",
   NATIONAL_ID_FRONT: "National ID (front)",
   NATIONAL_ID_BACK: "National ID (back)",
   OTHER_GOVT_ID: "Other government ID",

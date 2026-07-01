@@ -324,11 +324,11 @@ const DUMMY_PAYOUT_ACCOUNTS: CompanyAccount[] = [
   {
     id: "dev-1",
     bankName: "Atlas Clearing Bank",
-    accountName: "Remit2Globe Client Trust — USD",
+    accountName: "Amigo Client Trust — KES",
     accountNumber: "8844-2910-7731-02",
     swiftBic: "ATLSUS6N",
     iban: null,
-    currency: "USD",
+    currency: "KES",
     countryNote: "New York, USA",
     instructions:
       "Use your transfer reference in the payment narrative. Credits are applied after reconciliation.",
@@ -1902,6 +1902,12 @@ function SendMoneyPageContent() {
                     . Everyone can use <strong>Bank transfer</strong>.
                   </div>
                 )}
+                <button
+                  type="button"
+                  className="h-10 px-4 rounded-lg text-sm border cursor-pointer border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
+                >
+                  Pay by debit/credit card
+                </button>
               </div>
             </div>
 

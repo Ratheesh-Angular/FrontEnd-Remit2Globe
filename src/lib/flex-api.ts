@@ -79,3 +79,42 @@ export async function fetchFlexCountries(): Promise<FlexCountry[]> {
   const json: unknown = await res.json();
   return parseFlexCountriesResponse(json);
 }
+
+function parseCatalogCountriesResponse(json: unknown): FlexCountry[] {
+  const body =
+    json &&
+    typeof json === "object" &&
+    "data" in (json as object) &&
+    (json as { data?: unknown }).data !== undefined
+      ? (json as { data: unknown }).data
+      : json;
+
+  const countries =
+    body &&
+    typeof body === "object" &&
+    "countries" in (body as object) &&
+    Array.isArray((body as { countries?: unknown }).countries)
+      ? (body as { countries: unknown[] }).countries
+      : Array.isArray(body)
+        ? body
+        : [];
+
+  return (countries as { couCode?: string; couName?: string }[])
+    .map((r) => ({
+      couCode: String(r.couCode ?? "").trim().toUpperCase(),
+      couName: String(r.couName ?? "").trim(),
+    }))
+    .filter((c) => c.couCode.length > 0 && c.couName.length > 0)
+    .sort((a, b) => a.couName.localeCompare(b.couName));
+}
+
+export async function fetchCatalogCountries(): Promise<FlexCountry[]> {
+  const res = await fetch(flexApiUrl("/catalog-countries"), {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to load catalog countries: ${res.status}`);
+  }
+  const json: unknown = await res.json();
+  return parseCatalogCountriesResponse(json);
+}

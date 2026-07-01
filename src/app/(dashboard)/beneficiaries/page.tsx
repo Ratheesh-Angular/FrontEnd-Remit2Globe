@@ -32,9 +32,9 @@ import {
 } from "lucide-react";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import {
-  getCatalogCountries,
   matchFlexCountryByLabel,
 } from "@/lib/catalog-countries";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 
 import type { BeneficiaryDeliveryChannel } from "@/lib/beneficiary-delivery-channels";
 import { getDeliveryChannelLabel } from "@/lib/beneficiary-delivery-channels";
@@ -97,7 +97,7 @@ export default function BeneficiariesPage() {
     return beneficiaries.slice(start, start + PAGE_SIZE);
   }, [beneficiaries, page]);
 
-  const catalogCountries = useMemo(() => getCatalogCountries(), []);
+  const { countries: catalogCountries } = useCatalogCountries(true);
 
   useEffect(() => {
     setPage((p) => Math.min(Math.max(1, p), totalPages));

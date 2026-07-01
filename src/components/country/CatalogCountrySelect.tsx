@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { FlexCountry } from "@/types/flex-country";
 import {
-  getCatalogCountries,
+  fetchCatalogCountries,
   matchFlexCountryByLabel,
 } from "@/lib/catalog-countries";
 import { FlexCountryFlag } from "./FlexCountryFlag";
@@ -60,17 +60,19 @@ export function CatalogCountrySelect({
     let cancelled = false;
     setInternalLoading(true);
     setInternalError("");
-    try {
-      const list = getCatalogCountries();
-      if (!cancelled) setInternal(list);
-    } catch {
-      if (!cancelled) {
-        setInternal([]);
-        setInternalError("Could not load countries");
-      }
-    } finally {
-      if (!cancelled) setInternalLoading(false);
-    }
+    fetchCatalogCountries()
+      .then((list) => {
+        if (!cancelled) setInternal(list);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInternal([]);
+          setInternalError("Could not load countries");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setInternalLoading(false);
+      });
     return () => {
       cancelled = true;
     };

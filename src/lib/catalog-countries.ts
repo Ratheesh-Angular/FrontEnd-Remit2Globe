@@ -2,10 +2,11 @@ import type { FlexCountry } from "@/types/flex-country";
 import catalogRaw from "@/data/catalog-country-list.json";
 import countriesIso from "i18n-iso-countries";
 import enCountries from "i18n-iso-countries/langs/en.json";
+import { fetchCatalogCountries as fetchCatalogCountriesFromApi } from "@/lib/flex-api";
 
 countriesIso.registerLocale(enCountries);
 
-let cached: FlexCountry[] | null = null;
+let cachedFallback: FlexCountry[] | null = null;
 
 function normalizeRow(r: unknown): FlexCountry | null {
   if (!r || typeof r !== "object") return null;
@@ -17,17 +18,26 @@ function normalizeRow(r: unknown): FlexCountry | null {
 }
 
 /**
- * Full catalog (`catalog-country-list.json`, mirrored from backend `countryList.json`).
- * Sorted by display name. Safe to call on client or server.
+ * Bundled fallback (`catalog-country-list.json`). Use for offline/build sync only.
+ * Runtime reads should use {@link fetchCatalogCountries}.
  */
 export function getCatalogCountries(): FlexCountry[] {
-  if (cached) return cached;
+  if (cachedFallback) return cachedFallback;
   const arr = Array.isArray(catalogRaw) ? catalogRaw : [];
   const rows = arr
     .map(normalizeRow)
     .filter((x): x is FlexCountry => x !== null);
-  cached = [...rows].sort((a, b) => a.couName.localeCompare(b.couName));
-  return cached;
+  cachedFallback = [...rows].sort((a, b) => a.couName.localeCompare(b.couName));
+  return cachedFallback;
+}
+
+/** Load platform catalog from API (admin-managed). Returns empty list when none enabled. */
+export async function fetchCatalogCountries(): Promise<FlexCountry[]> {
+  try {
+    return await fetchCatalogCountriesFromApi();
+  } catch {
+    return getCatalogCountries();
+  }
 }
 
 /**
