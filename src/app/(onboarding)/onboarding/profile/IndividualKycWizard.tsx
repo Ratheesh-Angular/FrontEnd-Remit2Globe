@@ -444,6 +444,16 @@ export function IndividualKycWizard() {
     });
   }, [form.country]);
 
+  /** National ID issuing country is always the registration / residence country. */
+  useEffect(() => {
+    const c = form.country.trim();
+    if (!c) return;
+    setForm((prev) => {
+      if (prev.nationalIdIssuingCountry === c) return prev;
+      return { ...prev, nationalIdIssuingCountry: c };
+    });
+  }, [form.country]);
+
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
     [flexCountryList, form.country],
@@ -1559,16 +1569,18 @@ export function IndividualKycWizard() {
                         error={errors.nationalIdIssuingCountry}
                       >
                         <FlexCountrySelect
-                          value={form.nationalIdIssuingCountry}
-                          onChange={(name) =>
-                            setField("nationalIdIssuingCountry", name)
-                          }
+                          value={form.nationalIdIssuingCountry || form.country}
+                          onChange={() => {}}
+                          disabled
                           error={Boolean(errors.nationalIdIssuingCountry)}
-                          placeholder="Select issuing country…"
+                          placeholder="Same as country of residence"
                           countries={flexCountryList}
                           countriesLoading={flexCountriesLoading}
                           countriesError={flexCountriesError}
                         />
+                        <p className="mt-1.5 text-xs text-slate-500">
+                          Same as the country you selected at registration.
+                        </p>
                       </Field>
                     </div>
                     <Field

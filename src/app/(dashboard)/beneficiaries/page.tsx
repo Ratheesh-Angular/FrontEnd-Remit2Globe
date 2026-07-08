@@ -31,9 +31,7 @@ import {
   Users,
 } from "lucide-react";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
-import {
-  matchFlexCountryByLabel,
-} from "@/lib/catalog-countries";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 
 import type { BeneficiaryDeliveryChannel } from "@/lib/beneficiary-delivery-channels";

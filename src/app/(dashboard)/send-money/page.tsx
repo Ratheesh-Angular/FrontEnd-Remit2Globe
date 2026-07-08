@@ -50,6 +50,7 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
+import { fetchFlexForexRate } from "@/lib/flex-forex-rate";
 
 interface FlexCountry {
   couCode: string;
@@ -360,11 +361,18 @@ function SendMoneyPageContent() {
 
   const [payCurrency, setPayCurrency] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [receiveAmount, setReceiveAmount] = useState("");
+  const [amountEditSide, setAmountEditSide] = useState<"pay" | "receive">("pay");
   const [recipientCouCode, setRecipientCouCode] = useState("");
   const [recipientCouName, setRecipientCouName] = useState("");
   const [receiveCurrency, setReceiveCurrency] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [flexForexRate, setFlexForexRate] = useState<number | null>(null);
+  const [reverseFlexForexRate, setReverseFlexForexRate] = useState<number | null>(
+    null,
+  );
+  const [flexForexLoading, setFlexForexLoading] = useState(false);
 
   const [transferId, setTransferId] = useState<string | null>(null);
   const [referenceCode, setReferenceCode] = useState<string | null>(null);
@@ -403,6 +411,11 @@ function SendMoneyPageContent() {
   const [referenceCopied, setReferenceCopied] = useState(false);
 
   bankProofsRef.current = bankPaymentProofs;
+
+  const beneficiaryRecipientLocked = useMemo(
+    () => Boolean(beneficiaryQueryId && selectedBen?.id === beneficiaryQueryId),
+    [beneficiaryQueryId, selectedBen],
+  );
 
   useEffect(() => {
     return () => {
@@ -846,22 +859,49 @@ function SendMoneyPageContent() {
     return () => document.removeEventListener("mousedown", close);
   }, [payCurrencyOpen, recipientOpen]);
 
+  useEffect(() => {
+    if (!beneficiaryRecipientLocked) return;
+    setRecipientOpen(false);
+  }, [beneficiaryRecipientLocked]);
+
   const refreshQuote = useCallback(async () => {
-    const amt = parseFloat(payAmount);
-    if (!payCurrency || !receiveCurrency || !amt || amt <= 0) {
+    if (!payCurrency || !receiveCurrency) {
       setQuote(null);
       return;
     }
+
+    const payAmt = parseFloat(payAmount);
+    const recvAmt = parseFloat(receiveAmount);
+    const usePaySide = amountEditSide === "pay";
+
+    if (usePaySide) {
+      if (!payAmt || payAmt <= 0) {
+        setQuote(null);
+        return;
+      }
+    } else if (!recvAmt || recvAmt <= 0) {
+      setQuote(null);
+      return;
+    }
+
     setQuoteLoading(true);
     try {
       const { data } = await api.get<{ data: Quote }>("/remittance/quote", {
-        params: {
-          fromCurrency: payCurrency,
-          toCurrency: receiveCurrency,
-          payAmount: amt,
-        },
+        params: usePaySide
+          ? {
+              fromCurrency: payCurrency,
+              toCurrency: receiveCurrency,
+              payAmount: payAmt,
+            }
+          : {
+              fromCurrency: payCurrency,
+              toCurrency: receiveCurrency,
+              receiveAmount: recvAmt,
+            },
       });
       setQuote(data.data);
+      setPayAmount(String(data.data.payAmount));
+      setReceiveAmount(String(data.data.receiveAmount));
     } catch {
       setQuote(null);
       notifyError(
@@ -870,7 +910,13 @@ function SendMoneyPageContent() {
     } finally {
       setQuoteLoading(false);
     }
-  }, [payAmount, payCurrency, receiveCurrency]);
+  }, [
+    amountEditSide,
+    payAmount,
+    receiveAmount,
+    payCurrency,
+    receiveCurrency,
+  ]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -878,6 +924,56 @@ function SendMoneyPageContent() {
     }, 400);
     return () => clearTimeout(t);
   }, [refreshQuote]);
+
+  /** Live Flex rate preview (forward + reverse) before quote is available. */
+  const refreshFlexForexRate = useCallback(async () => {
+    if (!payCurrency.trim() || !receiveCurrency.trim()) {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      return;
+    }
+    setFlexForexLoading(true);
+    try {
+      const [forward, reverse] = await Promise.all([
+        fetchFlexForexRate(payCurrency, receiveCurrency),
+        fetchFlexForexRate(receiveCurrency, payCurrency),
+      ]);
+      setFlexForexRate(forward.rate);
+      setReverseFlexForexRate(reverse.rate);
+    } catch {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      notifyError(
+        "Could not load exchange rate for this currency pair. Try again or pick another corridor.",
+      );
+    } finally {
+      setFlexForexLoading(false);
+    }
+  }, [payCurrency, receiveCurrency]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void refreshFlexForexRate();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [refreshFlexForexRate]);
+
+  const rateDisplayForward = amountEditSide === "pay";
+  const displayedFromCurrency = rateDisplayForward
+    ? quote?.fromCurrency ?? payCurrency
+    : quote?.toCurrency ?? receiveCurrency;
+  const displayedToCurrency = rateDisplayForward
+    ? quote?.toCurrency ?? receiveCurrency
+    : quote?.fromCurrency ?? payCurrency;
+  const displayedFxRate = rateDisplayForward
+    ? quote?.rate ?? flexForexRate
+    : reverseFlexForexRate;
+  const rateDisplayLoading =
+    (quoteLoading &&
+      (rateDisplayForward
+        ? !!parseFloat(payAmount)
+        : !!parseFloat(receiveAmount))) ||
+    (flexForexLoading && !quote);
 
   useEffect(() => {
     if (payInMethod !== "BANK_TRANSFER" || !payCurrency) return;
@@ -1181,6 +1277,8 @@ function SendMoneyPageContent() {
     setPostConfirmMessage("");
     setQuote(null);
     setPayAmount("");
+    setReceiveAmount("");
+    setAmountEditSide("pay");
     setRecipientCouCode("");
     setRecipientCouName("");
     if (ctx) setPayCurrency(ctx.defaultPayCurrency || "USD");
@@ -1339,7 +1437,9 @@ function SendMoneyPageContent() {
             </label>
             <CatalogCountrySelect
               value={recipientCouName}
+              disabled={beneficiaryRecipientLocked}
               onChange={(couName) => {
+                if (beneficiaryRecipientLocked) return;
                 setRecipientCouName(couName);
                 const match = matchFlexCountryByLabel(
                   dedupedCatalogCountries,
@@ -1382,6 +1482,7 @@ function SendMoneyPageContent() {
                   value={payAmount}
                   onChange={(e) => {
                     const v = e.target.value.replace(/[^0-9.]/g, "");
+                    setAmountEditSide("pay");
                     setPayAmount(v);
                   }}
                   placeholder="0"
@@ -1456,35 +1557,37 @@ function SendMoneyPageContent() {
           </div>
 
           <div className="flex justify-end min-h-[2rem] items-center">
-            {quoteLoading ? (
+            {rateDisplayLoading ? (
               <Loader variant="inline" />
-            ) : quote ? (
+            ) : displayedFxRate != null &&
+              displayedFromCurrency.trim() &&
+              displayedToCurrency.trim() ? (
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-50/90 pl-1.5 pr-2.5 py-1 border border-slate-100 shadow-sm">
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                   <Flag
-                    code={payCurrencyFlagCode(quote.fromCurrency)}
+                    code={payCurrencyFlagCode(displayedFromCurrency)}
                     className="h-full w-full object-cover"
                   />
                 </span>
                 <p className="text-sm text-slate-700 tabular-nums">
                   <span className="font-semibold text-slate-800">
-                    1 {quote.fromCurrency}
+                    1 {displayedFromCurrency}
                   </span>
                   <span className="text-slate-400 mx-1">=</span>
                   <span className="font-semibold text-slate-800">
-                    {fmtMoney(quote.rate)} {quote.toCurrency}
+                    {fmtMoney(displayedFxRate)} {displayedToCurrency}
                   </span>
                 </p>
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                   <Flag
-                    code={payCurrencyFlagCode(quote.toCurrency)}
+                    code={payCurrencyFlagCode(displayedToCurrency)}
                     className="h-full w-full object-cover"
                   />
                 </span>
               </div>
             ) : (
               <p className="text-sm text-slate-400 text-right">
-                Enter amount and recipient to see rate
+                Select send and receive currencies to see rate
               </p>
             )}
           </div>
@@ -1494,11 +1597,24 @@ function SendMoneyPageContent() {
               What they get
             </h2>
             <div className="mt-2 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
-              <div className="flex-1 min-w-0 border-b-2 border-slate-200 pb-2">
-                <span className="sr-only">Recipient receives</span>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums tracking-tight min-h-[2.5rem]">
-                  {quote ? fmtMoney(Number(quote.receiveAmount)) : "—"}
-                </p>
+              <div className="flex-1 min-w-0">
+                <label className="sr-only" htmlFor="receive-amount">
+                  Amount recipient receives
+                </label>
+                <input
+                  id="receive-amount"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={receiveAmount}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    setAmountEditSide("receive");
+                    setReceiveAmount(v);
+                  }}
+                  placeholder="0"
+                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-teal-600 transition-colors"
+                />
               </div>
               <div
                 className="relative shrink-0"
@@ -1506,12 +1622,18 @@ function SendMoneyPageContent() {
               >
                 <button
                   type="button"
+                  disabled={beneficiaryRecipientLocked}
                   onClick={() => {
+                    if (beneficiaryRecipientLocked) return;
                     setRecipientOpen((o) => !o);
                     setRecipientSearch("");
                     setPayCurrencyOpen(false);
                   }}
-                  className="cursor-pointer flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
+                  className={`cursor-pointer flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 text-left transition-colors ${
+                    beneficiaryRecipientLocked
+                      ? "opacity-70 cursor-not-allowed"
+                      : "hover:bg-slate-50"
+                  }`}
                 >
                   <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                     <Flag
@@ -1524,9 +1646,11 @@ function SendMoneyPageContent() {
                   <span className="text-base font-bold text-slate-900">
                     {recipientDisplayCurrency || "—"}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                  {!beneficiaryRecipientLocked ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                  ) : null}
                 </button>
-                {recipientOpen && (
+                {recipientOpen && !beneficiaryRecipientLocked && (
                   <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,18rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
                     <div className="p-2 border-b border-slate-100">
                       <input
@@ -1654,7 +1778,12 @@ function SendMoneyPageContent() {
           <button
             type="button"
             disabled={
-              submitting || !quote || !receiveCurrency || !parseFloat(payAmount)
+              submitting ||
+              !quote ||
+              !receiveCurrency ||
+              (amountEditSide === "pay"
+                ? !parseFloat(payAmount)
+                : !parseFloat(receiveAmount))
             }
             onClick={() => void handleStep1Next()}
             className="cursor-pointer w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"

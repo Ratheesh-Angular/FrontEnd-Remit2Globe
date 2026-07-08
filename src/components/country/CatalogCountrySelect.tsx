@@ -94,6 +94,10 @@ export function CatalogCountrySelect({
   );
 
   useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -131,7 +135,7 @@ export function CatalogCountrySelect({
         )}
         <FieldSelectChevron className="ml-auto" />
       </button>
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
           <div className="p-2 border-b border-slate-100">
             <input

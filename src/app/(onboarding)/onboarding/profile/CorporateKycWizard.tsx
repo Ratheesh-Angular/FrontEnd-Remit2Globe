@@ -1714,7 +1714,7 @@ export function CorporateKycWizard() {
                             />
                           </Field>
                           <div className="mt-3">
-                            <Field label="Passport or National ID" required>
+                            <Field label="Passport or National ID " required>
                               <CorporateOwnershipDocUpload
                                 documentFileUrl={row.documentFileUrl}
                                 documentFileName={row.documentFileName}
@@ -1763,13 +1763,13 @@ export function CorporateKycWizard() {
                               />
                             </Field>
                             <div className="mt-3">
-                              <Field label="Passport or National ID" required>
+                              <Field label="Corporate Document" required>
                                 <CorporateOwnershipDocUpload
                                   documentFileUrl={row.documentFileUrl}
                                   documentFileName={row.documentFileName}
                                   uploading={uploading}
                                   errorMsg={errMsg}
-                                  description={`Upload a clear copy of passport or national ID`}
+                                  description={`Upload a clear copy of corporate document`}
                                   fileInputRef={(el) => {
                                     shareholderFileInputRefs.current[i] = el;
                                   }}
@@ -1845,7 +1845,6 @@ export function CorporateKycWizard() {
             onKycSubmitted={handleKycSubmitted}
           />
         )}
-
 
         {activeSection !== "documents" && activeSection !== "submitted" && (
           <div className="flex justify-between items-center pt-2">
