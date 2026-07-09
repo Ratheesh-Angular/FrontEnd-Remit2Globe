@@ -8,8 +8,7 @@ import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
 import type { AuthUser } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
-import Image from "next/image";
-import R2GLogo from "../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 import { useRef } from "react";
@@ -287,13 +286,7 @@ export default function DashboardLayoutClient({
         {/* Logo */}
         <div className="border-b border-slate-200">
           <div className="flex justify-center mb-4 mt-4 ">
-            {/* <Image
-              src={R2GLogo}
-              alt="Amigo"
-              priority
-              className="object-contain w-[125px]"
-            /> */}
-            <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+            <FlexLogo className="h-8 max-w-[7.5rem]" priority />
           </div>
         </div>
 
@@ -330,7 +323,7 @@ export default function DashboardLayoutClient({
                   flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   ${
                     isActive
-                      ? "bg-teal-50 text-teal-700"
+                      ? "bg-red-50 text-red-700"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                   }
                 `}
@@ -375,12 +368,12 @@ export default function DashboardLayoutClient({
             <div className="relative flex items-center">
               <button
                 type="button"
-                className="p-2 rounded-full hover:bg-teal-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-200 relative"
+                className="p-2 rounded-full hover:bg-red-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-200 relative"
                 aria-label="Open notifications"
                 id="notif-icon-btn"
                 onClick={() => setNotifOpen((open) => !open)}
               >
-                <Bell className="w-6 h-6 text-teal-600" />
+                <Bell className="w-6 h-6 text-red-600" />
                 {unreadCount > 0 && (
                   <span
                     className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full min-w-5 h-5 px-1 flex items-center justify-center text-xs font-semibold border border-white shadow"
@@ -410,7 +403,7 @@ export default function DashboardLayoutClient({
                     <button
                       type="button"
                       onClick={handleMarkAllRead}
-                      className="flex items-center gap-1 text-xs text-teal-600 hover:text-teal-800 font-medium"
+                      className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-medium"
                       title="Mark all as read"
                     >
                       <CheckCheck className="w-3.5 h-3.5" />
@@ -434,10 +427,10 @@ export default function DashboardLayoutClient({
                             if (!n.isRead) void handleMarkNotifRead(n.id);
                             setNotifOpen(false);
                           }}
-                          className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${!n.isRead ? "bg-teal-50/40" : ""}`}
+                          className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${!n.isRead ? "bg-red-50/40" : ""}`}
                         >
                           {!n.isRead && (
-                            <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-teal-500" />
+                            <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-red-500" />
                           )}
                           <div
                             className={`flex-1 min-w-0 ${n.isRead ? "ml-5" : ""}`}
@@ -465,7 +458,7 @@ export default function DashboardLayoutClient({
                   <Link
                     href="/notifications"
                     onClick={() => setNotifOpen(false)}
-                    className="block text-center text-sm font-medium text-teal-600 hover:text-teal-800"
+                    className="block text-center text-sm font-medium text-red-600 hover:text-red-800"
                   >
                     View all notifications
                   </Link>
@@ -477,7 +470,7 @@ export default function DashboardLayoutClient({
               onClick={() => router.push("/profile")}
               className="cursor-pointer flex items-center gap-2.5 sm:gap-3 min-w-0 px-1"
             >
-              <div className=" w-8 h-8 shrink-0 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-sm font-medium">
+              <div className=" w-8 h-8 shrink-0 rounded-full bg-red-100 flex items-center justify-center text-red-700 text-sm font-medium">
                 {effectiveUser?.email?.[0]?.toUpperCase() ||
                   effectiveUser?.phone?.[0] ||
                   "U"}
@@ -513,7 +506,7 @@ export default function DashboardLayoutClient({
             {sessionBanner}{" "}
             <button
               type="button"
-              className="underline font-medium text-teal-800 hover:text-teal-900"
+              className="underline font-medium text-red-800 hover:text-red-900"
               onClick={() => window.location.reload()}
             >
               Refresh

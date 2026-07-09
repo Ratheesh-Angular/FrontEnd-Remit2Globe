@@ -9,8 +9,7 @@ import {
   meetsStrongPassword,
   type PasswordStrength,
 } from "@/lib/passwordStrength";
-import Image from "next/image";
-import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError, notifySuccess } from "@/lib/notify";
@@ -118,13 +117,7 @@ export default function ResetPasswordPage() {
       <AppLoadingOverlay show={isLoading} label="Updating password…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
-          {/* <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
 
         <div className="mb-8 text-center">
@@ -147,7 +140,7 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-red-500/20 focus:border-red-600 placeholder:text-slate-400"
                 placeholder="Enter a strong password"
               />
               <button
@@ -197,7 +190,7 @@ export default function ResetPasswordPage() {
                     height="18"
                     fill="none"
                     viewBox="0 0 20 20"
-                    className="text-teal-500"
+                    className="text-red-500"
                   >
                     <circle
                       cx="10"
@@ -272,7 +265,7 @@ export default function ResetPasswordPage() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 autoComplete="new-password"
-                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 placeholder:text-slate-400"
+                className="border border-slate-200 rounded-lg px-3 pr-10 h-10 w-full text-sm outline-none transition-all focus:ring-2 focus:ring-red-500/20 focus:border-red-600 placeholder:text-slate-400"
                 placeholder="Confirm your password"
               />
               <button
@@ -293,7 +286,7 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-11 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
@@ -327,7 +320,7 @@ export default function ResetPasswordPage() {
         <p className="text-center text-sm text-slate-500 mt-6">
           <a
             href="/login"
-            className="text-teal-600 hover:text-teal-700 font-medium"
+            className="text-red-600 hover:text-red-700 font-medium"
           >
             Back to sign in
           </a>

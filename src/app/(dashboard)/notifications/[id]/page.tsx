@@ -40,14 +40,14 @@ const CTA_BY_TYPE: Record<
 };
 
 const ICON_BY_TYPE: Record<NotificationType, React.ReactNode> = {
-  REGISTRATION_SUCCESS: <BadgeCheck className="w-6 h-6 text-teal-600" />,
+  REGISTRATION_SUCCESS: <BadgeCheck className="w-6 h-6 text-red-600" />,
   KYC_SUBMITTED: <FileText className="w-6 h-6 text-blue-500" />,
   KYC_APPROVED: <ShieldCheck className="w-6 h-6 text-green-500" />,
   KYC_REJECTED: <ShieldX className="w-6 h-6 text-red-500" />,
-  TRANSACTION_CREATED: <Send className="w-6 h-6 text-teal-600" />,
+  TRANSACTION_CREATED: <Send className="w-6 h-6 text-red-600" />,
   PAYMENT_INSTRUCTIONS: <CreditCard className="w-6 h-6 text-amber-500" />,
   PAYMENT_RECEIVED: <CheckCircle2 className="w-6 h-6 text-green-500" />,
-  TRANSACTION_COMPLETED: <CheckCircle2 className="w-6 h-6 text-teal-600" />,
+  TRANSACTION_COMPLETED: <CheckCircle2 className="w-6 h-6 text-red-600" />,
 };
 
 function formatMetadata(metadata: Record<string, unknown>): {
@@ -138,7 +138,7 @@ export default function NotificationDetailPage() {
         </p>
         <Link
           href="/notifications"
-          className="flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800"
+          className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to notifications
@@ -179,7 +179,7 @@ export default function NotificationDetailPage() {
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
         {/* Icon banner */}
         <div className="flex items-center gap-4 px-6 pt-6 pb-4 border-b border-slate-50">
-          <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
             {icon}
           </div>
           <div className="min-w-0">
@@ -223,7 +223,7 @@ export default function NotificationDetailPage() {
                     ? `/transactions`
                     : cta.href
                 }
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors"
               >
                 {cta.label}
               </Link>

@@ -88,7 +88,7 @@ export default function NotificationsPage() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Bell className="w-6 h-6 text-teal-600" />
+          <Bell className="w-6 h-6 text-red-600" />
           <h1 className="text-2xl font-semibold text-slate-900">
             Notifications
           </h1>
@@ -102,7 +102,7 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={handleMarkAllRead}
-            className="flex items-center gap-1.5 text-sm font-medium text-teal-600 hover:text-teal-800 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
           >
             <CheckCheck className="w-4 h-4" />
             Mark all as read
@@ -138,12 +138,12 @@ export default function NotificationsPage() {
                 {group.items.map((n) => (
                   <div
                     key={n.id}
-                    className={`flex items-start gap-3 px-4 py-4 ${!n.isRead ? "bg-teal-50/40" : ""}`}
+                    className={`flex items-start gap-3 px-4 py-4 ${!n.isRead ? "bg-red-50/40" : ""}`}
                   >
                     {/* Unread dot */}
                     <div className="pt-1 shrink-0 w-2.5">
                       {!n.isRead && (
-                        <span className="block w-2 h-2 rounded-full bg-teal-500" />
+                        <span className="block w-2 h-2 rounded-full bg-red-500" />
                       )}
                     </div>
 
@@ -156,7 +156,7 @@ export default function NotificationsPage() {
                       className="flex-1 min-w-0 group"
                     >
                       <p
-                        className={`text-sm group-hover:text-teal-700 transition-colors ${!n.isRead ? "font-semibold text-slate-900" : "text-slate-700"}`}
+                        className={`text-sm group-hover:text-red-700 transition-colors ${!n.isRead ? "font-semibold text-slate-900" : "text-slate-700"}`}
                       >
                         {n.title}
                       </p>
@@ -174,7 +174,7 @@ export default function NotificationsPage() {
                         type="button"
                         onClick={() => void handleMarkRead(n.id)}
                         title="Mark as read"
-                        className="shrink-0 p-1 text-slate-300 hover:text-teal-600 transition-colors"
+                        className="shrink-0 p-1 text-slate-300 hover:text-red-600 transition-colors"
                       >
                         <CheckCheck className="w-4 h-4" />
                       </button>

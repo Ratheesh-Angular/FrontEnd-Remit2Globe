@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-import Image from "next/image";
-import R2GLogo from "../../../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { notifyApiError, notifyInfo } from "@/lib/notify";
 
@@ -117,7 +116,7 @@ export default function ForgotPasswordVerifyContent() {
           </p>
           <a
             href="/forgot-password"
-            className="text-teal-600 hover:text-teal-700 font-medium text-sm"
+            className="text-red-600 hover:text-red-700 font-medium text-sm"
           >
             Forgot password
           </a>
@@ -131,13 +130,7 @@ export default function ForgotPasswordVerifyContent() {
       <AppLoadingOverlay show={isLoading} label="Verifying…" />
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex justify-center mb-6">
-          {/* <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
 
         <div className="mb-8 text-center">
@@ -164,7 +157,7 @@ export default function ForgotPasswordVerifyContent() {
               onChange={(e) => handleChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
               disabled={isLoading}
-              className="w-12 h-12 text-center text-lg font-semibold border border-slate-300 rounded-lg outline-none transition-all focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20 disabled:opacity-60"
+              className="w-12 h-12 text-center text-lg font-semibold border border-slate-300 rounded-lg outline-none transition-all focus:border-red-600 focus:ring-2 focus:ring-red-500/20 disabled:opacity-60"
             />
           ))}
         </div>
@@ -175,7 +168,7 @@ export default function ForgotPasswordVerifyContent() {
             type="button"
             onClick={handleResend}
             disabled={!canResend || isLoading}
-            className="text-teal-600 hover:text-teal-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
+            className="text-red-600 hover:text-red-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
           >
             {canResend ? "Resend" : `Resend in ${resendTimer}s`}
           </button>
@@ -184,7 +177,7 @@ export default function ForgotPasswordVerifyContent() {
         <p className="text-center text-sm text-slate-500">
           <a
             href="/login"
-            className="text-teal-600 hover:text-teal-700 font-medium"
+            className="text-red-600 hover:text-red-700 font-medium"
           >
             Back to sign in
           </a>

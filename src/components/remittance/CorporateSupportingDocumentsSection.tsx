@@ -163,13 +163,13 @@ export function CorporateSupportingDocumentsSection({
         <div
           className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
             hasOneOrMore
-              ? "bg-teal-50 text-teal-800"
+              ? "bg-red-50 text-red-800"
               : "bg-amber-50 text-amber-800"
           }`}
         >
           <div
             className={`w-1.5 h-1.5 rounded-full ${
-              hasOneOrMore ? "bg-teal-500" : "bg-amber-500"
+              hasOneOrMore ? "bg-red-500" : "bg-amber-500"
             }`}
           />
           {hasOneOrMore
@@ -188,7 +188,7 @@ export function CorporateSupportingDocumentsSection({
             <div
               key={doc.type}
               className={`bg-slate-50/80 border rounded-xl p-5 transition-colors ${
-                server ? "border-teal-200" : "border-slate-200"
+                server ? "border-red-200" : "border-slate-200"
               }`}
             >
               <div className="flex items-start justify-between gap-4">
@@ -205,7 +205,7 @@ export function CorporateSupportingDocumentsSection({
                     <div
                       className={`mt-2 flex items-center gap-2 text-xs ${
                         server
-                          ? "text-teal-700"
+                          ? "text-red-700"
                           : uploading
                             ? "text-slate-500"
                             : "text-red-500"
@@ -216,7 +216,7 @@ export function CorporateSupportingDocumentsSection({
                       )}
                       {!uploading && server && (
                         <svg
-                          className="w-3.5 h-3.5 text-teal-600"
+                          className="w-3.5 h-3.5 text-red-600"
                           viewBox="0 0 20 20"
                           fill="currentColor"
                           aria-hidden
@@ -288,7 +288,7 @@ export function CorporateSupportingDocumentsSection({
                     disabled={Boolean(disabled) || !transferId || uploading}
                     className={`cursor-pointer h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       server
-                        ? "border-teal-200 text-teal-700 hover:bg-teal-50"
+                        ? "border-red-200 text-red-700 hover:bg-red-50"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >

@@ -94,7 +94,7 @@ function DashboardTransactionHistory() {
         </h2>
         <Link
           href="/transactions"
-          className="cursor-pointer shrink-0 inline-flex items-center gap-0.5 text-sm font-medium text-teal-700 hover:text-teal-800 transition-colors"
+          className="cursor-pointer shrink-0 inline-flex items-center gap-0.5 text-sm font-medium text-red-700 hover:text-red-800 transition-colors"
         >
           View all
           <ChevronRight className="w-4 h-4" aria-hidden />
@@ -115,7 +115,7 @@ function DashboardTransactionHistory() {
             No transfers yet.{" "}
             <Link
               href="/send-money"
-              className="font-medium text-teal-700 hover:text-teal-800 underline-offset-2 hover:underline"
+              className="font-medium text-red-700 hover:text-red-800 underline-offset-2 hover:underline"
             >
               Send money
             </Link>{" "}
@@ -263,7 +263,7 @@ export default function DashboardClient({ user }: { user: User }) {
           <button
             type="button"
             onClick={() => router.push("/onboarding/profile")}
-            className="cursor-pointer mt-3 text-sm font-medium text-teal-700 hover:text-teal-800"
+            className="cursor-pointer mt-3 text-sm font-medium text-red-700 hover:text-red-800"
           >
             Go to onboarding
           </button>
@@ -296,14 +296,14 @@ function ActionCard({
         ${
           locked
             ? "opacity-50 cursor-not-allowed"
-            : "hover:border-teal-300 hover:shadow-sm cursor-pointer"
+            : "hover:border-red-300 hover:shadow-sm cursor-pointer"
         }
       `}
     >
       <div className="flex items-start align-center">
         <div>
           {icon && (
-            <div className="w-8 h-8 mr-1 text-teal-500 pt-1">{icon}</div>
+            <div className="w-8 h-8 mr-1 text-red-500 pt-1">{icon}</div>
           )}
         </div>
         <div>

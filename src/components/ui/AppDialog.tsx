@@ -156,7 +156,7 @@ export function AppDialog({
               "h-10 px-5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2 min-w-[7rem]",
               destructive
                 ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-teal-600 hover:bg-teal-700 text-white",
+                : "bg-red-600 hover:bg-red-700 text-white",
             )}
           >
             {loading ? (

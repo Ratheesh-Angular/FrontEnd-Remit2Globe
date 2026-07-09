@@ -13,8 +13,7 @@ import {
   isStaleAuthHttpStatus,
   safeGetSession,
 } from "@/lib/load-session-client";
-import Image from "next/image";
-import R2GLogo from "../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { ArrowLeftIcon } from "lucide-react";
 export default function OnboardingLayoutClient({
   children,
@@ -121,8 +120,7 @@ export default function OnboardingLayoutClient({
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {/* <Image src={R2GLogo} alt="Amigo" width={100} height={100} />   */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo className="h-8 max-w-[7.5rem]" priority />
         </div>
 
         <Link
@@ -145,7 +143,7 @@ export default function OnboardingLayoutClient({
           {sessionBanner}{" "}
           <button
             type="button"
-            className="underline font-medium text-teal-800 hover:text-teal-900"
+            className="underline font-medium text-red-800 hover:text-red-900"
             onClick={() => window.location.reload()}
           >
             Refresh

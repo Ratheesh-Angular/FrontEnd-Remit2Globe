@@ -94,6 +94,10 @@ export function CatalogCountrySelect({
   );
 
   useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -131,7 +135,7 @@ export function CatalogCountrySelect({
         )}
         <FieldSelectChevron className="ml-auto" />
       </button>
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
           <div className="p-2 border-b border-slate-100">
             <input
@@ -160,7 +164,7 @@ export function CatalogCountrySelect({
                     }}
                     className={`${fieldDropdownOption} gap-2.5 ${
                       selected?.couCode === c.couCode
-                        ? "bg-teal-50 text-teal-700 font-medium"
+                        ? "bg-red-50 text-red-700 font-medium"
                         : "text-slate-700"
                     }`}
                   >
@@ -168,7 +172,7 @@ export function CatalogCountrySelect({
                     <span>{c.couName}</span>
                     {selected?.couCode === c.couCode && (
                       <svg
-                        className="ml-auto w-4 h-4 text-teal-600"
+                        className="ml-auto w-4 h-4 text-red-600"
                         viewBox="0 0 20 20"
                         fill="currentColor"
                       >

@@ -23,9 +23,11 @@ import enCountries from "i18n-iso-countries/langs/en.json";
 
 countriesIso.registerLocale(enCountries);
 import {
-  CURRENCY_TO_FLAG_ALPHA2,
   legalCurrencyForCouCode,
-  PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY,
+  buildRecipientCurrencyOptions,
+  dedupeCatalogCountries,
+  fmtMoney,
+  payCurrencyFlagCode,
 } from "@/lib/send-money-currencies";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
@@ -50,15 +52,9 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
+import { fetchFlexForexRate } from "@/lib/flex-forex-rate";
 
 interface FlexCountry {
-  couCode: string;
-  couName: string;
-}
-
-/** One row per receive currency; maps back to a Flex corridor country for quotes & beneficiaries. */
-interface RecipientReceiveOption {
-  currency: string;
   couCode: string;
   couName: string;
 }
@@ -216,17 +212,6 @@ function payoutDetailsForReceipt(b: Beneficiary): string {
   );
 }
 
-function payCurrencyFlagCode(currency: string): string {
-  return CURRENCY_TO_FLAG_ALPHA2[currency.toUpperCase()] ?? "US";
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 const STEPS = [
   "Amount & corridor",
   "Beneficiary",
@@ -235,7 +220,7 @@ const STEPS = [
   "Confirmation",
 ];
 
-const SELECT_FIELD = `w-full border border-slate-200 rounded-lg px-3 ${FIELD_HEIGHT} text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${fieldNativeSelectClasses}`;
+const SELECT_FIELD = `w-full border border-slate-200 rounded-lg px-3 ${FIELD_HEIGHT} text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${fieldNativeSelectClasses}`;
 
 /** Images + common documents for bank payment proof (browser/OS may still filter by picker). */
 const PAYMENT_PROOF_ACCEPT =
@@ -324,7 +309,7 @@ const DUMMY_PAYOUT_ACCOUNTS: CompanyAccount[] = [
   {
     id: "dev-1",
     bankName: "Atlas Clearing Bank",
-    accountName: "Amigo Client Trust — KES",
+    accountName: "Flex Money Client Trust — KES",
     accountNumber: "8844-2910-7731-02",
     swiftBic: "ATLSUS6N",
     iban: null,
@@ -360,11 +345,20 @@ function SendMoneyPageContent() {
 
   const [payCurrency, setPayCurrency] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [receiveAmount, setReceiveAmount] = useState("");
+  const [amountEditSide, setAmountEditSide] = useState<"pay" | "receive">(
+    "pay",
+  );
   const [recipientCouCode, setRecipientCouCode] = useState("");
   const [recipientCouName, setRecipientCouName] = useState("");
   const [receiveCurrency, setReceiveCurrency] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [flexForexRate, setFlexForexRate] = useState<number | null>(null);
+  const [reverseFlexForexRate, setReverseFlexForexRate] = useState<
+    number | null
+  >(null);
+  const [flexForexLoading, setFlexForexLoading] = useState(false);
 
   const [transferId, setTransferId] = useState<string | null>(null);
   const [referenceCode, setReferenceCode] = useState<string | null>(null);
@@ -403,6 +397,11 @@ function SendMoneyPageContent() {
   const [referenceCopied, setReferenceCopied] = useState(false);
 
   bankProofsRef.current = bankPaymentProofs;
+
+  const beneficiaryRecipientLocked = useMemo(
+    () => Boolean(beneficiaryQueryId && selectedBen?.id === beneficiaryQueryId),
+    [beneficiaryQueryId, selectedBen],
+  );
 
   useEffect(() => {
     return () => {
@@ -464,13 +463,10 @@ function SendMoneyPageContent() {
     };
   }, [recipientCouName, recipientCouCode]);
 
-  const dedupedCatalogCountries = useMemo(() => {
-    const byCode = new Map<string, FlexCountry>();
-    for (const c of catalogCountries) {
-      if (!byCode.has(c.couCode)) byCode.set(c.couCode, c);
-    }
-    return [...byCode.values()];
-  }, [catalogCountries]);
+  const dedupedCatalogCountries = useMemo(
+    () => dedupeCatalogCountries(catalogCountries),
+    [catalogCountries],
+  );
 
   const corporateSupportingDocsForUi = useMemo(() => {
     const raw = transferRow?.supportingDocuments ?? [];
@@ -503,30 +499,10 @@ function SendMoneyPageContent() {
   );
 
   /** Unique receive currencies from the full catalog (one representative country each). */
-  const recipientCurrencyOptions = useMemo(() => {
-    const byCurrency = new Map<string, RecipientReceiveOption>();
-    for (const c of dedupedCatalogCountries) {
-      const currency = legalCurrencyForCouCode(c.couCode);
-      const opt: RecipientReceiveOption = {
-        currency,
-        couCode: c.couCode,
-        couName: c.couName,
-      };
-      const existing = byCurrency.get(currency);
-      const preferred =
-        PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY[currency.toUpperCase()];
-      if (!existing) {
-        byCurrency.set(currency, opt);
-        continue;
-      }
-      if (preferred && c.couCode.toUpperCase() === preferred) {
-        byCurrency.set(currency, opt);
-      }
-    }
-    return [...byCurrency.values()].sort((a, b) =>
-      a.currency.localeCompare(b.currency),
-    );
-  }, [dedupedCatalogCountries]);
+  const recipientCurrencyOptions = useMemo(
+    () => buildRecipientCurrencyOptions(dedupedCatalogCountries),
+    [dedupedCatalogCountries],
+  );
 
   const filteredRecipientCurrencyOptions = useMemo(() => {
     const q = recipientSearch.toLowerCase().trim();
@@ -846,31 +822,72 @@ function SendMoneyPageContent() {
     return () => document.removeEventListener("mousedown", close);
   }, [payCurrencyOpen, recipientOpen]);
 
+  useEffect(() => {
+    if (!beneficiaryRecipientLocked) return;
+    setRecipientOpen(false);
+  }, [beneficiaryRecipientLocked]);
+
   const refreshQuote = useCallback(async () => {
-    const amt = parseFloat(payAmount);
-    if (!payCurrency || !receiveCurrency || !amt || amt <= 0) {
+    if (!payCurrency || !receiveCurrency) {
       setQuote(null);
       return;
     }
+
+    const payAmt = parseFloat(payAmount);
+    const recvAmt = parseFloat(receiveAmount);
+    const usePaySide = amountEditSide === "pay";
+
+    if (usePaySide) {
+      if (!payAmt || payAmt <= 0) {
+        setQuote(null);
+        return;
+      }
+    } else if (!recvAmt || recvAmt <= 0) {
+      setQuote(null);
+      return;
+    }
+
     setQuoteLoading(true);
     try {
       const { data } = await api.get<{ data: Quote }>("/remittance/quote", {
-        params: {
-          fromCurrency: payCurrency,
-          toCurrency: receiveCurrency,
-          payAmount: amt,
-        },
+        params: usePaySide
+          ? {
+              fromCurrency: payCurrency,
+              toCurrency: receiveCurrency,
+              payAmount: payAmt,
+            }
+          : {
+              fromCurrency: payCurrency,
+              toCurrency: receiveCurrency,
+              receiveAmount: recvAmt,
+            },
       });
       setQuote(data.data);
-    } catch {
+      setPayAmount(String(data.data.payAmount));
+      setReceiveAmount(String(data.data.receiveAmount));
+    } catch (err: unknown) {
       setQuote(null);
+      const apiMessage =
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        err.response &&
+        typeof err.response === "object" &&
+        "data" in err.response &&
+        err.response.data &&
+        typeof err.response.data === "object" &&
+        "message" in err.response.data &&
+        typeof err.response.data.message === "string"
+          ? err.response.data.message
+          : null;
       notifyError(
-        "No rate for this corridor yet. Try another currency pair or contact support.",
+        apiMessage ??
+          "No rate for this corridor yet. Try another currency pair or contact support.",
       );
     } finally {
       setQuoteLoading(false);
     }
-  }, [payAmount, payCurrency, receiveCurrency]);
+  }, [amountEditSide, payAmount, receiveAmount, payCurrency, receiveCurrency]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -878,6 +895,56 @@ function SendMoneyPageContent() {
     }, 400);
     return () => clearTimeout(t);
   }, [refreshQuote]);
+
+  /** Live Flex rate preview (forward + reverse) before quote is available. */
+  const refreshFlexForexRate = useCallback(async () => {
+    if (!payCurrency.trim() || !receiveCurrency.trim()) {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      return;
+    }
+    setFlexForexLoading(true);
+    try {
+      const [forward, reverse] = await Promise.all([
+        fetchFlexForexRate(payCurrency, receiveCurrency),
+        fetchFlexForexRate(receiveCurrency, payCurrency),
+      ]);
+      setFlexForexRate(forward.rate);
+      setReverseFlexForexRate(reverse.rate);
+    } catch {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      notifyError(
+        "Could not load exchange rate for this currency pair. Try again or pick another corridor.",
+      );
+    } finally {
+      setFlexForexLoading(false);
+    }
+  }, [payCurrency, receiveCurrency]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void refreshFlexForexRate();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [refreshFlexForexRate]);
+
+  const rateDisplayForward = amountEditSide === "pay";
+  const displayedFromCurrency = rateDisplayForward
+    ? (quote?.fromCurrency ?? payCurrency)
+    : (quote?.toCurrency ?? receiveCurrency);
+  const displayedToCurrency = rateDisplayForward
+    ? (quote?.toCurrency ?? receiveCurrency)
+    : (quote?.fromCurrency ?? payCurrency);
+  const displayedFxRate = rateDisplayForward
+    ? (quote?.rate ?? flexForexRate)
+    : reverseFlexForexRate;
+  const rateDisplayLoading =
+    (quoteLoading &&
+      (rateDisplayForward
+        ? !!parseFloat(payAmount)
+        : !!parseFloat(receiveAmount))) ||
+    (flexForexLoading && !quote);
 
   useEffect(() => {
     if (payInMethod !== "BANK_TRANSFER" || !payCurrency) return;
@@ -1181,6 +1248,8 @@ function SendMoneyPageContent() {
     setPostConfirmMessage("");
     setQuote(null);
     setPayAmount("");
+    setReceiveAmount("");
+    setAmountEditSide("pay");
     setRecipientCouCode("");
     setRecipientCouName("");
     if (ctx) setPayCurrency(ctx.defaultPayCurrency || "USD");
@@ -1299,9 +1368,9 @@ function SendMoneyPageContent() {
                 <div
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
                     active
-                      ? "bg-teal-600 text-white border-teal-600"
+                      ? "bg-red-600 text-white border-red-600"
                       : done
-                        ? "bg-teal-50 text-teal-800 border-teal-200"
+                        ? "bg-red-50 text-red-800 border-red-200"
                         : "bg-white text-slate-500 border-slate-200"
                   }`}
                 >
@@ -1339,7 +1408,9 @@ function SendMoneyPageContent() {
             </label>
             <CatalogCountrySelect
               value={recipientCouName}
+              disabled={beneficiaryRecipientLocked}
               onChange={(couName) => {
+                if (beneficiaryRecipientLocked) return;
                 setRecipientCouName(couName);
                 const match = matchFlexCountryByLabel(
                   dedupedCatalogCountries,
@@ -1382,10 +1453,11 @@ function SendMoneyPageContent() {
                   value={payAmount}
                   onChange={(e) => {
                     const v = e.target.value.replace(/[^0-9.]/g, "");
+                    setAmountEditSide("pay");
                     setPayAmount(v);
                   }}
                   placeholder="0"
-                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-teal-600 transition-colors"
+                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-red-600 transition-colors"
                 />
               </div>
               <div className="relative shrink-0" data-pay-currency-dropdown>
@@ -1417,7 +1489,7 @@ function SendMoneyPageContent() {
                         placeholder="Search currency…"
                         value={payCurrencySearch}
                         onChange={(e) => setPayCurrencySearch(e.target.value)}
-                        className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                        className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                       />
                     </div>
                     <ul className="max-h-52 overflow-y-auto py-1">
@@ -1429,9 +1501,9 @@ function SendMoneyPageContent() {
                               setPayCurrency(cur);
                               setPayCurrencyOpen(false);
                             }}
-                            className={`cursor-pointer flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                            className={`cursor-pointer flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-red-50 ${
                               payCurrency === cur
-                                ? "bg-teal-50 text-teal-800 font-medium cursor-pointer"
+                                ? "bg-red-50 text-red-800 font-medium cursor-pointer"
                                 : "text-slate-700 cursor-pointer"
                             }`}
                           >
@@ -1456,35 +1528,37 @@ function SendMoneyPageContent() {
           </div>
 
           <div className="flex justify-end min-h-[2rem] items-center">
-            {quoteLoading ? (
+            {rateDisplayLoading ? (
               <Loader variant="inline" />
-            ) : quote ? (
+            ) : displayedFxRate != null &&
+              displayedFromCurrency.trim() &&
+              displayedToCurrency.trim() ? (
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-50/90 pl-1.5 pr-2.5 py-1 border border-slate-100 shadow-sm">
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                   <Flag
-                    code={payCurrencyFlagCode(quote.fromCurrency)}
+                    code={payCurrencyFlagCode(displayedFromCurrency)}
                     className="h-full w-full object-cover"
                   />
                 </span>
                 <p className="text-sm text-slate-700 tabular-nums">
                   <span className="font-semibold text-slate-800">
-                    1 {quote.fromCurrency}
+                    1 {displayedFromCurrency}
                   </span>
                   <span className="text-slate-400 mx-1">=</span>
                   <span className="font-semibold text-slate-800">
-                    {fmtMoney(quote.rate)} {quote.toCurrency}
+                    {fmtMoney(displayedFxRate)} {displayedToCurrency}
                   </span>
                 </p>
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                   <Flag
-                    code={payCurrencyFlagCode(quote.toCurrency)}
+                    code={payCurrencyFlagCode(displayedToCurrency)}
                     className="h-full w-full object-cover"
                   />
                 </span>
               </div>
             ) : (
               <p className="text-sm text-slate-400 text-right">
-                Enter amount and recipient to see rate
+                Select send and receive currencies to see rate
               </p>
             )}
           </div>
@@ -1494,11 +1568,24 @@ function SendMoneyPageContent() {
               What they get
             </h2>
             <div className="mt-2 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
-              <div className="flex-1 min-w-0 border-b-2 border-slate-200 pb-2">
-                <span className="sr-only">Recipient receives</span>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums tracking-tight min-h-[2.5rem]">
-                  {quote ? fmtMoney(Number(quote.receiveAmount)) : "—"}
-                </p>
+              <div className="flex-1 min-w-0">
+                <label className="sr-only" htmlFor="receive-amount">
+                  Amount recipient receives
+                </label>
+                <input
+                  id="receive-amount"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={receiveAmount}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    setAmountEditSide("receive");
+                    setReceiveAmount(v);
+                  }}
+                  placeholder="0"
+                  className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-red-600 transition-colors"
+                />
               </div>
               <div
                 className="relative shrink-0"
@@ -1506,12 +1593,18 @@ function SendMoneyPageContent() {
               >
                 <button
                   type="button"
+                  disabled={beneficiaryRecipientLocked}
                   onClick={() => {
+                    if (beneficiaryRecipientLocked) return;
                     setRecipientOpen((o) => !o);
                     setRecipientSearch("");
                     setPayCurrencyOpen(false);
                   }}
-                  className="cursor-pointer flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-50 text-left transition-colors"
+                  className={`cursor-pointer flex items-center gap-2 h-10 pl-2.5 pr-2 min-w-[7rem] rounded-lg border border-slate-200 bg-slate-50/80 text-left transition-colors ${
+                    beneficiaryRecipientLocked
+                      ? "opacity-70 cursor-not-allowed"
+                      : "hover:bg-slate-50"
+                  }`}
                 >
                   <span className="inline-flex h-8 w-8 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
                     <Flag
@@ -1524,9 +1617,11 @@ function SendMoneyPageContent() {
                   <span className="text-base font-bold text-slate-900">
                     {recipientDisplayCurrency || "—"}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                  {!beneficiaryRecipientLocked ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 ml-auto shrink-0" />
+                  ) : null}
                 </button>
-                {recipientOpen && (
+                {recipientOpen && !beneficiaryRecipientLocked && (
                   <div className="absolute z-50 right-0 mt-1 w-[min(100vw-2rem,18rem)] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
                     <div className="p-2 border-b border-slate-100">
                       <input
@@ -1538,7 +1633,7 @@ function SendMoneyPageContent() {
                         }
                         value={recipientSearch}
                         onChange={(e) => setRecipientSearch(e.target.value)}
-                        className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                        className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                       />
                     </div>
                     <ul className="max-h-52 overflow-y-auto py-1">
@@ -1560,9 +1655,9 @@ function SendMoneyPageContent() {
                                     setRecipientOpen(false);
                                   }}
                                   className={` 
-                                    cursor-pointer flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                                    cursor-pointer flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-red-50 ${
                                       receiveCurrency === cur
-                                        ? "bg-teal-50 text-teal-800 font-medium cursor-pointer"
+                                        ? "bg-red-50 text-red-800 font-medium cursor-pointer"
                                         : "text-slate-700 cursor-pointer"
                                     }`}
                                 >
@@ -1573,7 +1668,7 @@ function SendMoneyPageContent() {
                                   <span className="font-semibold">{cur}</span>
                                   {receiveCurrency === cur && (
                                     <svg
-                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                      className="ml-auto w-4 h-4 shrink-0 text-red-600"
                                       viewBox="0 0 20 20"
                                       fill="currentColor"
                                     >
@@ -1598,9 +1693,9 @@ function SendMoneyPageContent() {
                                   setRecipientCouName(opt.couName);
                                   setRecipientOpen(false);
                                 }}
-                                className={`cursor-pointer  flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-teal-50 ${
+                                className={`cursor-pointer  flex items-start gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-red-50 ${
                                   receiveCurrency === opt.currency
-                                    ? "bg-teal-50 text-teal-800 font-medium cursor-pointer"
+                                    ? "bg-red-50 text-red-800 font-medium cursor-pointer"
                                     : "text-slate-700 cursor-pointer"
                                 }`}
                               >
@@ -1615,7 +1710,7 @@ function SendMoneyPageContent() {
                                   <span
                                     className={`text-[11px] leading-snug line-clamp-2 ${
                                       receiveCurrency === opt.currency
-                                        ? "text-teal-700/85"
+                                        ? "text-red-700/85"
                                         : "text-slate-500"
                                     }`}
                                     title={opt.couName}
@@ -1654,10 +1749,15 @@ function SendMoneyPageContent() {
           <button
             type="button"
             disabled={
-              submitting || !quote || !receiveCurrency || !parseFloat(payAmount)
+              submitting ||
+              !quote ||
+              !receiveCurrency ||
+              (amountEditSide === "pay"
+                ? !parseFloat(payAmount)
+                : !parseFloat(receiveAmount))
             }
             onClick={() => void handleStep1Next()}
-            className="cursor-pointer w-full h-12 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="cursor-pointer w-full h-12 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {submitting ? (
               <Loader variant="inline" className="w-4 h-4" />
@@ -1692,7 +1792,7 @@ function SendMoneyPageContent() {
                 }
                 setShowAddBeneficiaryModal(true);
               }}
-              className="cursor-pointer inline-flex items-center justify-center gap-2 h-10 shrink-0 px-4 rounded-lg border border-teal-200 bg-teal-50/70 text-teal-900 text-sm font-medium hover:bg-teal-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cursor-pointer inline-flex items-center justify-center gap-2 h-10 shrink-0 px-4 rounded-lg border border-red-200 bg-red-50/70 text-red-900 text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <UserPlus className="w-4 h-4" />
               Add new beneficiary
@@ -1717,7 +1817,7 @@ function SendMoneyPageContent() {
                     }}
                     className={`cursor-pointer w-full text-left rounded-lg border px-3 py-3 transition-colors ${
                       beneficiaryId === b.id
-                        ? "border-teal-600 bg-teal-50 cursor-pointer"
+                        ? "border-red-600 bg-red-50 cursor-pointer"
                         : "border-slate-200 hover:border-slate-300 cursor-pointer"
                     }`}
                   >
@@ -1782,7 +1882,7 @@ function SendMoneyPageContent() {
               type="button"
               disabled={!beneficiaryId || submitting}
               onClick={() => void handleStep2Next()}
-              className="cursor-pointer flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 "
+              className="cursor-pointer flex-1 h-10 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 "
             >
               Continue
             </button>
@@ -1866,7 +1966,7 @@ function SendMoneyPageContent() {
                   onClick={() => setPayInMethod("BANK_TRANSFER")}
                   className={`h-10 px-4 rounded-lg text-sm border cursor-pointer ${
                     payInMethod === "BANK_TRANSFER"
-                      ? "bg-teal-600 text-white border-teal-600 cursor-pointer"
+                      ? "bg-red-600 text-white border-red-600 cursor-pointer"
                       : "border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
                   }`}
                 >
@@ -1878,7 +1978,7 @@ function SendMoneyPageContent() {
                     onClick={() => setPayInMethod("MOBILE_MONEY")}
                     className={`h-10 px-4 rounded-lg text-sm border cursor-pointer ${
                       payInMethod === "MOBILE_MONEY"
-                        ? "bg-teal-600 text-white border-teal-600 cursor-pointer"
+                        ? "bg-red-600 text-white border-red-600 cursor-pointer"
                         : "border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
                     }`}
                   >
@@ -1929,7 +2029,7 @@ function SendMoneyPageContent() {
               )}
 
             {payInMethod === "MOBILE_MONEY" && ctx.canUseMobilePayIn && (
-              <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
+              <div className="space-y-2 rounded-xl border border-red-100 bg-red-50/40 p-4">
                 <label
                   className="text-sm font-medium text-slate-800 block mb-1"
                   htmlFor="payer-phone-send-money"
@@ -1992,7 +2092,7 @@ function SendMoneyPageContent() {
               type="button"
               disabled={step3ContinueGate.continueDisabled}
               onClick={() => void handleStep3Next()}
-              className="flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 cursor-pointer"
+              className="flex-1 h-10 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 cursor-pointer"
             >
               Continue
             </button>
@@ -2022,7 +2122,7 @@ function SendMoneyPageContent() {
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Recipient gets</dt>
-                <dd className="font-medium text-teal-700 text-right">
+                <dd className="font-medium text-red-700 text-right">
                   {fmtMoney(Number(quote.receiveAmount))} {quote.toCurrency}
                 </dd>
               </div>
@@ -2060,7 +2160,7 @@ function SendMoneyPageContent() {
               </div>
               <div className="flex justify-between gap-4 pb-2">
                 <dt className="text-slate-500 shrink-0">Transfer reference</dt>
-                <dd className="font-mono text-xs font-semibold text-teal-800 text-right break-all">
+                <dd className="font-mono text-xs font-semibold text-red-800 text-right break-all">
                   {referenceCode ?? transferRow?.referenceCode ?? "—"}
                 </dd>
               </div>
@@ -2146,7 +2246,7 @@ function SendMoneyPageContent() {
             <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-800">
               <input
                 type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-2 focus:ring-teal-500/20 focus:ring-offset-0 shrink-0"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-2 focus:ring-red-500/20 focus:ring-offset-0 shrink-0"
                 checked={payReviewTermsAccepted}
                 onChange={(e) => setPayReviewTermsAccepted(e.target.checked)}
                 aria-required="true"
@@ -2172,7 +2272,7 @@ function SendMoneyPageContent() {
               type="button"
               disabled={submitting || !payReviewTermsAccepted}
               onClick={() => void handleConfirm()}
-              className="cursor-pointer flex-1 h-10 bg-teal-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 "
+              className="cursor-pointer flex-1 h-10 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 "
             >
               Proceed & Confirm
             </button>
@@ -2185,9 +2285,9 @@ function SendMoneyPageContent() {
         <div className="w-full max-w-4xl  bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
           <div className="w-full flex flex-col items-center text-center space-y-4">
             <div className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-teal-50 flex items-center justify-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-50 flex items-center justify-center">
                 <Check
-                  className="w-5 h-5 sm:w-6 sm:h-6 text-teal-600"
+                  className="w-5 h-5 sm:w-6 sm:h-6 text-red-600"
                   aria-hidden
                 />
               </div>
@@ -2205,8 +2305,8 @@ function SendMoneyPageContent() {
             </div>
 
             {confirmationAmounts ? (
-              <div className="w-full max-w-md rounded-xl border border-teal-100 bg-gradient-to-b from-teal-50/80 to-slate-50/60 p-3 sm:p-4 text-center">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-800/80">
+              <div className="w-full max-w-md rounded-xl border border-red-100 bg-gradient-to-b from-red-50/80 to-slate-50/60 p-3 sm:p-4 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-red-800/80">
                   Total to pay
                 </p>
                 <p className="mt-1 text-2xl sm:text-3xl font-semibold tabular-nums text-slate-900 tracking-tight">
@@ -2231,9 +2331,9 @@ function SendMoneyPageContent() {
                     </span>
                   </div>
                   {confirmationAmounts.receive != null ? (
-                    <div className="flex justify-between gap-4 pt-1 border-t border-teal-100/80">
+                    <div className="flex justify-between gap-4 pt-1 border-t border-red-100/80">
                       <span className="text-slate-500">Recipient gets</span>
-                      <span className="font-medium tabular-nums text-teal-800">
+                      <span className="font-medium tabular-nums text-red-800">
                         {fmtMoney(confirmationAmounts.receive)}{" "}
                         {confirmationAmounts.toCurrency}
                       </span>
@@ -2257,7 +2357,7 @@ function SendMoneyPageContent() {
                   Transfer reference (use in payment)
                 </p>
                 <p
-                  className="font-mono text-xs sm:text-sm font-semibold text-teal-800 break-all"
+                  className="font-mono text-xs sm:text-sm font-semibold text-red-800 break-all"
                   title={referenceCode ?? transferRow?.referenceCode ?? ""}
                 >
                   {referenceCode ?? transferRow?.referenceCode ?? "—"}
@@ -2303,7 +2403,7 @@ function SendMoneyPageContent() {
                       <span className="font-semibold text-slate-900 leading-tight">
                         {a.bankName}
                       </span>
-                      <span className="shrink-0 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">
+                      <span className="shrink-0 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
                         {a.currency}
                       </span>
                     </div>
@@ -2353,7 +2453,7 @@ function SendMoneyPageContent() {
                 ))}
               </ul>
 
-              <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 sm:p-4 w-full text-left">
+              <div className="rounded-lg border border-dashed border-red-200/80 bg-white p-3 sm:p-4 w-full text-left">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
                   <p className="text-xs text-slate-600 text-center sm:text-left flex-1 min-w-0">
                     <span className="font-medium text-slate-800">
@@ -2398,7 +2498,7 @@ function SendMoneyPageContent() {
                               type="button"
                               onClick={() => viewBankProof(p)}
                               disabled={p.status === "uploading"}
-                              className="h-full w-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 disabled:opacity-50 cursor-pointer"
+                              className="h-full w-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 disabled:opacity-50 cursor-pointer"
                               aria-label={`View ${p.fileName}`}
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2424,7 +2524,7 @@ function SendMoneyPageContent() {
                           </p>
                           <p className="text-[10px] text-slate-500 tabular-nums">
                             {p.status === "uploading" ? (
-                              <span className="text-teal-700">Uploading…</span>
+                              <span className="text-red-700">Uploading…</span>
                             ) : p.status === "error" ? (
                               <span className="text-red-600">
                                 {p.errorMessage ?? "Upload failed"}
@@ -2443,7 +2543,7 @@ function SendMoneyPageContent() {
                             disabled={
                               p.status === "uploading" || p.status === "error"
                             }
-                            className="p-1 rounded text-slate-600 hover:bg-white hover:text-teal-700 transition-colors disabled:opacity-40 cursor-pointer"
+                            className="p-1 rounded text-slate-600 hover:bg-white hover:text-red-700 transition-colors disabled:opacity-40 cursor-pointer"
                             aria-label="View file"
                             title="View"
                           >
@@ -2469,7 +2569,7 @@ function SendMoneyPageContent() {
 
           {payInMethod === "MOBILE_MONEY" ||
           transferRow?.payInMethod === "MOBILE_MONEY" ? (
-            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-teal-100 bg-teal-50/30 px-3 py-2 max-w-2xl mx-auto text-center">
+            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-red-100 bg-red-50/30 px-3 py-2 max-w-2xl mx-auto text-center">
               <span className="font-medium text-slate-800">Mobile money: </span>
               Approve the collection on{" "}
               <span className="font-mono text-[11px]">

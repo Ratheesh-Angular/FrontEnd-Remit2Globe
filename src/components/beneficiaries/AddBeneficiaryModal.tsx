@@ -1111,7 +1111,7 @@ export function AddBeneficiaryModal({
           onFocus={
             field.key === "iban" ? () => setIsConfirmingIban(false) : undefined
           }
-          className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+          className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
             errors[field.key as keyof FormData]
               ? "border-red-400"
               : "border-slate-200"
@@ -1125,12 +1125,12 @@ export function AddBeneficiaryModal({
         {(field.lookup === "ifsc" || field.lookup === "aba") && (
           <>
             {bankIdLookupStatus === "loading" && (
-              <p className="mt-1 text-xs text-teal-600">
+              <p className="mt-1 text-xs text-red-600">
                 Looking up bank details…
               </p>
             )}
             {bankIdLookupStatus === "ok" && (
-              <p className="mt-1 text-xs text-teal-700">
+              <p className="mt-1 text-xs text-red-700">
                 Bank and branch filled automatically. Edit below if needed.
               </p>
             )}
@@ -1192,7 +1192,7 @@ export function AddBeneficiaryModal({
               }}
               onFocus={() => setIsConfirmingIban(true)}
               onBlur={() => setIsConfirmingIban(false)}
-              className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+              className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                 errors.confirmIban ? "border-red-400" : "border-slate-200"
               }`}
             />
@@ -1363,7 +1363,7 @@ export function AddBeneficiaryModal({
                       type="button"
                       disabled={!formData.country}
                       onClick={() => setPayoutCurrencyOpen((v) => !v)}
-                      className={`cursor-pointer flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      className={`cursor-pointer flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                         errors.payoutCurrency
                           ? "border-red-400 cursor-pointer"
                           : "border-slate-200 cursor-pointer"
@@ -1410,9 +1410,9 @@ export function AddBeneficiaryModal({
                                   handleChange("payoutCurrency", cur);
                                   setPayoutCurrencyOpen(false);
                                 }}
-                                className={`cursor-pointer flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                                className={`cursor-pointer flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-red-50 hover:text-red-700 transition-colors ${
                                   formData.payoutCurrency === cur
-                                    ? "bg-teal-50 text-teal-700 font-medium cursor-pointer"
+                                    ? "bg-red-50 text-red-700 font-medium cursor-pointer"
                                     : "text-slate-700 cursor-pointer"
                                 }`}
                               >
@@ -1423,7 +1423,7 @@ export function AddBeneficiaryModal({
                                 <span className="truncate">{cur}</span>
                                 {formData.payoutCurrency === cur && (
                                   <svg
-                                    className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                    className="ml-auto w-4 h-4 shrink-0 text-red-600"
                                     viewBox="0 0 20 20"
                                     fill="currentColor"
                                   >
@@ -1471,7 +1471,7 @@ export function AddBeneficiaryModal({
                       e.target.value as BeneficiaryDeliveryChannel,
                     )
                   }
-                  className={`w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed ${fieldNativeSelectClasses}`}
+                  className={`w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed ${fieldNativeSelectClasses}`}
                 >
                   {!formData.country.trim() ? (
                     <option value="BANK_TRANSFER">
@@ -1526,7 +1526,7 @@ export function AddBeneficiaryModal({
                   autoComplete="given-name"
                   value={formData.firstName}
                   onChange={(e) => handleChange("firstName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                     errors.firstName ? "border-red-400" : "border-slate-200"
                   }`}
                 />
@@ -1551,7 +1551,7 @@ export function AddBeneficiaryModal({
                   autoComplete="family-name"
                   value={formData.lastName}
                   onChange={(e) => handleChange("lastName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                     errors.lastName ? "border-red-400" : "border-slate-200"
                   }`}
                 />
@@ -1600,7 +1600,7 @@ export function AddBeneficiaryModal({
                       }
                       value={formData.bankName}
                       onChange={(e) => handleChange("bankName", e.target.value)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed ${
                         errors.bankName ? "border-red-400" : "border-slate-200"
                       }`}
                     />
@@ -1614,7 +1614,7 @@ export function AddBeneficiaryModal({
                           setBankOpen((v) => !v);
                           setBankSearch("");
                         }}
-                        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                        className={`flex items-center gap-2 w-full border rounded-lg px-3 h-10 text-sm text-left focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors bg-white disabled:opacity-50 disabled:cursor-not-allowed ${
                           errors.bankName
                             ? "border-red-400"
                             : "border-slate-200"
@@ -1650,7 +1650,7 @@ export function AddBeneficiaryModal({
                               placeholder="Search bank…"
                               value={bankSearch}
                               onChange={(e) => setBankSearch(e.target.value)}
-                              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                              className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                             />
                           </div>
                           <ul className="max-h-52 overflow-y-auto py-1">
@@ -1659,16 +1659,16 @@ export function AddBeneficiaryModal({
                                 <button
                                   type="button"
                                   onClick={() => selectFlexBank(b)}
-                                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 transition-colors ${
+                                  className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-red-50 hover:text-red-700 transition-colors ${
                                     bankPickerDisplayName === b.bankName
-                                      ? "bg-teal-50 text-teal-700 font-medium"
+                                      ? "bg-red-50 text-red-700 font-medium"
                                       : "text-slate-700"
                                   }`}
                                 >
                                   <span className="truncate">{b.bankName}</span>
                                   {bankPickerDisplayName === b.bankName && (
                                     <svg
-                                      className="ml-auto w-4 h-4 shrink-0 text-teal-600"
+                                      className="ml-auto w-4 h-4 shrink-0 text-red-600"
                                       viewBox="0 0 20 20"
                                       fill="currentColor"
                                     >
@@ -1714,7 +1714,7 @@ export function AddBeneficiaryModal({
                       placeholder="Enter the beneficiary's bank name"
                       value={formData.bankName}
                       onChange={(e) => handleChange("bankName", e.target.value)}
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                         errors.bankName ? "border-red-400" : "border-slate-200"
                       }`}
                     />
@@ -1738,7 +1738,7 @@ export function AddBeneficiaryModal({
                     placeholder="e.g. Main Street"
                     value={formData.branchName}
                     onChange={(e) => handleChange("branchName", e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors"
+                    className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors"
                   />
                 </div>
 
@@ -1775,7 +1775,7 @@ export function AddBeneficiaryModal({
                           }
                         }}
                         onFocus={() => setIsConfirmingAccount(false)}
-                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                           errors.accountNumber
                             ? "border-red-400"
                             : "border-slate-200"
@@ -1820,7 +1820,7 @@ export function AddBeneficiaryModal({
                         }}
                         onFocus={() => setIsConfirmingAccount(true)}
                         onBlur={() => setIsConfirmingAccount(false)}
-                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                        className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                           errors.confirmAccountNumber
                             ? "border-red-400"
                             : "border-slate-200"
@@ -1858,7 +1858,7 @@ export function AddBeneficiaryModal({
                         !formData.country ||
                         availableMobileMoneyProviders.length === 0
                       }
-                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${fieldNativeSelectClasses} ${
+                      className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${fieldNativeSelectClasses} ${
                         errors.mobileMoneyProvider
                           ? "border-red-400"
                           : "border-slate-200"
@@ -1898,7 +1898,7 @@ export function AddBeneficiaryModal({
                     Mobile Number <span className="text-red-500">*</span>
                   </label>
                   <div
-                    className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+                    className={`flex items-center border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-red-500/20 focus-within:border-red-600 bg-white ${
                       errors.mobileNumber
                         ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
                         : "border-slate-200"
@@ -1993,7 +1993,7 @@ export function AddBeneficiaryModal({
                     onChange={(e) =>
                       handlePayoutInPersonIdChange(e.target.value)
                     }
-                    className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+                    className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
                       errors.payoutInPersonIdNumber
                         ? "border-red-400"
                         : "border-slate-200"
@@ -2033,7 +2033,7 @@ export function AddBeneficiaryModal({
               <button
                 type="submit"
                 disabled={isSaving}
-                className="cursor-pointer flex-1 h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="cursor-pointer flex-1 h-10 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isSaving ? (
                   <>

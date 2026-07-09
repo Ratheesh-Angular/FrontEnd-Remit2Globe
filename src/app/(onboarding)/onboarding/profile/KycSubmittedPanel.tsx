@@ -34,9 +34,9 @@ function TimelineStep({
       <div
         className={`relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
           done
-            ? "bg-teal-600 text-white"
+            ? "bg-red-600 text-white"
             : active
-              ? "border-2 border-teal-600 bg-teal-50 text-teal-800"
+              ? "border-2 border-red-600 bg-red-50 text-red-800"
               : "bg-slate-100 text-slate-400"
         }`}
       >
@@ -80,9 +80,9 @@ export function KycSubmittedPanel({
 
   return (
     <div className="space-y-8 py-1 text-center">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
         <svg
-          className="h-10 w-10 text-teal-600"
+          className="h-10 w-10 text-red-600"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -180,7 +180,7 @@ export function KycSubmittedPanel({
       <button
         type="button"
         onClick={() => router.push("/dashboard")}
-        className="cursor-pointer inline-flex h-11 items-center justify-center rounded-lg bg-teal-600 px-6 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+        className="cursor-pointer inline-flex h-11 items-center justify-center rounded-lg bg-red-600 px-6 text-sm font-medium text-white transition-colors hover:bg-red-700"
       >
         Back to Dashboard
       </button>

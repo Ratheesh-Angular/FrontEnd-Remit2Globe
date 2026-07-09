@@ -142,7 +142,7 @@ export function ViewBeneficiaryModal({
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200/80 relative">
           <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700 mb-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 mb-1">
                 Beneficiary
               </p>
               {loading ? (
@@ -247,7 +247,7 @@ export function ViewBeneficiaryModal({
                   onClose();
                 }
               }}
-              className="flex-1 h-10 inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 h-10 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Pencil className="w-4 h-4" />
               Edit

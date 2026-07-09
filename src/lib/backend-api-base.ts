@@ -1,6 +1,6 @@
 /**
  * Express mounts routes under `/api`. `NEXT_PUBLIC_API_URL` should be that root
- * (e.g. `https://remit2globe-api.onrender.com/api`). If only the host origin is set,
+ * (e.g. `https://flex-money-api.onrender.com/api`). If only the host origin is set,
  * we append `/api` so paths like `/api/flex/countries` resolve correctly.
  */
 function normalizeApiBase(rawInput: string): string {

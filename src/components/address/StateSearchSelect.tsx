@@ -159,14 +159,14 @@ export function StateSearchSelect({
                     }}
                     className={`${fieldDropdownOption} ${
                       value === s
-                        ? "bg-teal-50 text-teal-700 font-medium"
+                        ? "bg-red-50 text-red-700 font-medium"
                         : "text-slate-700"
                     }`}
                   >
                     {s}
                     {value === s && (
                       <svg
-                        className="ml-auto w-4 h-4 text-teal-600"
+                        className="ml-auto w-4 h-4 text-red-600"
                         viewBox="0 0 20 20"
                         fill="currentColor"
                         aria-hidden
@@ -190,7 +190,7 @@ export function StateSearchSelect({
                     setOpen(false);
                     setSearch("");
                   }}
-                  className="w-full px-3 py-2.5 text-sm text-left text-teal-700 font-medium hover:bg-teal-50"
+                  className="w-full px-3 py-2.5 text-sm text-left text-red-700 font-medium hover:bg-red-50"
                 >
                   Use “{search.trim()}”
                 </button>

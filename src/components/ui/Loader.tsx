@@ -18,7 +18,7 @@ export type LoaderProps = {
 };
 
 /**
- * Theme-aligned loading indicator (teal accent, slate text).
+ * Theme-aligned loading indicator (red accent, slate text).
  * Use `overlay` for blocking operations (e.g. save/delete in flight).
  */
 export function Loader({
@@ -32,12 +32,12 @@ export function Loader({
     <div className="flex flex-col items-center gap-3 text-center">
       <div className="relative">
         <div
-          className="absolute inset-0 rounded-full bg-teal-500/15 blur-md scale-150"
+          className="absolute inset-0 rounded-full bg-red-500/15 blur-md scale-150"
           aria-hidden
         />
         <Spinner
           size={variant === "overlay" ? "xl" : size}
-          className="relative text-teal-600"
+          className="relative text-red-600"
         />
       </div>
       {label ? (
@@ -52,11 +52,11 @@ export function Loader({
   if (variant === "inline") {
     return (
       <div
-        className={cn("inline-flex items-center gap-2 text-teal-600", className)}
+        className={cn("inline-flex items-center gap-2 text-red-600", className)}
         role="status"
         aria-live="polite"
       >
-        <Spinner size={size === "xl" ? "lg" : size} className="text-teal-600" />
+        <Spinner size={size === "xl" ? "lg" : size} className="text-red-600" />
         {label ? (
           <span className="text-sm text-slate-600">{label}</span>
         ) : null}

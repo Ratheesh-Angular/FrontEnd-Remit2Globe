@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useEffect, useRef, useMemo } from "react";
 import api from "@/lib/api";
 import Flag from "react-world-flags";
 import { getSession, signIn, signOut } from "next-auth/react";
-import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import {
   nationalPhonePlaceholder,
   validateNationalPhoneDigits,
@@ -161,9 +160,10 @@ export default function RegisterPage() {
       const phoneErr = validateNationalPhoneDigits(selectedCountry, localPhone);
       if (phoneErr) errs.phone = phoneErr;
     }
-    // if (!agreed) {
-    //   errs.agreed = "You must agree to the Terms of Service.";
-    // }
+    if (!agreed) {
+      errs.agreed =
+        "You must agree to the Terms of Service and Privacy Policy.";
+    }
     return errs;
   }
 
@@ -245,13 +245,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-8">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          {/* <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
         {/* Heading */}
         <div className="mb-6">
@@ -352,7 +346,7 @@ export default function RegisterPage() {
               Phone number
             </label>
             <div
-              className={`flex items-center ${FIELD_HEIGHT} border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+              className={`flex items-center ${FIELD_HEIGHT} border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-red-500/20 focus-within:border-red-600 bg-white ${
                 errors.phone
                   ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
                   : "border-slate-200"
@@ -482,8 +476,7 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* Terms */}
-          {/* <div>
+          <div>
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -493,20 +486,24 @@ export default function RegisterPage() {
                   setErrors((prev) => ({ ...prev, agreed: undefined }));
                 }}
                 disabled={isLoading}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-teal-600 cursor-pointer flex-shrink-0"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-red-600 cursor-pointer flex-shrink-0"
               />
               <span className="text-sm text-slate-600 leading-snug">
                 I agree to the{" "}
                 <a
-                  href="#"
-                  className="text-teal-600 hover:text-teal-700 hover:underline font-medium"
+                  href="https://www.flex-money.com/terms/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-600 hover:text-red-700 hover:underline font-medium"
                 >
                   Terms of Service
                 </a>{" "}
                 and{" "}
                 <a
-                  href="#"
-                  className="text-teal-600 hover:text-teal-700 hover:underline font-medium"
+                  href="https://www.flex-money.com/privacypolicy/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-600 hover:text-red-700 hover:underline font-medium"
                 >
                   Privacy Policy
                 </a>
@@ -515,13 +512,13 @@ export default function RegisterPage() {
             {errors.agreed && (
               <p className="mt-1.5 text-xs text-red-500">{errors.agreed}</p>
             )}
-          </div> */}
+          </div>
 
           {/* Submit */}
           <button
             type="submit"
-            disabled={isLoading}
-            className="cursor-pointer w-full h-11 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 mt-2"
+            disabled={isLoading || !agreed}
+            className="cursor-pointer w-full h-11 bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 mt-2"
           >
             {isLoading ? (
               <>
@@ -559,7 +556,7 @@ export default function RegisterPage() {
           Already have an account?{" "}
           <a
             href="/login"
-            className="text-teal-600 hover:text-teal-700 font-medium hover:underline"
+            className="text-red-600 hover:text-red-700 font-medium hover:underline"
           >
             Sign in
           </a>

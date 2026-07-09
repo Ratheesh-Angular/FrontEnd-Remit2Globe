@@ -10,9 +10,9 @@ const variantStyles: Record<
   { wrap: string; icon: typeof CheckCircle2; iconClass: string }
 > = {
   success: {
-    wrap: "border-teal-200 bg-teal-50 text-teal-900",
+    wrap: "border-red-200 bg-red-50 text-red-900",
     icon: CheckCircle2,
-    iconClass: "text-teal-600",
+    iconClass: "text-red-600",
   },
   error: {
     wrap: "border-red-200 bg-red-50 text-red-900",
@@ -64,7 +64,7 @@ export function Toaster() {
               ) : null}
             </div>
             <ToastPrimitive.Close
-              className="absolute right-2 top-2 rounded-md p-1 text-slate-500 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              className="absolute right-2 top-2 rounded-md p-1 text-slate-500 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/30"
               aria-label="Dismiss"
             >
               <X className="h-4 w-4" />

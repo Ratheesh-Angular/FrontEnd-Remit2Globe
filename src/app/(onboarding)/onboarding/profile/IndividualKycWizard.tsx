@@ -444,6 +444,16 @@ export function IndividualKycWizard() {
     });
   }, [form.country]);
 
+  /** National ID issuing country is always the registration / residence country. */
+  useEffect(() => {
+    const c = form.country.trim();
+    if (!c) return;
+    setForm((prev) => {
+      if (prev.nationalIdIssuingCountry === c) return prev;
+      return { ...prev, nationalIdIssuingCountry: c };
+    });
+  }, [form.country]);
+
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
     [flexCountryList, form.country],
@@ -971,12 +981,12 @@ export function IndividualKycWizard() {
   const inputClass = (
     field: Exclude<keyof IndividualForm, "residenceAddress">,
   ) =>
-    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
       errors[field] ? "border-red-400" : "border-slate-200"
     }`;
 
   const addrInputClass = (sub: keyof ResidenceAddressForm) =>
-    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors ${
+    `border rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
       errors.residenceAddress?.[sub] ? "border-red-400" : "border-slate-200"
     }`;
 
@@ -984,7 +994,7 @@ export function IndividualKycWizard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -1027,23 +1037,23 @@ export function IndividualKycWizard() {
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
                     isDone
-                      ? "bg-teal-600 text-white"
+                      ? "bg-red-600 text-white"
                       : isActive
-                        ? "bg-teal-50 border-2 border-teal-600 text-teal-700"
+                        ? "bg-red-50 border-2 border-red-600 text-red-700"
                         : "bg-slate-100 text-slate-400"
                   }`}
                 >
                   {isDone ? "✓" : index + 1}
                 </div>
                 <span
-                  className={`text-xs font-medium hidden sm:block ${isActive ? "text-teal-700" : "text-slate-500"}`}
+                  className={`text-xs font-medium hidden sm:block ${isActive ? "text-red-700" : "text-slate-500"}`}
                 >
                   {section.label}
                 </span>
               </button>
               {index < sections.length - 1 && (
                 <div
-                  className={`h-px flex-1 ${isDone ? "bg-teal-300" : "bg-slate-200"}`}
+                  className={`h-px flex-1 ${isDone ? "bg-red-300" : "bg-slate-200"}`}
                 />
               )}
             </div>
@@ -1154,7 +1164,7 @@ export function IndividualKycWizard() {
                       use for account verification.
                     </p> */}
                     <div
-                      className={`flex items-center h-10 border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-600 bg-white ${
+                      className={`flex items-center h-10 border rounded-lg overflow-visible transition-all focus-within:ring-2 focus-within:ring-red-500/20 focus-within:border-red-600 bg-white ${
                         errors.registrationPhone
                           ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
                           : "border-slate-200"
@@ -1255,7 +1265,7 @@ export function IndividualKycWizard() {
                     name="residencyStatus"
                     checked={form.isNational === false}
                     onChange={() => handleIsNationalChange(false)}
-                    className="w-4 h-4 text-teal-600 focus:ring-teal-500"
+                    className="w-4 h-4 text-red-600 focus:ring-red-500"
                   />
                   <span className="text-sm text-slate-700">Resident</span>
                 </label>
@@ -1266,7 +1276,7 @@ export function IndividualKycWizard() {
                     name="residencyStatus"
                     checked={form.isNational === true}
                     onChange={() => handleIsNationalChange(true)}
-                    className="w-4 h-4 text-teal-600 focus:ring-teal-500"
+                    className="w-4 h-4 text-red-600 focus:ring-red-500"
                   />
                   <span className="text-sm text-slate-700">Citizen</span>
                 </label>
@@ -1559,16 +1569,18 @@ export function IndividualKycWizard() {
                         error={errors.nationalIdIssuingCountry}
                       >
                         <FlexCountrySelect
-                          value={form.nationalIdIssuingCountry}
-                          onChange={(name) =>
-                            setField("nationalIdIssuingCountry", name)
-                          }
+                          value={form.nationalIdIssuingCountry || form.country}
+                          onChange={() => {}}
+                          disabled
                           error={Boolean(errors.nationalIdIssuingCountry)}
-                          placeholder="Select issuing country…"
+                          placeholder="Same as country of residence"
                           countries={flexCountryList}
                           countriesLoading={flexCountriesLoading}
                           countriesError={flexCountriesError}
                         />
+                        <p className="mt-1.5 text-xs text-slate-500">
+                          Same as the country you selected at registration.
+                        </p>
                       </Field>
                     </div>
                     <Field
@@ -1754,7 +1766,7 @@ export function IndividualKycWizard() {
                 type="button"
                 onClick={() => saveSection(activeSection)}
                 disabled={isSaving}
-                className="cursor-pointer h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="cursor-pointer h-10 px-6 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? (
                   <>

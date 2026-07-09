@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-import Image from "next/image";
-import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import {
   notifyApiError,
@@ -207,13 +206,7 @@ export default function VerifyContent() {
       <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          {/* <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
 
         {/* Heading */}
@@ -230,7 +223,7 @@ export default function VerifyContent() {
               <button
                 type="button"
                 onClick={() => router.push("/register")}
-                className="text-teal-700 font-medium underline"
+                className="text-red-700 font-medium underline"
               >
                 register again
               </button>{" "}
@@ -246,7 +239,7 @@ export default function VerifyContent() {
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center ${
                   emailVerified
-                    ? "bg-teal-600"
+                    ? "bg-red-600"
                     : "bg-slate-100 border-2 border-slate-300"
                 }`}
               >
@@ -274,7 +267,7 @@ export default function VerifyContent() {
               </div>
             </div>
             {emailVerified && (
-              <span className="text-xs font-medium text-teal-600">
+              <span className="text-xs font-medium text-red-600">
                 Verified
               </span>
             )}
@@ -297,8 +290,8 @@ export default function VerifyContent() {
                 disabled={emailVerified || isLoading}
                 className={`w-12 h-12 text-center text-lg font-semibold border rounded-lg outline-none transition-all ${
                   emailVerified
-                    ? "bg-teal-50 border-teal-200 text-teal-700"
-                    : "border-slate-300 focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20"
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "border-slate-300 focus:border-red-600 focus:ring-2 focus:ring-red-500/20"
                 } disabled:cursor-not-allowed`}
               />
             ))}
@@ -308,7 +301,7 @@ export default function VerifyContent() {
             <button
               onClick={() => handleResendOtp("email")}
               disabled={!canResend || isLoading}
-              className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
+              className="w-full text-sm text-red-600 hover:text-red-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
             >
               {canResend ? "Resend code" : `Resend code in ${resendTimer}s`}
             </button>
@@ -325,7 +318,7 @@ export default function VerifyContent() {
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center ${
                   phoneVerified
-                    ? "bg-teal-600"
+                    ? "bg-red-600"
                     : emailVerified
                       ? "bg-slate-100 border-2 border-slate-300"
                       : "bg-slate-50 border-2 border-slate-200"
@@ -367,7 +360,7 @@ export default function VerifyContent() {
               </div>
             </div>
             {phoneVerified && (
-              <span className="text-xs font-medium text-teal-600">
+              <span className="text-xs font-medium text-red-600">
                 Verified
               </span>
             )}
@@ -390,9 +383,9 @@ export default function VerifyContent() {
                 disabled={!emailVerified || phoneVerified || isLoading}
                 className={`w-12 h-12 text-center text-lg font-semibold border rounded-lg outline-none transition-all ${
                   phoneVerified
-                    ? "bg-teal-50 border-teal-200 text-teal-700"
+                    ? "bg-red-50 border-red-200 text-red-700"
                     : emailVerified
-                      ? "border-slate-300 focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20"
+                      ? "border-slate-300 focus:border-red-600 focus:ring-2 focus:ring-red-500/20"
                       : "bg-slate-50 border-slate-200 text-slate-400"
                 } disabled:cursor-not-allowed`}
               />
@@ -403,7 +396,7 @@ export default function VerifyContent() {
             <button
               onClick={() => handleResendOtp("phone")}
               disabled={!canResend || isLoading}
-              className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
+              className="w-full text-sm text-red-600 hover:text-red-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
             >
               {canResend ? "Resend code" : `Resend code in ${resendTimer}s`}
             </button>
@@ -415,7 +408,7 @@ export default function VerifyContent() {
           Didn't receive the codes?{" "}
           <button
             onClick={() => router.push("/register")}
-            className="text-teal-600 hover:text-teal-700 font-medium"
+            className="text-red-600 hover:text-red-700 font-medium"
           >
             Go back to registration
           </button>

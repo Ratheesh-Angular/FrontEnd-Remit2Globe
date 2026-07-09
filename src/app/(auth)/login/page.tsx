@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import api from "@/lib/api";
-import Image from "next/image";
-import R2GLogo from "../../../../assets/logos/R2GLogo.png";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { notifyApiError, notifyError } from "@/lib/notify";
 
 export default function LoginPage() {
@@ -68,20 +67,14 @@ export default function LoginPage() {
       <AppLoadingOverlay show={isLoading} label="Signing in…" />
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
         <div className="flex justify-center mb-6">
-          {/*   <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
 
         <h1 className="text-xl font-semibold text-slate-900 mb-1">
           Welcome back
         </h1>
         <p className="text-sm text-slate-500 mb-6">
-          Sign in to your Amigo account
+          Sign in to your Flex Money account
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -95,7 +88,7 @@ export default function LoginPage() {
               onChange={(e) => setEmailOrPhone(e.target.value)}
               placeholder="you@example.com or +1234567890"
               autoComplete="username"
-              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
           </div>
 
@@ -110,7 +103,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 autoComplete="current-password"
-                className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
               />
               <button
                 type="button"
@@ -125,7 +118,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="cursor-pointer w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="cursor-pointer w-full h-11 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? "Signing in…" : "Sign In"}
           </button>
@@ -136,7 +129,7 @@ export default function LoginPage() {
             Don&apos;t have an account?{" "}
             <a
               href="/register"
-              className="text-teal-600 hover:text-teal-700 font-medium"
+              className="text-red-600 hover:text-red-700 font-medium"
             >
               Create one
             </a>
@@ -144,7 +137,7 @@ export default function LoginPage() {
           <p>
             <a
               href="/forgot-password"
-              className="text-teal-600 hover:text-teal-700 font-medium"
+              className="text-red-600 hover:text-red-700 font-medium"
             >
               Forgot password?
             </a>

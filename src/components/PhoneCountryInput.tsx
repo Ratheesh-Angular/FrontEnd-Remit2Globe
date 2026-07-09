@@ -139,7 +139,7 @@ export function PhoneCountryInput({
 
   const wrapError = error
     ? "border-red-400 focus-within:ring-red-400/20 focus-within:border-red-400"
-    : "border-slate-200 focus-within:ring-teal-500/20 focus-within:border-teal-600";
+    : "border-slate-200 focus-within:ring-red-500/20 focus-within:border-red-600";
 
   return (
     <div>
@@ -197,7 +197,7 @@ export function PhoneCountryInput({
                   placeholder="Search country or code…"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                  className="w-full px-2.5 h-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                 />
               </div>
               <ul className="max-h-52 overflow-y-auto py-1">
@@ -205,9 +205,9 @@ export function PhoneCountryInput({
                   <li key={c.code}>
                     <button
                       type="button"
-                      className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-teal-50 hover:text-teal-700 ${
+                      className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left hover:bg-red-50 hover:text-red-700 ${
                         selected?.code === c.code
-                          ? "bg-teal-50 text-teal-800 font-medium"
+                          ? "bg-red-50 text-red-800 font-medium"
                           : "text-slate-700"
                       }`}
                       onClick={() => {

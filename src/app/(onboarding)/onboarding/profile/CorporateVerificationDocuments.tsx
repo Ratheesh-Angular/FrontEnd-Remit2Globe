@@ -318,7 +318,7 @@ export function CorporateVerificationDocuments({
               <a
                 key={s.id}
                 href={`#${s.id}`}
-                className="text-xs font-medium text-teal-700 hover:text-teal-800 underline-offset-2 hover:underline"
+                className="text-xs font-medium text-red-700 hover:text-red-800 underline-offset-2 hover:underline"
               >
                 {s.title}
               </a>
@@ -334,7 +334,7 @@ export function CorporateVerificationDocuments({
           aria-label="Upload progress"
         >
           <div
-            className="h-full rounded-full bg-teal-600 transition-[width] duration-300 ease-out"
+            className="h-full rounded-full bg-red-600 transition-[width] duration-300 ease-out"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -344,7 +344,7 @@ export function CorporateVerificationDocuments({
             {missingLabels.join(" · ")}
           </p>
         ) : (
-          <p className="text-xs font-medium text-teal-800">
+          <p className="text-xs font-medium text-red-800">
             All required documents uploaded—you can submit below.
           </p>
         )} */}
@@ -379,7 +379,7 @@ export function CorporateVerificationDocuments({
                       key={doc.type}
                       className={`rounded-lg border px-3 py-3 sm:px-4 transition-colors ${
                         doneRow
-                          ? "border-teal-200 bg-teal-50/25"
+                          ? "border-red-200 bg-red-50/25"
                           : "border-slate-200 bg-white"
                       }`}
                     >
@@ -395,7 +395,7 @@ export function CorporateVerificationDocuments({
                               </span>
                             )}
                             {upload?.status === "done" && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-medium text-teal-800">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-800">
                                 <svg
                                   className="h-3 w-3 shrink-0"
                                   viewBox="0 0 20 20"
@@ -425,7 +425,7 @@ export function CorporateVerificationDocuments({
                           </div>
                           {upload?.status === "done" && (
                             <p
-                              className="truncate text-xs text-teal-800/90"
+                              className="truncate text-xs text-red-800/90"
                               title={upload.fileName}
                             >
                               {upload.fileName}
@@ -438,7 +438,7 @@ export function CorporateVerificationDocuments({
                             </p>
                           )}
                           <details className="group text-xs text-slate-600">
-                            <summary className="cursor-pointer list-none font-medium text-teal-700 hover:text-teal-800 [&::-webkit-details-marker]:hidden">
+                            <summary className="cursor-pointer list-none font-medium text-red-700 hover:text-red-800 [&::-webkit-details-marker]:hidden">
                               <span className="underline-offset-2 group-open:no-underline hover:underline">
                                 What to upload
                               </span>
@@ -486,8 +486,8 @@ export function CorporateVerificationDocuments({
                             disabled={upload?.status === "uploading"}
                             className={`inline-flex min-h-[44px] items-center justify-center rounded-lg border px-4 text-xs font-medium transition-colors disabled:opacity-50 sm:min-h-0 sm:h-9 ${
                               upload?.status === "done"
-                                ? "border-teal-200 text-teal-700 hover:bg-teal-50"
-                                : "border-slate-200 bg-teal-600 text-white hover:bg-teal-700"
+                                ? "border-red-200 text-red-700 hover:bg-red-50"
+                                : "border-slate-200 bg-red-600 text-white hover:bg-red-700"
                             }`}
                           >
                             {upload?.status === "uploading"
@@ -529,7 +529,7 @@ export function CorporateVerificationDocuments({
             type="button"
             onClick={handleSubmitKyc}
             disabled={!allRequiredUploaded || isSubmitting}
-            className="inline-flex min-h-[44px] w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-teal-600 px-5 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:h-10 sm:w-auto"
+            className="inline-flex min-h-[44px] w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:h-10 sm:w-auto"
           >
             {isSubmitting ? (
               <>
