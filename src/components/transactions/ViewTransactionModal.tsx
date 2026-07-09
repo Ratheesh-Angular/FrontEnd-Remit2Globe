@@ -211,7 +211,7 @@ export function ViewTransactionModal({
           <AppLoadingOverlay show={uploadBusy} label="Uploading proof…" />
           <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700 mb-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 mb-1">
                 Transfer
               </p>
               {loading ? (
@@ -309,11 +309,11 @@ export function ViewTransactionModal({
                     </div>
                   </div>
                   {/* {totalToPay != null && row.payCurrency && (
-                    <div className="mb-3 mt-3 rounded-lg border border-teal-200 bg-teal-50/80 px-3 py-2.5 flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-teal-900">
+                    <div className="mb-3 mt-3 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2.5 flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-red-900">
                         Total to pay
                       </span>
-                      <span className="text-base font-bold text-teal-950 tabular-nums">
+                      <span className="text-base font-bold text-red-950 tabular-nums">
                         {fmtMoney(totalToPay)} {row.payCurrency}
                       </span>
                     </div>
@@ -321,7 +321,7 @@ export function ViewTransactionModal({
                 </div>
 
                 <div className="rounded-xl border border-slate-200 p-0 overflow-hidden">
-                  <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-teal-800 bg-teal-50/80 border-b border-teal-100">
+                  <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-red-800 bg-red-50/80 border-b border-red-100">
                     Pay-in
                   </p>
                   <dl className="px-4">
@@ -347,7 +347,7 @@ export function ViewTransactionModal({
 
                 {row.beneficiary && (
                   <div className="rounded-xl border border-slate-200 p-0 overflow-hidden">
-                    <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-teal-800 bg-teal-50/80 border-b border-teal-100">
+                    <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-red-800 bg-red-50/80 border-b border-red-100">
                       Beneficiary
                     </p>
                     <dl className="px-4">
@@ -400,7 +400,7 @@ export function ViewTransactionModal({
                   row.transferPurpose ||
                   row.relationshipToRecipient) && (
                   <div className="rounded-xl border border-slate-200 p-0 overflow-hidden">
-                    <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-teal-800 bg-teal-50/80 border-b border-teal-100">
+                    <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-red-800 bg-red-50/80 border-b border-red-100">
                       Source, purpose & relationship
                     </p>
                     <dl className="px-4">
@@ -445,7 +445,7 @@ export function ViewTransactionModal({
                     </p>
                     {canUploadMoreProof && (
                       <div className="px-4 py-3 border-b border-slate-100">
-                        <div className="rounded-lg border border-dashed border-teal-200/80 bg-white p-3 text-left">
+                        <div className="rounded-lg border border-dashed border-red-200/80 bg-white p-3 text-left">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                             <p className="text-xs text-slate-600 flex-1 min-w-0">
                               <span className="font-medium text-slate-800">
@@ -534,7 +534,7 @@ export function ViewTransactionModal({
                                 onClick={() =>
                                   openPaymentProof(p, setLightboxUrl)
                                 }
-                                className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100"
+                                className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-medium text-red-800 bg-red-50 hover:bg-red-100"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 View
@@ -566,7 +566,7 @@ export function ViewTransactionModal({
                   downloadTransferReceiptPdf(receiptPayload);
                 }
               }}
-              className="flex-1 h-10 inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 h-10 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               Download receipt

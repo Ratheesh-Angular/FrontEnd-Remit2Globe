@@ -156,7 +156,7 @@ export function RemittanceTransfersTable({
                       <button
                         type="button"
                         onClick={() => onViewTransfer(t.id)}
-                        className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                        className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors"
                         title="View transaction"
                         aria-label="View transaction"
                       >
@@ -194,7 +194,7 @@ export function RemittanceTransfersTable({
                   <button
                     type="button"
                     onClick={() => onViewTransfer(t.id)}
-                    className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                    className="cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors"
                     title="View transaction"
                     aria-label="View transaction"
                   >

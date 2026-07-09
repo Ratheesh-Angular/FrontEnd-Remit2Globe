@@ -297,7 +297,7 @@ export function VerificationDocuments({
               key={doc.type}
               className={`bg-slate-50/80 border rounded-xl p-5 transition-colors ${
                 upload?.status === "done"
-                  ? "border-teal-200"
+                  ? "border-red-200"
                   : "border-slate-200"
               }`}
             >
@@ -322,7 +322,7 @@ export function VerificationDocuments({
                     <div
                       className={`mt-2 flex items-center gap-2 text-xs ${
                         upload.status === "done"
-                          ? "text-teal-700"
+                          ? "text-red-700"
                           : upload.status === "uploading"
                             ? "text-slate-500"
                             : "text-red-500"
@@ -333,7 +333,7 @@ export function VerificationDocuments({
                       )}
                       {upload.status === "done" && (
                         <svg
-                          className="w-3.5 h-3.5 text-teal-600"
+                          className="w-3.5 h-3.5 text-red-600"
                           viewBox="0 0 20 20"
                           fill="currentColor"
                         >
@@ -404,7 +404,7 @@ export function VerificationDocuments({
                     disabled={upload?.status === "uploading"}
                     className={`cursor-pointer h-9 px-4 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
                       upload?.status === "done"
-                        ? "border-teal-200 text-teal-700 hover:bg-teal-50"
+                        ? "border-red-200 text-red-700 hover:bg-red-50"
                         : "border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
@@ -437,7 +437,7 @@ export function VerificationDocuments({
             type="button"
             onClick={handleSubmitKyc}
             disabled={!allRequiredUploaded || isSubmitting}
-            className="cursor-pointer shrink-0 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="cursor-pointer shrink-0 h-10 px-5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isSubmitting ? (
               <>
@@ -457,12 +457,12 @@ export function VerificationDocuments({
               <div key={doc.type} className="flex items-center gap-1.5">
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    isDone ? "bg-teal-500" : "bg-slate-200"
+                    isDone ? "bg-red-500" : "bg-slate-200"
                   }`}
                 />
                 <span
                   className={`text-xs ${
-                    isDone ? "text-teal-700" : "text-slate-400"
+                    isDone ? "text-red-700" : "text-slate-400"
                   }`}
                 >
                   {doc.label}

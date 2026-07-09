@@ -9,7 +9,7 @@ const TESTIMONIALS = [
     avatar: "PS",
     rating: 5,
     quote:
-      "I've been sending money to my parents in India for years. Amigo has the best rates I've found, and transfers arrive within minutes. Highly recommended!",
+      "I've been sending money to my parents in India for years. Flex Money has the best rates I've found, and transfers arrive within minutes. Highly recommended!",
   },
   {
     name: "James Okonkwo",
@@ -46,8 +46,8 @@ export function TestimonialsSection() {
             Trusted by Thousands
           </h2>
           <p className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto">
-            People around the world trust Amigo to send money to their loved
-            ones.
+            People around the world trust Flex Money to send money to their
+            loved ones.
           </p>
         </div>
 
@@ -69,7 +69,7 @@ export function TestimonialsSection() {
                 &ldquo;{testimonial.quote}&rdquo;
               </blockquote>
               <div className="flex items-center gap-4">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-teal-100 text-teal-700 font-semibold">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 text-red-700 font-semibold">
                   {testimonial.avatar}
                 </div>
                 <div>

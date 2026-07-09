@@ -400,7 +400,7 @@ export default function TransactionsPage() {
         </div>
         <Link
           href="/send-money"
-          className="inline-flex items-center justify-center gap-2 h-11 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-teal-600/20 transition-colors shrink-0"
+          className="inline-flex items-center justify-center gap-2 h-11 px-5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-red-600/20 transition-colors shrink-0"
         >
           <Send className="w-4 h-4" />
           New transfer
@@ -418,14 +418,14 @@ export default function TransactionsPage() {
                 if (e.key === "Enter") applyReferenceFilter();
               }}
               placeholder="Reference"
-              className="min-w-[8rem] flex-1 h-9 px-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="min-w-[8rem] flex-1 h-9 px-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={applyReferenceFilter}
-              className="h-9 px-3 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+              className="h-9 px-3 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
             >
               Apply
             </button>
@@ -474,7 +474,7 @@ export default function TransactionsPage() {
                   onClick={() => handleSelectDatePreset(preset)}
                   className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors ${
                     dateRangePreset === preset
-                      ? "bg-teal-600 text-white"
+                      ? "bg-red-600 text-white"
                       : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
                     value={customFromInput}
                     onChange={(e) => setCustomFromInput(e.target.value)}
                     max={customToInput || undefined}
-                    className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 ${
+                    className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 ${
                       customRangeError ? "border-red-300" : "border-slate-200"
                     }`}
                   />
@@ -518,7 +518,7 @@ export default function TransactionsPage() {
                     value={customToInput}
                     onChange={(e) => setCustomToInput(e.target.value)}
                     min={customFromInput || undefined}
-                    className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 ${
+                    className={`w-full h-9 px-2.5 rounded-lg border text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 ${
                       customRangeError ? "border-red-300" : "border-slate-200"
                     }`}
                   />
@@ -577,7 +577,7 @@ export default function TransactionsPage() {
           </p>
           <Link
             href="/send-money"
-            className="inline-flex items-center gap-2 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
+            className="inline-flex items-center gap-2 h-10 px-5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors"
           >
             <Send className="w-4 h-4" />
             {appliedRef || appliedDateRangePreset !== "ALL"

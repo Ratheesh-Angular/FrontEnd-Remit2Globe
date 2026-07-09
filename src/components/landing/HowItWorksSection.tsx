@@ -51,7 +51,7 @@ export function HowItWorksSection() {
         </div>
 
         <div className="relative">
-          <div className="hidden lg:block absolute top-20 left-[12%] right-[12%] h-0.5 bg-gradient-to-r from-teal-200 via-teal-300 to-teal-200" />
+          <div className="hidden lg:block absolute top-20 left-[12%] right-[12%] h-0.5 bg-gradient-to-r from-red-200 via-red-300 to-red-200" />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
             {STEPS.map((item) => {
@@ -61,9 +61,9 @@ export function HowItWorksSection() {
                   key={item.step}
                   className="relative flex flex-col items-center text-center"
                 >
-                  <div className="relative z-10 flex items-center justify-center w-16 h-16 rounded-full bg-teal-600 text-white shadow-lg shadow-teal-600/30 mb-5">
+                  <div className="relative z-10 flex items-center justify-center w-16 h-16 rounded-full bg-red-600 text-white shadow-lg shadow-red-600/30 mb-5">
                     <Icon className="w-7 h-7" />
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full bg-white text-teal-600 text-xs font-bold border-2 border-teal-600">
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full bg-white text-red-600 text-xs font-bold border-2 border-red-600">
                       {item.step}
                     </span>
                   </div>

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import R2GLogo from "../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 
 const NAV_LINKS = [
   { label: "How It Works", href: "#how-it-works" },
@@ -35,7 +34,7 @@ export function LandingHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <h1 className="text-2xl font-bold text-teal-600">Amigo</h1>
+            <FlexLogo className="h-8 sm:h-9 lg:h-10 max-w-none" priority />
           </Link>
 
           <nav className="hidden lg:flex items-center gap-8">
@@ -43,7 +42,7 @@ export function LandingHeader() {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors"
+                className="text-sm font-medium text-slate-600 hover:text-red-700 transition-colors"
               >
                 {link.label}
               </a>
@@ -53,13 +52,13 @@ export function LandingHeader() {
           <div className="hidden lg:flex items-center gap-3">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center h-10 px-5 text-sm font-medium text-teal-700 border border-teal-600 rounded-lg hover:bg-teal-50 transition-colors"
+              className="inline-flex items-center justify-center h-10 px-5 text-sm font-medium text-red-700 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
             >
               Login
             </Link>
             <Link
               href="/register"
-              className="inline-flex items-center justify-center h-10 px-5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+              className="inline-flex items-center justify-center h-10 px-5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm"
             >
               Get Started
             </Link>
@@ -97,14 +96,14 @@ export function LandingHeader() {
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}
-                className="block w-full text-center px-4 py-2.5 text-sm font-medium text-teal-700 border border-teal-600 rounded-lg hover:bg-teal-50"
+                className="block w-full text-center px-4 py-2.5 text-sm font-medium text-red-700 border border-red-600 rounded-lg hover:bg-red-50"
               >
                 Login
               </Link>
               <Link
                 href="/register"
                 onClick={() => setMobileOpen(false)}
-                className="block w-full text-center px-4 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                className="block w-full text-center px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
               >
                 Get Started
               </Link>

@@ -132,7 +132,7 @@ function CorporateKeyPersonnelProfileList({ value }: { value: unknown }) {
         return (
           <li
             key={idx}
-            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-teal-600"
+            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-red-600"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1 space-y-2">
@@ -163,7 +163,7 @@ function CorporateKeyPersonnelProfileList({ value }: { value: unknown }) {
                   href={docUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
                 >
                   View document
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -200,14 +200,14 @@ function CorporateShareholdersProfileList({ value }: { value: unknown }) {
         return (
           <li
             key={idx}
-            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-teal-600"
+            className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 shadow-sm border-l-[3px] border-l-red-600"
           >
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${
                   isCorporate
                     ? "bg-slate-100 text-slate-800 ring-slate-200"
-                    : "bg-teal-50 text-teal-800 ring-teal-200"
+                    : "bg-red-50 text-red-800 ring-red-200"
                 }`}
               >
                 {isCorporate ? "Corporate" : "Individual"}
@@ -249,7 +249,7 @@ function CorporateShareholdersProfileList({ value }: { value: unknown }) {
                   href={docUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
                 >
                   View document
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -454,7 +454,7 @@ export default function ProfilePageClient() {
                   flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors
                   ${
                     active
-                      ? "border-teal-600 text-teal-700"
+                      ? "border-red-600 text-red-700"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-200"
                   }
                 `}
@@ -520,7 +520,7 @@ export default function ProfilePageClient() {
                     action={
                       <Link
                         href="/onboarding/profile"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 hover:text-teal-700"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         Update in KYC
@@ -626,7 +626,7 @@ export default function ProfilePageClient() {
                     action={
                       <Link
                         href="/onboarding/profile"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 hover:text-teal-700"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         Update in KYC
@@ -843,7 +843,7 @@ export default function ProfilePageClient() {
                 action={
                   <Link
                     href="/onboarding/profile?step=documents"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 hover:text-teal-700"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
                   >
                     Manage uploads
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -878,7 +878,7 @@ export default function ProfilePageClient() {
                                   href={String(doc.fileUrl)}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-teal-600 hover:text-teal-700 font-medium inline-flex items-center gap-1"
+                                  className="text-red-600 hover:text-red-700 font-medium inline-flex items-center gap-1"
                                 >
                                   {String(doc.fileName ?? "View")}
                                   <ExternalLink className="w-3.5 h-3.5" />
@@ -991,7 +991,7 @@ function ChangePasswordPanel({
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
             <button
               type="button"
@@ -1013,7 +1013,7 @@ function ChangePasswordPanel({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
             <button
               type="button"
@@ -1080,7 +1080,7 @@ function ChangePasswordPanel({
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               autoComplete="new-password"
-              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 pr-14 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
             <button
               type="button"
@@ -1098,7 +1098,7 @@ function ChangePasswordPanel({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="inline-flex h-11 items-center justify-center rounded-lg bg-teal-600 px-6 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex h-11 items-center justify-center rounded-lg bg-red-600 px-6 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Updating…" : "Update password"}
         </button>

@@ -89,7 +89,7 @@ export function DocumentPreviewModal({
               href={fileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-teal-600 hover:text-teal-700"
+              className="text-xs font-medium text-red-600 hover:text-red-700"
             >
               Open in new tab
             </a>
@@ -141,7 +141,7 @@ export function DocumentPreviewModal({
                 href={fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex h-10 items-center rounded-lg bg-teal-600 px-5 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+                className="inline-flex h-10 items-center rounded-lg bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-700"
               >
                 Open file
               </a>

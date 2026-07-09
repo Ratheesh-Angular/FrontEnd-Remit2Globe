@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
-import Image from "next/image";
-import R2GLogo from "../../../../assets/logos/R2GLogo.png";
+import { FlexLogo } from "@/components/brand/FlexLogo";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { notifyApiError, notifyError, notifyInfo } from "@/lib/notify";
 
@@ -59,13 +58,7 @@ export default function ForgotPasswordPage() {
       <AppLoadingOverlay show={isLoading} label="Sending code…" />
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-8">
         <div className="flex justify-center mb-6">
-          {/* <Image
-            src={R2GLogo}
-            alt="Amigo"
-            priority
-            className="object-contain w-[125px]"
-          /> */}
-          <h5 className="text-2xl font-bold text-teal-600">AMIGO</h5>
+          <FlexLogo priority />
         </div>
         <h1 className="text-xl font-semibold text-slate-900 mb-1">
           Forgot password
@@ -85,14 +78,14 @@ export default function ForgotPasswordPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
-              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+              className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-11 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? "Sending…" : "Continue"}
           </button>
@@ -101,7 +94,7 @@ export default function ForgotPasswordPage() {
         <p className="text-center text-sm text-slate-500 mt-6">
           <a
             href="/login"
-            className="text-teal-600 hover:text-teal-700 font-medium"
+            className="text-red-600 hover:text-red-700 font-medium"
           >
             Back to sign in
           </a>

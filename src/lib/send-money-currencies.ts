@@ -240,6 +240,62 @@ export const PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY: Record<string, string> = {
   USD: "USA",
 };
 
+/** One row per receive currency; maps back to a catalog country for display & quotes. */
+export type RecipientReceiveOption = {
+  currency: string;
+  couCode: string;
+  couName: string;
+};
+
+export function dedupeCatalogCountries<
+  T extends { couCode: string },
+>(countries: T[]): T[] {
+  const byCode = new Map<string, T>();
+  for (const c of countries) {
+    if (!byCode.has(c.couCode)) byCode.set(c.couCode, c);
+  }
+  return [...byCode.values()];
+}
+
+/** Unique receive currencies from the full catalog (one representative country each). */
+export function buildRecipientCurrencyOptions(
+  catalogCountries: { couCode: string; couName: string }[],
+): RecipientReceiveOption[] {
+  const byCurrency = new Map<string, RecipientReceiveOption>();
+  for (const c of dedupeCatalogCountries(catalogCountries)) {
+    const currency = legalCurrencyForCouCode(c.couCode);
+    const opt: RecipientReceiveOption = {
+      currency,
+      couCode: c.couCode,
+      couName: c.couName,
+    };
+    const existing = byCurrency.get(currency);
+    const preferred =
+      PREFERRED_COU_CODE_FOR_RECEIVE_CURRENCY[currency.toUpperCase()];
+    if (!existing) {
+      byCurrency.set(currency, opt);
+      continue;
+    }
+    if (preferred && c.couCode.toUpperCase() === preferred) {
+      byCurrency.set(currency, opt);
+    }
+  }
+  return [...byCurrency.values()].sort((a, b) =>
+    a.currency.localeCompare(b.currency),
+  );
+}
+
+export function payCurrencyFlagCode(currency: string): string {
+  return CURRENCY_TO_FLAG_ALPHA2[currency.toUpperCase()] ?? "US";
+}
+
+export function fmtMoney(n: number): string {
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export const AFRICAN_MOBILE_PAYIN_ISO2 = new Set([
   "KE",
   "TZ",

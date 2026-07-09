@@ -17,7 +17,7 @@ const FAQ_ITEMS = [
   {
     question: "Which countries can I send to?",
     answer:
-      "Amigo supports transfers to 97+ countries across Africa, Asia, Europe, and the Americas. Popular destinations include India, Kenya, Ghana, Nigeria, Uganda, Pakistan, Bangladesh, Philippines, and many more.",
+      "Flex Money supports transfers to 100+ countries across Africa, Asia, Europe, and the Americas. Popular destinations include India, Kenya, Ghana, Nigeria, Uganda, Pakistan, Bangladesh, Philippines, and many more.",
   },
   {
     question: "Is my money safe?",

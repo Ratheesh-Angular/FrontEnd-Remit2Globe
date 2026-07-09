@@ -1,84 +1,151 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import Flag from "react-world-flags";
+import { ArrowRight } from "lucide-react";
+import { RecipientCurrencySelect } from "@/components/remittance/RecipientCurrencySelect";
+import { Loader } from "@/components/ui/Loader";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { fetchFlexForexRate } from "@/lib/flex-forex-rate";
+import {
+  buildRecipientCurrencyOptions,
+  fmtMoney,
+  payCurrencyFlagCode,
+  type RecipientReceiveOption,
+} from "@/lib/send-money-currencies";
 
-type Country = {
-  couCode: string;
-  couName: string;
-  currency: string;
-  code2: string;
-};
+const PAY_CURRENCY = "USD";
 
-const POPULAR_COUNTRIES: Country[] = [
-  { couCode: "IND", couName: "India", currency: "INR", code2: "in" },
-  { couCode: "KEN", couName: "Kenya", currency: "KES", code2: "ke" },
-  { couCode: "GHA", couName: "Ghana", currency: "GHS", code2: "gh" },
-  { couCode: "TZA", couName: "Tanzania", currency: "TZS", code2: "tz" },
-  { couCode: "UGA", couName: "Uganda", currency: "UGX", code2: "ug" },
-  { couCode: "NGA", couName: "Nigeria", currency: "NGN", code2: "ng" },
-  { couCode: "PAK", couName: "Pakistan", currency: "PKR", code2: "pk" },
-  { couCode: "BGD", couName: "Bangladesh", currency: "BDT", code2: "bd" },
-  { couCode: "PHL", couName: "Philippines", currency: "PHP", code2: "ph" },
-  {
-    couCode: "ARE",
-    couName: "United Arab Emirates",
-    currency: "AED",
-    code2: "ae",
-  },
-  { couCode: "GBR", couName: "United Kingdom", currency: "GBP", code2: "gb" },
-  { couCode: "ZAF", couName: "South Africa", currency: "ZAR", code2: "za" },
-];
+function sanitizeAmountInput(raw: string): string {
+  return raw.replace(/[^0-9.,]/g, "");
+}
 
-const SAMPLE_RATES: Record<string, number> = {
-  INR: 83.45,
-  KES: 129.5,
-  GHS: 15.85,
-  TZS: 2540.0,
-  UGX: 3720.0,
-  NGN: 1550.0,
-  PKR: 278.5,
-  BDT: 110.25,
-  PHP: 56.8,
-  AED: 3.67,
-  GBP: 0.79,
-  ZAR: 18.25,
-};
+function parseAmount(raw: string): number {
+  const parsed = parseFloat(raw.replace(/,/g, ""));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
 
-function formatAmount(amount: number, currency: string): string {
-  return (
-    new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount) + ` ${currency}`
-  );
+function formatDerivedAmount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function RateCalculator() {
-  const [amount, setAmount] = useState("1000");
-  const [selectedCountry, setSelectedCountry] = useState(POPULAR_COUNTRIES[0]);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { countries: catalogCountries, loading: catalogLoading } =
+    useCatalogCountries(true);
 
-  const numericAmount = useMemo(() => {
-    const parsed = parseFloat(amount.replace(/,/g, ""));
-    return isNaN(parsed) || parsed < 0 ? 0 : parsed;
-  }, [amount]);
+  const recipientCurrencyOptions = useMemo(
+    () => buildRecipientCurrencyOptions(catalogCountries),
+    [catalogCountries],
+  );
 
-  const rate = SAMPLE_RATES[selectedCountry.currency] ?? 1;
-  const receivedAmount = numericAmount * rate;
+  const defaultReceiveOption = useMemo(() => {
+    return (
+      recipientCurrencyOptions.find((o) => o.currency === "INR") ??
+      recipientCurrencyOptions[0] ??
+      null
+    );
+  }, [recipientCurrencyOptions]);
+
+  const [receiveOption, setReceiveOption] =
+    useState<RecipientReceiveOption | null>(null);
+  const [payAmount, setPayAmount] = useState("1000");
+  const [receiveAmount, setReceiveAmount] = useState("");
+  const [amountEditSide, setAmountEditSide] = useState<"pay" | "receive">("pay");
+  const [flexForexRate, setFlexForexRate] = useState<number | null>(null);
+  const [reverseFlexForexRate, setReverseFlexForexRate] = useState<
+    number | null
+  >(null);
+  const [flexForexLoading, setFlexForexLoading] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-rate-dropdown]")) {
-        setDropdownOpen(false);
-      }
+    if (!receiveOption && defaultReceiveOption) {
+      setReceiveOption(defaultReceiveOption);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [defaultReceiveOption, receiveOption]);
+
+  const receiveCurrency = receiveOption?.currency ?? "";
+
+  const refreshFlexForexRate = useCallback(async () => {
+    if (!receiveCurrency.trim()) {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      setRateError(null);
+      return;
+    }
+    setFlexForexLoading(true);
+    setRateError(null);
+    try {
+      const [forward, reverse] = await Promise.all([
+        fetchFlexForexRate(PAY_CURRENCY, receiveCurrency),
+        fetchFlexForexRate(receiveCurrency, PAY_CURRENCY),
+      ]);
+      setFlexForexRate(forward.rate);
+      setReverseFlexForexRate(reverse.rate);
+    } catch {
+      setFlexForexRate(null);
+      setReverseFlexForexRate(null);
+      setRateError("Could not load exchange rate for this currency pair.");
+    } finally {
+      setFlexForexLoading(false);
+    }
+  }, [receiveCurrency]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void refreshFlexForexRate();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [refreshFlexForexRate]);
+
+  /** Keep the non-edited side in sync from live Flex rates (same pattern as send-money). */
+  useEffect(() => {
+    if (flexForexLoading) return;
+
+    if (amountEditSide === "pay") {
+      const pay = parseAmount(payAmount);
+      if (!pay || flexForexRate == null) {
+        if (!pay) setReceiveAmount("");
+        return;
+      }
+      setReceiveAmount(formatDerivedAmount(pay * flexForexRate));
+      return;
+    }
+
+    const recv = parseAmount(receiveAmount);
+    if (!recv || reverseFlexForexRate == null) {
+      if (!recv) setPayAmount("");
+      return;
+    }
+    setPayAmount(formatDerivedAmount(recv * reverseFlexForexRate));
+  }, [
+    amountEditSide,
+    payAmount,
+    receiveAmount,
+    flexForexRate,
+    reverseFlexForexRate,
+    flexForexLoading,
+  ]);
+
+  const rateDisplayForward = amountEditSide === "pay";
+  const displayedFromCurrency = rateDisplayForward
+    ? PAY_CURRENCY
+    : receiveCurrency;
+  const displayedToCurrency = rateDisplayForward
+    ? receiveCurrency
+    : PAY_CURRENCY;
+  const displayedFxRate = rateDisplayForward
+    ? flexForexRate
+    : reverseFlexForexRate;
+  const rateDisplayLoading =
+    flexForexLoading &&
+    (rateDisplayForward ? !!parseAmount(payAmount) : !!parseAmount(receiveAmount));
 
   return (
     <section id="rate-calculator" className="py-8 lg:py-16 bg-white">
@@ -97,8 +164,11 @@ export function RateCalculator() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 p-6 sm:p-8">
             <div className="space-y-6">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
-                  You Send
+                <label
+                  htmlFor="landing-pay-amount"
+                  className="text-sm font-medium text-slate-700 mb-2 block"
+                >
+                  What you pay
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1">
@@ -106,17 +176,20 @@ export function RateCalculator() {
                       $
                     </span>
                     <input
+                      id="landing-pay-amount"
                       type="text"
-                      value={amount}
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={payAmount}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9.,]/g, "");
-                        setAmount(val);
+                        setAmountEditSide("pay");
+                        setPayAmount(sanitizeAmountInput(e.target.value));
                       }}
-                      className="w-full h-14 pl-8 pr-4 text-xl font-semibold text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                      className="w-full h-14 pl-8 pr-4 text-xl font-semibold text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                       placeholder="1,000"
                     />
                   </div>
-                  <div className="flex items-center gap-2 h-14 px-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2 h-14 px-4 bg-slate-50 rounded-xl border border-slate-200 shrink-0">
                     <Image
                       src="https://flagcdn.com/w40/us.png"
                       alt="USA"
@@ -125,104 +198,94 @@ export function RateCalculator() {
                       className="rounded-sm"
                       unoptimized
                     />
-                    <span className="font-semibold text-slate-900">USD</span>
+                    <span className="font-semibold text-slate-900">
+                      {PAY_CURRENCY}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-3 text-sm text-slate-500">
-                <div className="h-px flex-1 bg-slate-200" />
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 font-medium">
-                  <RefreshCw className="w-3.5 h-3.5" />1 USD ={" "}
-                  {rate.toLocaleString()} {selectedCountry.currency}
-                </div>
-                <div className="h-px flex-1 bg-slate-200" />
+              <div className="flex justify-center min-h-[2rem] items-center">
+                {rateDisplayLoading ? (
+                  <Loader variant="inline" label="Loading rate…" />
+                ) : displayedFxRate != null &&
+                  displayedFromCurrency &&
+                  displayedToCurrency ? (
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-50/90 pl-1.5 pr-2.5 py-1 border border-slate-100 shadow-sm">
+                    <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
+                      <Flag
+                        code={payCurrencyFlagCode(displayedFromCurrency)}
+                        className="h-full w-full object-cover"
+                      />
+                    </span>
+                    <p className="text-sm text-slate-700 tabular-nums">
+                      <span className="font-semibold text-slate-800">
+                        1 {displayedFromCurrency}
+                      </span>
+                      <span className="text-slate-400 mx-1">=</span>
+                      <span className="font-semibold text-slate-800">
+                        {fmtMoney(displayedFxRate)} {displayedToCurrency}
+                      </span>
+                    </p>
+                    <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
+                      <Flag
+                        code={payCurrencyFlagCode(displayedToCurrency)}
+                        className="h-full w-full object-cover"
+                      />
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 text-center">
+                    {rateError ??
+                      (catalogLoading
+                        ? "Loading supported currencies…"
+                        : "Select a receive currency to see rate")}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
+                <label
+                  htmlFor="landing-receive-amount"
+                  className="text-sm font-medium text-slate-700 mb-2 block"
+                >
                   Recipient Gets
                 </label>
                 <div className="flex items-center gap-3">
-                  <div className="relative flex-1">
-                    <div className="w-full h-14 px-4 flex items-center text-xl font-semibold text-slate-900 rounded-xl bg-teal-50 border border-teal-200">
-                      {formatAmount(receivedAmount, selectedCountry.currency)}
-                    </div>
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      id="landing-receive-amount"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={receiveAmount}
+                      onChange={(e) => {
+                        setAmountEditSide("receive");
+                        setReceiveAmount(sanitizeAmountInput(e.target.value));
+                      }}
+                      placeholder="0"
+                      className="w-full h-14 px-4 text-xl font-semibold text-slate-900 rounded-xl bg-red-50 border border-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+                    />
                   </div>
-                  <div className="relative" data-rate-dropdown>
-                    <button
-                      type="button"
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
-                      className="flex items-center gap-2 h-14 px-4 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors min-w-[140px]"
-                    >
-                      <Image
-                        src={`https://flagcdn.com/w40/${selectedCountry.code2}.png`}
-                        alt={selectedCountry.couName}
-                        width={24}
-                        height={18}
-                        className="rounded-sm"
-                        unoptimized
-                      />
-                      <span className="font-semibold text-slate-900">
-                        {selectedCountry.currency}
-                      </span>
-                      <svg
-                        className={`w-4 h-4 text-slate-400 ml-auto transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-
-                    {dropdownOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-64 max-h-72 overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-lg z-10">
-                        {POPULAR_COUNTRIES.map((country) => (
-                          <button
-                            key={country.couCode}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCountry(country);
-                              setDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
-                              selectedCountry.couCode === country.couCode
-                                ? "bg-teal-50 text-teal-700"
-                                : "text-slate-700"
-                            }`}
-                          >
-                            <Image
-                              src={`https://flagcdn.com/w40/${country.code2}.png`}
-                              alt={country.couName}
-                              width={24}
-                              height={18}
-                              className="rounded-sm shrink-0"
-                              unoptimized
-                            />
-                            <span className="flex-1 font-medium truncate">
-                              {country.couName}
-                            </span>
-                            <span className="text-sm text-slate-500">
-                              {country.currency}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <RecipientCurrencySelect
+                    value={receiveCurrency}
+                    options={recipientCurrencyOptions}
+                    loading={catalogLoading}
+                    disabled={
+                      catalogLoading || recipientCurrencyOptions.length === 0
+                    }
+                    onChange={(opt) => {
+                      setReceiveOption(opt);
+                      setAmountEditSide("pay");
+                    }}
+                  />
                 </div>
               </div>
 
               <div className="pt-4">
                 <Link
                   href="/register"
-                  className="flex items-center justify-center gap-2 w-full h-14 text-base font-semibold text-white bg-teal-600 rounded-xl hover:bg-teal-700 transition-colors shadow-lg shadow-teal-600/25"
+                  className="flex items-center justify-center gap-2 w-full h-14 text-base font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-600/25"
                 >
                   Send Money Now
                   <ArrowRight className="w-5 h-5" />

@@ -164,7 +164,7 @@ export function CatalogCountrySelect({
                     }}
                     className={`${fieldDropdownOption} gap-2.5 ${
                       selected?.couCode === c.couCode
-                        ? "bg-teal-50 text-teal-700 font-medium"
+                        ? "bg-red-50 text-red-700 font-medium"
                         : "text-slate-700"
                     }`}
                   >
@@ -172,7 +172,7 @@ export function CatalogCountrySelect({
                     <span>{c.couName}</span>
                     {selected?.couCode === c.couCode && (
                       <svg
-                        className="ml-auto w-4 h-4 text-teal-600"
+                        className="ml-auto w-4 h-4 text-red-600"
                         viewBox="0 0 20 20"
                         fill="currentColor"
                       >

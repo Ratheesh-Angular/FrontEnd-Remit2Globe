@@ -60,7 +60,7 @@ export default function KycProfilePage() {
         <p>{loadError}</p>
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-lg bg-teal-600 hover:bg-teal-700 px-4 py-2 text-white font-medium"
+          className="inline-flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-white font-medium"
           onClick={() => window.location.reload()}
         >
           Refresh
@@ -72,7 +72,7 @@ export default function KycProfilePage() {
   if (!role) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

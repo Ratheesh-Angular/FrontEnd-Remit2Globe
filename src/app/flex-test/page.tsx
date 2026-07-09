@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { flexApiUrl } from "@/lib/flex-api";
 
-type TabId = "general" | "ifsc" | "forex";
+type TabId = "general" | "ifsc" | "forex" | "verify";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "general", label: "General API" },
   { id: "ifsc", label: "IFSC Validate" },
   { id: "forex", label: "Forex Rate" },
+  { id: "verify", label: "Verify MSISDN / Account" },
 ];
 
 const FOREX_PRESETS = [
@@ -59,15 +60,30 @@ export default function FlexTestPage() {
   const [forexLoading, setForexLoading] = useState(false);
   const [forexResult, setForexResult] = useState<unknown>(null);
 
+  const [msisdn, setMsisdn] = useState("");
+  const [msisdnLoading, setMsisdnLoading] = useState(false);
+  const [msisdnResult, setMsisdnResult] = useState<unknown>(null);
+
+  const [accountNumber, setAccountNumber] = useState("");
+  const [bankCode, setBankCode] = useState("");
+  const [accountCouCode, setAccountCouCode] = useState("");
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountResult, setAccountResult] = useState<unknown>(null);
+
   const resolvedCurrPair = useMemo(() => {
     if (currPairOverride.trim()) return currPairOverride.trim();
     return `${fromCurrency} - ${toCurrency}`;
   }, [currPairOverride, fromCurrency, toCurrency]);
 
   const countryOptions = useMemo(() => {
-    if (!response || typeof response !== "object" || response === null) return [];
+    if (!response || typeof response !== "object" || response === null)
+      return [];
     const data = (response as { data?: { data?: unknown } }).data;
-    if (!data || typeof data !== "object" || !Array.isArray((data as { data?: unknown }).data)) {
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !Array.isArray((data as { data?: unknown }).data)
+    ) {
       return [];
     }
     return (data as { data: { couCode: string; couName: string }[] }).data;
@@ -160,6 +176,65 @@ export default function FlexTestPage() {
     setToCurrency(to);
   };
 
+  const verifyMsisdn = async () => {
+    const trimmed = msisdn.trim();
+    if (!trimmed) {
+      setMsisdnResult({ success: false, error: "Enter an MSISDN" });
+      return;
+    }
+
+    try {
+      setMsisdnLoading(true);
+      const res = await fetch(flexApiUrl("/msisdn-verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: trimmed }),
+      });
+      const data = await res.json().catch(() => ({ error: "Invalid JSON" }));
+      setMsisdnResult({ httpStatus: res.status, ...data });
+    } catch (err) {
+      console.error(err);
+      setMsisdnResult({ success: false, error: "Request failed" });
+    } finally {
+      setMsisdnLoading(false);
+    }
+  };
+
+  const verifyAccount = async () => {
+    const payload = accountNumber.trim();
+    const bank = bankCode.trim();
+    const cou = accountCouCode.trim();
+    if (!payload || !bank || !cou) {
+      setAccountResult({
+        success: false,
+        error: "Account number, bank code, and country code are required",
+      });
+      return;
+    }
+
+    try {
+      setAccountLoading(true);
+      const res = await fetch(flexApiUrl("/account-verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payload,
+          bankCode: bank,
+          couCode: cou,
+        }),
+      });
+      const data = await res.json().catch(() => ({ error: "Invalid JSON" }));
+      setAccountResult({ httpStatus: res.status, ...data });
+    } catch (err) {
+      console.error(err);
+      setAccountResult({ success: false, error: "Request failed" });
+    } finally {
+      setAccountLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -169,7 +244,7 @@ export default function FlexTestPage() {
           </h1>
           <p className="mt-2 text-sm text-slate-600">
             Sandbox tools for Flex endpoints via our backend proxy (
-            <code className="text-teal-700">/api/flex/*</code>).
+            <code className="text-red-700">/api/flex/*</code>).
           </p>
         </div>
 
@@ -181,7 +256,7 @@ export default function FlexTestPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === tab.id
-                  ? "bg-white text-teal-700 border border-slate-200 border-b-white -mb-px"
+                  ? "bg-white text-red-700 border border-slate-200 border-b-white -mb-px"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -226,27 +301,29 @@ export default function FlexTestPage() {
                 </button>
               </div>
 
-              {loading && <p className="text-sm text-slate-500 mb-3">Loading…</p>}
+              {loading && (
+                <p className="text-sm text-slate-500 mb-3">Loading…</p>
+              )}
 
               {countryOptions.length > 0 && (
-                  <div className="mb-5">
-                    <label className="text-sm font-medium text-slate-700">
-                      Select country for banks
-                    </label>
-                    <select
-                      className="mt-1.5 block w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      onChange={(e) => handleGetBanks(e.target.value)}
-                      defaultValue=""
-                    >
-                      <option value="">— Select country —</option>
-                      {countryOptions.map((country) => (
-                        <option key={country.couCode} value={country.couCode}>
-                          {country.couName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="mb-5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Select country for banks
+                  </label>
+                  <select
+                    className="mt-1.5 block w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    onChange={(e) => handleGetBanks(e.target.value)}
+                    defaultValue=""
+                  >
+                    <option value="">— Select country —</option>
+                    {countryOptions.map((country) => (
+                      <option key={country.couCode} value={country.couCode}>
+                        {country.couName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <JsonBlock value={response} />
             </div>
@@ -254,11 +331,13 @@ export default function FlexTestPage() {
 
           {activeTab === "ifsc" && (
             <div>
-              <h2 className="text-lg font-semibold mb-2">IFSC validate (Flex)</h2>
+              <h2 className="text-lg font-semibold mb-2">
+                IFSC validate (Flex)
+              </h2>
               <p className="text-sm text-slate-600 mb-4">
                 POSTs to our backend; server calls Flex{" "}
-                <code className="text-teal-700">/ifscValidate</code> with{" "}
-                <code className="text-teal-700">
+                <code className="text-red-700">/ifscValidate</code> with{" "}
+                <code className="text-red-700">
                   {`{ "type": "IFSC", "payload": "SBIN0001234" }`}
                 </code>
                 .
@@ -277,7 +356,7 @@ export default function FlexTestPage() {
                   type="button"
                   onClick={validateIfsc}
                   disabled={ifscLoading}
-                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
                 >
                   {ifscLoading ? "Validating…" : "Validate IFSC"}
                 </button>
@@ -292,10 +371,10 @@ export default function FlexTestPage() {
               <h2 className="text-lg font-semibold mb-2">Forex rate (Flex)</h2>
               <p className="text-sm text-slate-600 mb-4">
                 POSTs to our backend; server calls Flex{" "}
-                <code className="text-teal-700">/forexRate</code> with signed
+                <code className="text-red-700">/forexRate</code> with signed
                 headers (Bearer token, x-userId, x-password, x-timestamp) and
                 body{" "}
-                <code className="text-teal-700">
+                <code className="text-red-700">
                   {`{ "currPair": "USD - KES" }`}
                 </code>
                 .
@@ -311,7 +390,7 @@ export default function FlexTestPage() {
                       key={preset.label}
                       type="button"
                       onClick={() => applyForexPreset(preset.from, preset.to)}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium border border-slate-200 bg-white hover:border-teal-300 hover:text-teal-700"
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border border-slate-200 bg-white hover:border-red-300 hover:text-red-700"
                     >
                       {preset.label}
                     </button>
@@ -373,7 +452,7 @@ export default function FlexTestPage() {
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
                   Will send:{" "}
-                  <code className="text-teal-700">{resolvedCurrPair}</code>
+                  <code className="text-red-700">{resolvedCurrPair}</code>
                 </p>
               </div>
 
@@ -381,12 +460,116 @@ export default function FlexTestPage() {
                 type="button"
                 onClick={fetchForexRate}
                 disabled={forexLoading}
-                className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
               >
                 {forexLoading ? "Fetching rate…" : "Get Forex Rate"}
               </button>
 
               <JsonBlock value={forexResult} />
+            </div>
+          )}
+
+          {activeTab === "verify" && (
+            <div className="space-y-10">
+              <section>
+                <h2 className="text-lg font-semibold mb-2">
+                  Verify MSISDN (Flex)
+                </h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  POSTs to our backend; server calls Flex{" "}
+                  <code className="text-red-700">/iVeryfy</code> with signed
+                  headers and body{" "}
+                  <code className="text-red-700">
+                    {`{ "payload": "2547XXXXXXXX" }`}
+                  </code>
+                  . Returns the registered name for the MSISDN.
+                </p>
+
+                <div className="flex flex-wrap gap-3 items-center">
+                  <input
+                    type="text"
+                    value={msisdn}
+                    onChange={(e) => setMsisdn(e.target.value)}
+                    placeholder="e.g. 254712345678"
+                    className="min-w-[200px] rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={verifyMsisdn}
+                    disabled={msisdnLoading}
+                    className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {msisdnLoading ? "Verifying…" : "Verify MSISDN"}
+                  </button>
+                </div>
+
+                <JsonBlock value={msisdnResult} />
+              </section>
+
+              <section className="border-t border-slate-200 pt-8">
+                <h2 className="text-lg font-semibold mb-2">
+                  Verify Account (Flex)
+                </h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  POSTs to our backend; server calls Flex{" "}
+                  <code className="text-red-700">/accountVerify</code> with
+                  signed headers and body{" "}
+                  <code className="text-red-700">
+                    {`{ "payload": "<account>", "bankCode": "…", "couCode": "…" }`}
+                  </code>
+                  . Returns the account holder name.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Account number
+                    </label>
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      placeholder="Account number"
+                      className="mt-1.5 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Bank code
+                    </label>
+                    <input
+                      type="text"
+                      value={bankCode}
+                      onChange={(e) => setBankCode(e.target.value)}
+                      placeholder="Bank code"
+                      className="mt-1.5 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Country code (ISO)
+                    </label>
+                    <input
+                      type="text"
+                      value={accountCouCode}
+                      onChange={(e) => setAccountCouCode(e.target.value)}
+                      placeholder="e.g. KEN"
+                      className="mt-1.5 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono uppercase"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={verifyAccount}
+                  disabled={accountLoading}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                >
+                  {accountLoading ? "Verifying…" : "Verify Account"}
+                </button>
+
+                <JsonBlock value={accountResult} />
+              </section>
             </div>
           )}
         </div>

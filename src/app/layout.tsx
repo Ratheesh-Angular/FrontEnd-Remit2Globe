@@ -14,9 +14,9 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Amigo - Send Money Abroad with Confidence",
+  title: "Flex Money - Send Money Abroad with Confidence",
   description:
-    "Fast, secure international money transfers to 97+ countries. Send to bank accounts, mobile wallets, or cash pickup. Competitive exchange rates and transparent fees.",
+    "Fast, secure international money transfers to 100+ countries. Send to bank accounts, mobile wallets, or cash pickup. Competitive exchange rates and transparent fees.",
   keywords: [
     "remittance",
     "money transfer",

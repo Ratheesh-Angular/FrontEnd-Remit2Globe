@@ -234,7 +234,7 @@ export default function BeneficiariesPage() {
             setEditId(null);
             setShowAddModal(true);
           }}
-          className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-teal-600/20 transition-colors shrink-0"
+          className="cursor-pointer inline-flex items-center justify-center gap-2 h-11 px-5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-red-600/20 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" />
           Add beneficiary
@@ -258,7 +258,7 @@ export default function BeneficiariesPage() {
               setEditId(null);
               setShowAddModal(true);
             }}
-            className="cursor-pointer inline-flex items-center gap-2 h-10 px-5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-xl transition-colors"
+            className="cursor-pointer inline-flex items-center gap-2 h-10 px-5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add your first beneficiary
@@ -345,7 +345,7 @@ export default function BeneficiariesPage() {
                             {isActive ? (
                               <Link
                                 href={`/send-money?beneficiaryId=${encodeURIComponent(b.id)}`}
-                                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm shadow-teal-600/20"
+                                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm shadow-red-600/20"
                               >
                                 <SendHorizontal className="w-3.5 h-3.5" />
                                 Send money
@@ -400,7 +400,7 @@ export default function BeneficiariesPage() {
                             setShowAddModal(false);
                             setEditId(b.id);
                           }}
-                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 transition-colors"
+                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium text-red-800 bg-red-50 hover:bg-red-100 transition-colors"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                           Edit
@@ -455,7 +455,7 @@ export default function BeneficiariesPage() {
                         onClick={() => setPage(n)}
                         className={`min-w-[2.25rem] h-9 px-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${
                           n === page
-                            ? "bg-teal-600 text-white shadow-sm shadow-teal-600/25"
+                            ? "bg-red-600 text-white shadow-sm shadow-red-600/25"
                             : "text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200"
                         }`}
                       >

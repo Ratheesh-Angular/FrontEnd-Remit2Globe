@@ -158,7 +158,7 @@ export function FlexCountrySelect({
                     }}
                     className={`${fieldDropdownOption} gap-2.5 ${
                       value === c.couName
-                        ? "bg-teal-50 text-teal-700 font-medium"
+                        ? "bg-red-50 text-red-700 font-medium"
                         : "text-slate-700"
                     }`}
                   >
@@ -166,7 +166,7 @@ export function FlexCountrySelect({
                     <span>{c.couName}</span>
                     {value === c.couName && (
                       <svg
-                        className="ml-auto w-4 h-4 text-teal-600"
+                        className="ml-auto w-4 h-4 text-red-600"
                         viewBox="0 0 20 20"
                         fill="currentColor"
                       >
