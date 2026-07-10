@@ -16,10 +16,10 @@ const NEXT_AUTH_COOKIE_NAMES = [
 ] as const;
 
 function safeCallbackPath(raw: string | null): string {
-  const callbackUrl = raw ?? "/register";
+  const callbackUrl = raw ?? "/login";
   return callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
     ? callbackUrl
-    : "/register";
+    : "/login";
 }
 
 function shouldClearNextAuth(req: NextRequest): boolean {
