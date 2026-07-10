@@ -39,7 +39,9 @@ export default async function DashboardPage() {
   if (sessionUserId) {
     const row = await loadAppUser(sessionUserId);
     if (!row) {
-      redirect("/api/auth/signout?callbackUrl=/register");
+      redirect(
+        "/api/auth/clear-backend-session?callbackUrl=/register&nextAuth=1",
+      );
     }
     const validated = await getValidatedServerSession();
     if (validated?.user) {
@@ -52,7 +54,9 @@ export default async function DashboardPage() {
     if (me) {
       return <DashboardClient user={me} />;
     }
-    redirect("/api/auth/clear-backend-session?callbackUrl=/register");
+    redirect(
+      "/api/auth/clear-backend-session?callbackUrl=/register&nextAuth=1",
+    );
   }
 
   redirect("/register");
