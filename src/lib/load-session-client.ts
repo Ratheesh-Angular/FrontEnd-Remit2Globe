@@ -85,10 +85,17 @@ export async function clearStaleAuthAndRedirect(to: string): Promise<void> {
   } catch {
     /* cookie may already be gone */
   }
-  const callback = encodeURIComponent(
-    to.startsWith("/") && !to.startsWith("//") ? to : "/register",
-  );
-  window.location.href = `/api/auth/clear-backend-session?callbackUrl=${callback}&nextAuth=1`;
+  try {
+    await fetch("/api/auth/clear-backend-session?nextAuth=1", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch {
+    /* ignore */
+  }
+  const target =
+    to.startsWith("/") && !to.startsWith("//") ? to : "/register";
+  window.location.assign(target);
 }
 
 export function isStaleAuthHttpStatus(status: number | undefined): boolean {

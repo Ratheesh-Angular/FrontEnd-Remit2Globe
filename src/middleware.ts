@@ -1,6 +1,7 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 const protectedRoutes = [
   "/dashboard",
@@ -22,13 +23,17 @@ export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!authed && protectedRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(
+      new URL("/login", getPublicAppOrigin(request)),
+    );
   }
 
   // Only skip /login when NextAuth JWT is valid. Do not redirect /register — stale
   // cookies must not block Google signup after a DB user delete.
   if (hasNa && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(
+      new URL("/dashboard", getPublicAppOrigin(request)),
+    );
   }
 
   return NextResponse.next();

@@ -62,7 +62,17 @@ export default function OnboardingLayoutClient({
       } catch (e) {
         const status = getHttpErrorStatus(e);
         if (isStaleAuthHttpStatus(status)) {
-          await clearStaleAuthAndRedirect("/register");
+          const retry = await safeGetSession();
+          const hasNextAuth = Boolean(
+            initialSession?.user?.id ?? retry?.user?.id,
+          );
+          if (hasNextAuth) {
+            await clearStaleAuthAndRedirect("/register");
+            return;
+          }
+          setSessionBanner(
+            `Could not verify your session (HTTP ${status}). Try refreshing the page.`,
+          );
           return;
         }
         const retry = await safeGetSession();
