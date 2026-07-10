@@ -1,5 +1,5 @@
 import type { Session } from "next-auth";
-import { getSession, signOut } from "next-auth/react";
+import { getSession } from "next-auth/react";
 import type { AuthUser } from "@/store/auth.store";
 import { sessionApi as api } from "@/lib/api";
 
@@ -85,7 +85,10 @@ export async function clearStaleAuthAndRedirect(to: string): Promise<void> {
   } catch {
     /* cookie may already be gone */
   }
-  await signOut({ callbackUrl: to });
+  const callback = encodeURIComponent(
+    to.startsWith("/") && !to.startsWith("//") ? to : "/register",
+  );
+  window.location.href = `/api/auth/clear-backend-session?callbackUrl=${callback}&nextAuth=1`;
 }
 
 export function isStaleAuthHttpStatus(status: number | undefined): boolean {
