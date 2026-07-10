@@ -52,7 +52,7 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
-import { fetchFlexForexRate } from "@/lib/flex-forex-rate";
+import { fetchFlexForexRateBidirectional } from "@/lib/flex-forex-rate";
 
 interface FlexCountry {
   couCode: string;
@@ -905,12 +905,12 @@ function SendMoneyPageContent() {
     }
     setFlexForexLoading(true);
     try {
-      const [forward, reverse] = await Promise.all([
-        fetchFlexForexRate(payCurrency, receiveCurrency),
-        fetchFlexForexRate(receiveCurrency, payCurrency),
-      ]);
-      setFlexForexRate(forward.rate);
-      setReverseFlexForexRate(reverse.rate);
+      const { forwardRate, reverseRate } = await fetchFlexForexRateBidirectional(
+        payCurrency,
+        receiveCurrency,
+      );
+      setFlexForexRate(forwardRate);
+      setReverseFlexForexRate(reverseRate);
     } catch {
       setFlexForexRate(null);
       setReverseFlexForexRate(null);

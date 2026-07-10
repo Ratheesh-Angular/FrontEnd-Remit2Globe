@@ -86,7 +86,7 @@ export default function LoginPage() {
               type="text"
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
-              placeholder="you@example.com or +1234567890"
+              placeholder="Email or Phone Number"
               autoComplete="username"
               className="border border-slate-200 rounded-lg px-3 h-10 w-full text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
             />
@@ -115,6 +115,15 @@ export default function LoginPage() {
             </div>
           </div>
 
+          <p className="text-right mb-2">
+            <a
+              href="/forgot-password"
+              className="text-red-600 hover:text-red-700 font-medium text-sm"
+            >
+              Forgot password?
+            </a>
+          </p>
+
           <button
             type="submit"
             disabled={isLoading}
@@ -124,7 +133,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 space-y-3 text-sm">
+        <div className="mt-6 text-sm">
           <p className="text-center text-slate-500">
             Don&apos;t have an account?{" "}
             <a
@@ -132,14 +141,6 @@ export default function LoginPage() {
               className="text-red-600 hover:text-red-700 font-medium"
             >
               Create one
-            </a>
-          </p>
-          <p>
-            <a
-              href="/forgot-password"
-              className="text-red-600 hover:text-red-700 font-medium"
-            >
-              Forgot password?
             </a>
           </p>
         </div>

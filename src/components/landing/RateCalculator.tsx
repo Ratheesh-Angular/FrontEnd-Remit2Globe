@@ -1,22 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import Flag from "react-world-flags";
 import { ArrowRight } from "lucide-react";
 import { RecipientCurrencySelect } from "@/components/remittance/RecipientCurrencySelect";
 import { Loader } from "@/components/ui/Loader";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
-import { fetchFlexForexRate } from "@/lib/flex-forex-rate";
+import { fetchFlexForexRateBidirectional } from "@/lib/flex-forex-rate";
 import {
   buildRecipientCurrencyOptions,
   fmtMoney,
   payCurrencyFlagCode,
   type RecipientReceiveOption,
 } from "@/lib/send-money-currencies";
-
-const PAY_CURRENCY = "USD";
+import { useLandingCountry } from "@/components/landing/LandingCountryContext";
 
 function sanitizeAmountInput(raw: string): string {
   return raw.replace(/[^0-9.,]/g, "");
@@ -36,6 +34,7 @@ function formatDerivedAmount(n: number): string {
 }
 
 export function RateCalculator() {
+  const { payCurrency, setPayCurrency, payCurrencyOptions } = useLandingCountry();
   const { countries: catalogCountries, loading: catalogLoading } =
     useCatalogCountries(true);
 
@@ -81,13 +80,15 @@ export function RateCalculator() {
     }
     setFlexForexLoading(true);
     setRateError(null);
+    setFlexForexRate(null);
+    setReverseFlexForexRate(null);
     try {
-      const [forward, reverse] = await Promise.all([
-        fetchFlexForexRate(PAY_CURRENCY, receiveCurrency),
-        fetchFlexForexRate(receiveCurrency, PAY_CURRENCY),
-      ]);
-      setFlexForexRate(forward.rate);
-      setReverseFlexForexRate(reverse.rate);
+      const { forwardRate, reverseRate } = await fetchFlexForexRateBidirectional(
+        payCurrency,
+        receiveCurrency,
+      );
+      setFlexForexRate(forwardRate);
+      setReverseFlexForexRate(reverseRate);
     } catch {
       setFlexForexRate(null);
       setReverseFlexForexRate(null);
@@ -95,7 +96,7 @@ export function RateCalculator() {
     } finally {
       setFlexForexLoading(false);
     }
-  }, [receiveCurrency]);
+  }, [receiveCurrency, payCurrency]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -135,11 +136,11 @@ export function RateCalculator() {
 
   const rateDisplayForward = amountEditSide === "pay";
   const displayedFromCurrency = rateDisplayForward
-    ? PAY_CURRENCY
+    ? payCurrency
     : receiveCurrency;
   const displayedToCurrency = rateDisplayForward
     ? receiveCurrency
-    : PAY_CURRENCY;
+    : payCurrency;
   const displayedFxRate = rateDisplayForward
     ? flexForexRate
     : reverseFlexForexRate;
@@ -172,9 +173,6 @@ export function RateCalculator() {
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
-                      $
-                    </span>
                     <input
                       id="landing-pay-amount"
                       type="text"
@@ -185,22 +183,32 @@ export function RateCalculator() {
                         setAmountEditSide("pay");
                         setPayAmount(sanitizeAmountInput(e.target.value));
                       }}
-                      className="w-full h-14 pl-8 pr-4 text-xl font-semibold text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+                      className="w-full h-14 px-4 text-xl font-semibold text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
                       placeholder="1,000"
                     />
                   </div>
-                  <div className="flex items-center gap-2 h-14 px-4 bg-slate-50 rounded-xl border border-slate-200 shrink-0">
-                    <Image
-                      src="https://flagcdn.com/w40/us.png"
-                      alt="USA"
-                      width={24}
-                      height={18}
-                      className="rounded-sm"
-                      unoptimized
-                    />
-                    <span className="font-semibold text-slate-900">
-                      {PAY_CURRENCY}
-                    </span>
+                  <div className="flex h-14 shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                    {payCurrencyOptions.map((currency) => (
+                      <button
+                        key={currency}
+                        type="button"
+                        onClick={() => {
+                          setPayCurrency(currency);
+                          setAmountEditSide("pay");
+                        }}
+                        className={`inline-flex items-center gap-1.5 h-full px-3 rounded-lg text-sm font-semibold transition-colors ${
+                          payCurrency === currency
+                            ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                            : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        <Flag
+                          code={payCurrencyFlagCode(currency)}
+                          className="w-5 h-3.5 rounded-sm object-cover"
+                        />
+                        {currency}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
