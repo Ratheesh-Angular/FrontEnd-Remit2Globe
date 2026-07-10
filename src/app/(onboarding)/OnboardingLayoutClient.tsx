@@ -39,7 +39,7 @@ export default function OnboardingLayoutClient({
             syncRes.status !== 204 &&
             isStaleAuthHttpStatus(syncRes.status)
           ) {
-            await clearStaleAuthAndRedirect("/register");
+            await clearStaleAuthAndRedirect("/login");
             return;
           }
         }
@@ -52,7 +52,7 @@ export default function OnboardingLayoutClient({
             res.data,
           );
           if (naSession?.user?.id) {
-            await clearStaleAuthAndRedirect("/register");
+            await clearStaleAuthAndRedirect("/login");
             return;
           }
           setSessionBanner("");
@@ -67,7 +67,7 @@ export default function OnboardingLayoutClient({
             initialSession?.user?.id ?? retry?.user?.id,
           );
           if (hasNextAuth) {
-            await clearStaleAuthAndRedirect("/register");
+            await clearStaleAuthAndRedirect("/login");
             return;
           }
           setSessionBanner(
@@ -87,7 +87,7 @@ export default function OnboardingLayoutClient({
           } catch {
             /* fall through */
           }
-          await clearStaleAuthAndRedirect("/register");
+          await clearStaleAuthAndRedirect("/login");
           return;
         }
         if (status !== undefined) {

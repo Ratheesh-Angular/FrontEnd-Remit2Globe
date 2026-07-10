@@ -103,7 +103,9 @@ export default function DashboardLayoutClient({
     const fetchUser = async () => {
       try {
         const naSession = initialSession ?? (await safeGetSession());
-        if (naSession?.user?.id) {
+        const nextAuthUserId = naSession?.user?.id;
+
+        if (nextAuthUserId && !initialUser) {
           const syncRes = await fetch("/api/auth/sync-backend-session", {
             method: "POST",
             credentials: "same-origin",
@@ -113,7 +115,7 @@ export default function DashboardLayoutClient({
             syncRes.status !== 204 &&
             isStaleAuthHttpStatus(syncRes.status)
           ) {
-            await clearStaleAuthAndRedirect("/register");
+            await clearStaleAuthAndRedirect("/login");
             return;
           }
         }
@@ -125,8 +127,8 @@ export default function DashboardLayoutClient({
             "[DashboardLayoutClient] unexpected /auth/me shape",
             res.data,
           );
-          if (naSession?.user?.id) {
-            await clearStaleAuthAndRedirect("/register");
+          if (nextAuthUserId && !initialUser) {
+            await clearStaleAuthAndRedirect("/login");
             return;
           }
           if (initialUser) setUser(initialUser);
@@ -137,25 +139,25 @@ export default function DashboardLayoutClient({
       } catch (e) {
         const status = getHttpErrorStatus(e);
         if (isStaleAuthHttpStatus(status)) {
-          const retry = await safeGetSession();
-          const hasNextAuth = Boolean(
-            initialSession?.user?.id ?? retry?.user?.id,
-          );
-          if (hasNextAuth) {
-            await clearStaleAuthAndRedirect("/register");
-            return;
-          }
           if (initialUser) {
             setSessionBanner(
               `Could not verify your session (HTTP ${status}). Try refreshing the page.`,
             );
             return;
           }
+          const retry = await safeGetSession();
+          const hasNextAuth = Boolean(
+            initialSession?.user?.id ?? retry?.user?.id,
+          );
+          if (hasNextAuth) {
+            await clearStaleAuthAndRedirect("/login");
+            return;
+          }
           await clearStaleAuthAndRedirect("/login");
           return;
         }
         const retry = await safeGetSession();
-        if (retry?.user?.id) {
+        if (retry?.user?.id && !initialUser) {
           try {
             const res = await api.get("/auth/me");
             const u = extractAuthMeUser(res.data);
@@ -168,7 +170,7 @@ export default function DashboardLayoutClient({
           } catch {
             /* fall through */
           }
-          await clearStaleAuthAndRedirect("/register");
+          await clearStaleAuthAndRedirect("/login");
           return;
         }
         if (status !== undefined) {

@@ -146,8 +146,8 @@ export const authOptions: NextAuthOptions = {
   ],
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
-    signIn: "/register",
-    error: "/register",
+    signIn: "/login",
+    error: "/login",
   },
   // JWT avoids adapter `createSession` / Session table issues while User + Account stay in Postgres.
   session: {

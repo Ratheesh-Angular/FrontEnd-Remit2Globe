@@ -1,9 +1,14 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { loadAppUser } from "@/lib/auth";
 import { authUserFromAppRow } from "@/lib/auth-user";
-import { resolveBackendFetchBase } from "@/lib/backend-api-base";
+import {
+  backendFetchResolutionMessage,
+  resolveBackendFetchBase,
+} from "@/lib/backend-api-base";
 import { backendOutboundFetch } from "@/lib/backend-outbound-fetch";
 import type { AuthUser } from "@/store/auth.store";
+
+const TOKEN_COOKIE = "token";
 
 /** Fresh user row for dashboard shell (sidebar KYC gates) — same sources as dashboard page. */
 export async function loadDashboardShellUser(
@@ -15,18 +20,33 @@ export async function loadDashboardShellUser(
     if (row) return authUserFromAppRow(row);
   }
 
-  const h = await headers();
-  const cookieHeader = h.get("cookie") ?? "";
-  if (!cookieHeader.includes("token=")) return null;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(TOKEN_COOKIE)?.value?.trim();
+  if (!token) return null;
 
   const resolved = resolveBackendFetchBase();
-  if (!resolved.ok) return null;
+  if (!resolved.ok) {
+    console.error(
+      "[loadDashboardShellUser] backend URL misconfigured:",
+      backendFetchResolutionMessage(resolved),
+    );
+    return null;
+  }
 
   const base = resolved.baseUrl;
   const res = await backendOutboundFetch(`${base}/auth/me`, {
-    headers: { cookie: cookieHeader },
+    headers: { Cookie: `${TOKEN_COOKIE}=${token}` },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[loadDashboardShellUser] /auth/me failed:",
+        res.status,
+        res.statusText,
+      );
+    }
+    return null;
+  }
 
   const body = (await res.json()) as {
     data?: {
@@ -60,5 +80,5 @@ export async function loadDashboardShellUser(
 
 export async function hasBackendAuthCookie(): Promise<boolean> {
   const cookieStore = await cookies();
-  return Boolean(cookieStore.get("token")?.value);
+  return Boolean(cookieStore.get(TOKEN_COOKIE)?.value);
 }

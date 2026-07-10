@@ -42,6 +42,15 @@ export default function LoginPage() {
         return;
       }
 
+      try {
+        await fetch("/api/auth/clear-backend-session?nextAuth=1", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+      } catch {
+        /* ignore — proceed with password session */
+      }
+
       const sessRes = await fetch("/api/auth/backend-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -94,7 +94,7 @@ export async function clearStaleAuthAndRedirect(to: string): Promise<void> {
     /* ignore */
   }
   const target =
-    to.startsWith("/") && !to.startsWith("//") ? to : "/register";
+    to.startsWith("/") && !to.startsWith("//") ? to : "/login";
   window.location.assign(target);
 }
 

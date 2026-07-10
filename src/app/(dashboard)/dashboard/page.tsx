@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";import { authOptions, loadAppUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { authOptions, loadAppUser } from "@/lib/auth";
 import { getValidatedServerSession } from "@/lib/auth-session";
 import {
   hasBackendAuthCookie,
@@ -17,6 +18,9 @@ type DashboardUser = {
   createdAt?: string;
 };
 
+const CLEAR_SESSION_LOGIN =
+  "/api/auth/clear-backend-session?callbackUrl=/login&nextAuth=1";
+
 async function loadUserFromBackendMe(): Promise<DashboardUser | null> {
   const shell = await loadDashboardShellUser(undefined);
   if (!shell) return null;
@@ -32,32 +36,29 @@ async function loadUserFromBackendMe(): Promise<DashboardUser | null> {
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
   const hasBackendToken = await hasBackendAuthCookie();
-
-  const sessionUserId = session?.user?.id?.trim();
-  if (sessionUserId) {
-    const row = await loadAppUser(sessionUserId);
-    if (!row) {
-      redirect(
-        "/api/auth/clear-backend-session?callbackUrl=/register&nextAuth=1",
-      );
-    }
-    const validated = await getValidatedServerSession();
-    if (validated?.user) {
-      return <DashboardClient user={validated.user} />;
-    }
-  }
 
   if (hasBackendToken) {
     const me = await loadUserFromBackendMe();
     if (me) {
       return <DashboardClient user={me} />;
     }
-    redirect(
-      "/api/auth/clear-backend-session?callbackUrl=/register&nextAuth=1",
-    );
   }
 
-  redirect("/register");
+  const validated = await getValidatedServerSession();
+  if (validated?.user) {
+    return <DashboardClient user={validated.user} />;
+  }
+
+  const session = await getServerSession(authOptions);
+  const sessionUserId = session?.user?.id?.trim();
+  if (sessionUserId && !(await loadAppUser(sessionUserId))) {
+    redirect(CLEAR_SESSION_LOGIN);
+  }
+
+  if (hasBackendToken) {
+    redirect(CLEAR_SESSION_LOGIN);
+  }
+
+  redirect("/login");
 }
