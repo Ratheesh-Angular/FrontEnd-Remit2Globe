@@ -5,7 +5,7 @@ import { Star } from "lucide-react";
 const TESTIMONIALS = [
   {
     name: "Priya Sharma",
-    location: "USA → India",
+    location: "Kenya → India",
     avatar: "PS",
     rating: 5,
     quote:
@@ -13,7 +13,7 @@ const TESTIMONIALS = [
   },
   {
     name: "James Okonkwo",
-    location: "UK → Nigeria",
+    location: "Uganda → Nigeria",
     avatar: "JO",
     rating: 5,
     quote:
@@ -21,7 +21,7 @@ const TESTIMONIALS = [
   },
   {
     name: "Sarah Ahmed",
-    location: "UAE → Pakistan",
+    location: "Tanzania → Pakistan",
     avatar: "SA",
     rating: 5,
     quote:
@@ -29,7 +29,7 @@ const TESTIMONIALS = [
   },
   {
     name: "Daniel Mensah",
-    location: "Canada → Ghana",
+    location: "Tanzania → Ghana",
     avatar: "DM",
     rating: 5,
     quote:

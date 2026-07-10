@@ -89,3 +89,42 @@ export async function fetchFlexForexRate(
 
   return { rate, currPair, raw };
 }
+
+/** Forward + reverse Flex rates; derives missing direction as reciprocal when Flex only lists one pair. */
+export async function fetchFlexForexRateBidirectional(
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<{
+  forwardRate: number;
+  reverseRate: number;
+  currPair: string;
+}> {
+  const [forwardResult, reverseResult] = await Promise.allSettled([
+    fetchFlexForexRate(fromCurrency, toCurrency),
+    fetchFlexForexRate(toCurrency, fromCurrency),
+  ]);
+
+  if (forwardResult.status === "fulfilled") {
+    const forwardRate = forwardResult.value.rate;
+    const reverseRate =
+      reverseResult.status === "fulfilled"
+        ? reverseResult.value.rate
+        : 1 / forwardRate;
+    return {
+      forwardRate,
+      reverseRate,
+      currPair: forwardResult.value.currPair,
+    };
+  }
+
+  if (reverseResult.status === "fulfilled") {
+    const reverseRate = reverseResult.value.rate;
+    return {
+      forwardRate: 1 / reverseRate,
+      reverseRate,
+      currPair: buildFlexCurrPair(fromCurrency, toCurrency),
+    };
+  }
+
+  throw forwardResult.reason;
+}

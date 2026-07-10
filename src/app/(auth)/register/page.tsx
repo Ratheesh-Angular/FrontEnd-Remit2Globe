@@ -22,6 +22,7 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { notifyApiError, notifyError, notifySuccess } from "@/lib/notify";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
+import { useSearchParams } from "next/navigation";
 import countriesIso from "i18n-iso-countries";
 
 function oauthErrorMessage(code: string) {
@@ -65,6 +66,7 @@ interface FormErrors {
 }
 
 export default function RegisterPage() {
+  const searchParams = useSearchParams();
   const [accountType, setAccountType] = useState<AccountType>("individual");
   const [formData, setFormData] = useState<FormData>({
     email: "",
@@ -107,6 +109,13 @@ export default function RegisterPage() {
     const qs = url.searchParams.toString();
     window.history.replaceState({}, "", `${url.pathname}${qs ? `?${qs}` : ""}`);
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get("accountType")?.trim().toLowerCase();
+    if (raw === "corporate" || raw === "business") {
+      setAccountType("corporate");
+    }
+  }, [searchParams]);
 
   // Detect sender country (Flex list) from IP once countries are loaded
   useEffect(() => {

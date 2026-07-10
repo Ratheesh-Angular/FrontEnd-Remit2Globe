@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { FlexLogo } from "@/components/brand/FlexLogo";
+import { LandingCountrySelect } from "@/components/landing/LandingCountrySelect";
 
 const NAV_LINKS = [
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Countries", href: "#countries" },
-  { label: "FAQ", href: "#faq" },
+  { id: "personal", label: "Personal", href: "#account-types-personal" },
+  { id: "business", label: "Business", href: "#account-types-business" },
+  { id: "how-it-works", label: "How It Works", href: "#how-it-works" },
+  { id: "countries", label: "Countries", href: "#countries" },
+  { id: "faq", label: "FAQ", href: "#faq" },
 ];
 
 export function LandingHeader() {
@@ -40,7 +43,7 @@ export function LandingHeader() {
           <nav className="hidden lg:flex items-center gap-8">
             {NAV_LINKS.map((link) => (
               <a
-                key={link.href}
+                key={link.id}
                 href={link.href}
                 className="text-sm font-medium text-slate-600 hover:text-red-700 transition-colors"
               >
@@ -50,6 +53,7 @@ export function LandingHeader() {
           </nav>
 
           <div className="hidden lg:flex items-center gap-3">
+            <LandingCountrySelect />
             <Link
               href="/login"
               className="inline-flex items-center justify-center h-10 px-5 text-sm font-medium text-red-700 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
@@ -82,9 +86,19 @@ export function LandingHeader() {
       {mobileOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white">
           <nav className="px-4 py-4 space-y-2">
+            <div className="pb-3 mb-1 border-b border-slate-100">
+              <p className="px-3 pb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Your country
+              </p>
+              <LandingCountrySelect
+                className="px-3"
+                fullWidth
+                onSelect={() => setMobileOpen(false)}
+              />
+            </div>
             {NAV_LINKS.map((link) => (
               <a
-                key={link.href}
+                key={link.id}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
                 className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg"
