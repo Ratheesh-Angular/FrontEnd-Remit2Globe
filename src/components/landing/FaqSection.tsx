@@ -7,7 +7,7 @@ const FAQ_ITEMS = [
   {
     question: "How long do transfers take?",
     answer:
-      "Most transfers arrive within minutes to bank accounts and mobile wallets. Cash pickup is usually available within hours. Delivery times may vary based on the destination country, payout method, and banking hours.",
+      "Most transfers arrive within minutes to bank accounts and mobile money. Delivery times may vary based on the destination country, payout method, and banking hours.",
   },
   {
     question: "What are the fees?",

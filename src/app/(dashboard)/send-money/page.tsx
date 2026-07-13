@@ -27,6 +27,8 @@ import {
   buildRecipientCurrencyOptions,
   dedupeCatalogCountries,
   fmtMoney,
+  fmtFxRate,
+  fmtFee,
   payCurrencyFlagCode,
 } from "@/lib/send-money-currencies";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
@@ -52,7 +54,7 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
-import { fetchFlexForexRateBidirectional } from "@/lib/flex-forex-rate";
+import { resolveFlexExchangeRate } from "@/lib/flex-forex-rate";
 
 interface FlexCountry {
   couCode: string;
@@ -81,6 +83,14 @@ interface Quote {
   receiveAmount: number;
   quoteExpiresAt: string;
   indicative: boolean;
+  payAmountMin?: number;
+  payAmountMax?: number;
+}
+
+interface TariffBounds {
+  minPayAmount: number;
+  maxPayAmount: number;
+  currency: string;
 }
 
 interface LookupOpt {
@@ -355,10 +365,16 @@ function SendMoneyPageContent() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [flexForexRate, setFlexForexRate] = useState<number | null>(null);
-  const [reverseFlexForexRate, setReverseFlexForexRate] = useState<
-    number | null
-  >(null);
   const [flexForexLoading, setFlexForexLoading] = useState(false);
+  const [flexForexError, setFlexForexError] = useState<string | null>(null);
+  const [tariffBounds, setTariffBounds] = useState<TariffBounds | null>(null);
+  const [tariffBoundsError, setTariffBoundsError] = useState<string | null>(
+    null,
+  );
+  const [amountValidationError, setAmountValidationError] = useState<
+    string | null
+  >(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const [transferId, setTransferId] = useState<string | null>(null);
   const [referenceCode, setReferenceCode] = useState<string | null>(null);
@@ -827,9 +843,15 @@ function SendMoneyPageContent() {
     setRecipientOpen(false);
   }, [beneficiaryRecipientLocked]);
 
+useEffect(() => {
+    setQuote(null);
+    setQuoteError(null);
+  }, [payCurrency, receiveCurrency]);
+
   const refreshQuote = useCallback(async () => {
     if (!payCurrency || !receiveCurrency) {
       setQuote(null);
+      setQuoteError(null);
       return;
     }
 
@@ -840,14 +862,33 @@ function SendMoneyPageContent() {
     if (usePaySide) {
       if (!payAmt || payAmt <= 0) {
         setQuote(null);
+        setQuoteError(null);
         return;
+      }
+      if (tariffBounds) {
+        if (payAmt < tariffBounds.minPayAmount) {
+          setQuote(null);
+          setQuoteError(
+            `Minimum send amount is ${fmtFee(tariffBounds.minPayAmount)} ${tariffBounds.currency}`,
+          );
+          return;
+        }
+        if (payAmt > tariffBounds.maxPayAmount) {
+          setQuote(null);
+          setQuoteError(
+            `Maximum send amount is ${fmtFee(tariffBounds.maxPayAmount)} ${tariffBounds.currency}`,
+          );
+          return;
+        }
       }
     } else if (!recvAmt || recvAmt <= 0) {
       setQuote(null);
+      setQuoteError(null);
       return;
     }
 
     setQuoteLoading(true);
+    setQuoteError(null);
     try {
       const { data } = await api.get<{ data: Quote }>("/remittance/quote", {
         params: usePaySide
@@ -862,9 +903,25 @@ function SendMoneyPageContent() {
               receiveAmount: recvAmt,
             },
       });
-      setQuote(data.data);
-      setPayAmount(String(data.data.payAmount));
-      setReceiveAmount(String(data.data.receiveAmount));
+      const q = data.data;
+      if (tariffBounds || q.payAmountMin != null) {
+        const min = q.payAmountMin ?? tariffBounds?.minPayAmount;
+        const max = q.payAmountMax ?? tariffBounds?.maxPayAmount;
+        const cur = tariffBounds?.currency ?? q.fromCurrency;
+        if (min != null && q.payAmount < min) {
+          setQuote(null);
+          setQuoteError(`Minimum send amount is ${fmtFee(min)} ${cur}`);
+          return;
+        }
+        if (max != null && q.payAmount > max) {
+          setQuote(null);
+          setQuoteError(`Maximum send amount is ${fmtFee(max)} ${cur}`);
+          return;
+        }
+      }
+      setQuote(q);
+      setPayAmount(String(q.payAmount));
+      setReceiveAmount(String(q.receiveAmount));
     } catch (err: unknown) {
       setQuote(null);
       const apiMessage =
@@ -880,14 +937,22 @@ function SendMoneyPageContent() {
         typeof err.response.data.message === "string"
           ? err.response.data.message
           : null;
-      notifyError(
+      const msg =
         apiMessage ??
-          "No rate for this corridor yet. Try another currency pair or contact support.",
-      );
+        "No rate for this corridor yet. Try another currency pair or contact support.";
+      setQuoteError(msg);
+      notifyError(msg);
     } finally {
       setQuoteLoading(false);
     }
-  }, [amountEditSide, payAmount, receiveAmount, payCurrency, receiveCurrency]);
+  }, [
+    amountEditSide,
+    payAmount,
+    receiveAmount,
+    payCurrency,
+    receiveCurrency,
+    tariffBounds,
+  ]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -896,27 +961,24 @@ function SendMoneyPageContent() {
     return () => clearTimeout(t);
   }, [refreshQuote]);
 
-  /** Live Flex rate preview (forward + reverse) before quote is available. */
+  /** Live Flex rate preview before quote is available. */
   const refreshFlexForexRate = useCallback(async () => {
     if (!payCurrency.trim() || !receiveCurrency.trim()) {
       setFlexForexRate(null);
-      setReverseFlexForexRate(null);
+      setFlexForexError(null);
       return;
     }
     setFlexForexLoading(true);
+    setFlexForexError(null);
     try {
-      const { forwardRate, reverseRate } = await fetchFlexForexRateBidirectional(
-        payCurrency,
-        receiveCurrency,
-      );
-      setFlexForexRate(forwardRate);
-      setReverseFlexForexRate(reverseRate);
+      const rate = await resolveFlexExchangeRate(payCurrency, receiveCurrency);
+      setFlexForexRate(rate);
     } catch {
       setFlexForexRate(null);
-      setReverseFlexForexRate(null);
-      notifyError(
-        "Could not load exchange rate for this currency pair. Try again or pick another corridor.",
-      );
+      const msg =
+        "Could not load exchange rate. Check your connection or try another currency pair.";
+      setFlexForexError(msg);
+      notifyError(msg);
     } finally {
       setFlexForexLoading(false);
     }
@@ -929,6 +991,117 @@ function SendMoneyPageContent() {
     return () => clearTimeout(t);
   }, [refreshFlexForexRate]);
 
+  useEffect(() => {
+    if (!payCurrency.trim() || !receiveCurrency.trim()) {
+      setTariffBounds(null);
+      setTariffBoundsError(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<{ data: TariffBounds }>(
+          "/remittance/tariff-bounds",
+          {
+            params: {
+              fromCurrency: payCurrency,
+              toCurrency: receiveCurrency,
+            },
+          },
+        );
+        if (!cancelled) {
+          setTariffBounds(data.data);
+          setTariffBoundsError(null);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setTariffBounds(null);
+          const apiMessage =
+            err &&
+            typeof err === "object" &&
+            "response" in err &&
+            err.response &&
+            typeof err.response === "object" &&
+            "data" in err.response &&
+            err.response.data &&
+            typeof err.response.data === "object" &&
+            "message" in err.response.data &&
+            typeof err.response.data.message === "string"
+              ? err.response.data.message
+              : null;
+          setTariffBoundsError(
+            apiMessage ??
+              `Transfers from ${payCurrency} to ${receiveCurrency} are not available yet. Contact support.`,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payCurrency, receiveCurrency]);
+
+  const canonicalFxRate = quote?.rate ?? flexForexRate;
+
+  /** Keep the non-edited side in sync from live Flex rate (quote overwrites on debounce). */
+  useEffect(() => {
+    if (quoteLoading || flexForexLoading || quote) return;
+    const rate = canonicalFxRate;
+    if (rate == null) return;
+
+    if (amountEditSide === "pay") {
+      const pay = parseFloat(payAmount);
+      if (!pay || pay <= 0) {
+        if (!pay) setReceiveAmount("");
+        return;
+      }
+      const derived = pay * rate;
+      if (Number.isFinite(derived) && derived > 0) {
+        setReceiveAmount(String(derived));
+      }
+      return;
+    }
+
+    const recv = parseFloat(receiveAmount);
+    if (!recv || recv <= 0) {
+      if (!recv) setPayAmount("");
+      return;
+    }
+    const derived = recv / rate;
+    if (Number.isFinite(derived) && derived > 0) {
+      setPayAmount(String(derived));
+    }
+  }, [
+    amountEditSide,
+    payAmount,
+    receiveAmount,
+    canonicalFxRate,
+    flexForexLoading,
+    quoteLoading,
+    quote,
+  ]);
+
+  useEffect(() => {
+    const pay = parseFloat(payAmount);
+    if (!tariffBounds || !pay || pay <= 0) {
+      setAmountValidationError(null);
+      return;
+    }
+    if (pay < tariffBounds.minPayAmount) {
+      setAmountValidationError(
+        `Minimum send amount is ${fmtFee(tariffBounds.minPayAmount)} ${tariffBounds.currency}`,
+      );
+      return;
+    }
+    if (pay > tariffBounds.maxPayAmount) {
+      setAmountValidationError(
+        `Maximum send amount is ${fmtFee(tariffBounds.maxPayAmount)} ${tariffBounds.currency}`,
+      );
+      return;
+    }
+    setAmountValidationError(null);
+  }, [payAmount, tariffBounds]);
+
   const rateDisplayForward = amountEditSide === "pay";
   const displayedFromCurrency = rateDisplayForward
     ? (quote?.fromCurrency ?? payCurrency)
@@ -936,9 +1109,7 @@ function SendMoneyPageContent() {
   const displayedToCurrency = rateDisplayForward
     ? (quote?.toCurrency ?? receiveCurrency)
     : (quote?.fromCurrency ?? payCurrency);
-  const displayedFxRate = rateDisplayForward
-    ? (quote?.rate ?? flexForexRate)
-    : reverseFlexForexRate;
+  const displayedFxRate = canonicalFxRate;
   const rateDisplayLoading =
     (quoteLoading &&
       (rateDisplayForward
@@ -1455,6 +1626,8 @@ function SendMoneyPageContent() {
                     const v = e.target.value.replace(/[^0-9.]/g, "");
                     setAmountEditSide("pay");
                     setPayAmount(v);
+                    setQuote(null);
+                    setQuoteError(null);
                   }}
                   placeholder="0"
                   className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-red-600 transition-colors"
@@ -1525,6 +1698,11 @@ function SendMoneyPageContent() {
                 )}
               </div>
             </div>
+            {(amountValidationError || quoteError) && (
+              <p className="mt-1 text-xs text-red-600">
+                {amountValidationError ?? quoteError}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end min-h-[2rem] items-center">
@@ -1546,7 +1724,7 @@ function SendMoneyPageContent() {
                   </span>
                   <span className="text-slate-400 mx-1">=</span>
                   <span className="font-semibold text-slate-800">
-                    {fmtMoney(displayedFxRate)} {displayedToCurrency}
+                    {fmtFxRate(displayedFxRate)} {displayedToCurrency}
                   </span>
                 </p>
                 <span className="inline-flex h-7 w-7 rounded-full overflow-hidden ring-2 ring-white shadow-sm shrink-0">
@@ -1556,6 +1734,8 @@ function SendMoneyPageContent() {
                   />
                 </span>
               </div>
+            ) : flexForexError ? (
+              <p className="text-sm text-red-500 text-right">{flexForexError}</p>
             ) : (
               <p className="text-sm text-slate-400 text-right">
                 Select send and receive currencies to see rate
@@ -1582,6 +1762,8 @@ function SendMoneyPageContent() {
                     const v = e.target.value.replace(/[^0-9.]/g, "");
                     setAmountEditSide("receive");
                     setReceiveAmount(v);
+                    setQuote(null);
+                    setQuoteError(null);
                   }}
                   placeholder="0"
                   className="w-full bg-transparent border-0 border-b-2 border-slate-200 pb-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight placeholder:text-slate-300 focus:outline-none focus:border-red-600 transition-colors"
@@ -1740,10 +1922,24 @@ function SendMoneyPageContent() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-500 ">
-            {quote
-              ? `Fees applicable ${fmtMoney(Number(quote.feeAmount))} ${quote.fromCurrency}`
-              : "Fees will appear when a quote is available."}
+          <p
+            className={`text-xs ${
+              quoteError || tariffBoundsError
+                ? "text-red-500"
+                : "text-slate-500"
+            }`}
+          >
+            {quoteLoading
+              ? "Calculating fees…"
+              : quote
+                ? `Fees applicable ${fmtFee(Number(quote.feeAmount))} ${quote.fromCurrency}`
+                : quoteError
+                  ? quoteError
+                  : tariffBoundsError
+                    ? tariffBoundsError
+                    : flexForexError
+                      ? "Could not load fees for this corridor. Try again or contact support."
+                      : "Fees will appear when a quote is available."}
           </p>
 
           <button
@@ -1752,6 +1948,7 @@ function SendMoneyPageContent() {
               submitting ||
               !quote ||
               !receiveCurrency ||
+              !!amountValidationError ||
               (amountEditSide === "pay"
                 ? !parseFloat(payAmount)
                 : !parseFloat(receiveAmount))

@@ -6,9 +6,20 @@ import { Menu, X } from "lucide-react";
 import { FlexLogo } from "@/components/brand/FlexLogo";
 import { LandingCountrySelect } from "@/components/landing/LandingCountrySelect";
 
-const NAV_LINKS = [
-  { id: "personal", label: "Personal", href: "#account-types-personal" },
-  { id: "business", label: "Business", href: "#account-types-business" },
+const ROUTE_NAV_LINKS = [
+  {
+    id: "personal",
+    label: "Personal",
+    href: "/register?accountType=individual",
+  },
+  {
+    id: "business",
+    label: "Business",
+    href: "/register?accountType=corporate",
+  },
+];
+
+const ANCHOR_NAV_LINKS = [
   { id: "how-it-works", label: "How It Works", href: "#how-it-works" },
   { id: "countries", label: "Countries", href: "#countries" },
   { id: "faq", label: "FAQ", href: "#faq" },
@@ -41,7 +52,16 @@ export function LandingHeader() {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-8">
-            {NAV_LINKS.map((link) => (
+            {ROUTE_NAV_LINKS.map((link) => (
+              <Link
+                key={link.id}
+                href={link.href}
+                className="text-sm font-medium text-slate-600 hover:text-red-700 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {ANCHOR_NAV_LINKS.map((link) => (
               <a
                 key={link.id}
                 href={link.href}
@@ -96,7 +116,17 @@ export function LandingHeader() {
                 onSelect={() => setMobileOpen(false)}
               />
             </div>
-            {NAV_LINKS.map((link) => (
+            {ROUTE_NAV_LINKS.map((link) => (
+              <Link
+                key={link.id}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className="block px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {ANCHOR_NAV_LINKS.map((link) => (
               <a
                 key={link.id}
                 href={link.href}

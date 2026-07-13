@@ -8,6 +8,7 @@ import {
   isFlexBankServiceTypeAllowed,
   isFlexMobileWalletServiceType,
 } from "@/lib/beneficiary-flex-banks";
+import { validateEmiratesId } from "@/lib/emirates-id-validation";
 
 export type BeneficiaryDeliveryChannel =
   | "BANK_TRANSFER"
@@ -247,10 +248,33 @@ export const DELIVERY_CHANNEL_LABELS: Record<
 /** UAE payout-in-person corridors collect Emirates ID; others use passport/national ID. */
 export const PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE = "ARE" as const;
 
+export type UaePayoutRecipientType = "RESIDENT" | "VISITOR";
+
+/** Infer UAE payout recipient type from a stored ID value (edit mode). */
+export function inferUaePayoutRecipientType(
+  id: string,
+): UaePayoutRecipientType | "" {
+  const trimmed = id.trim();
+  if (!trimmed) return "";
+  return validateEmiratesId(trimmed) === null ? "RESIDENT" : "VISITOR";
+}
+
+export function isUaePayoutInPerson(
+  destinationCouCode: string | undefined,
+  channel: BeneficiaryDeliveryChannel,
+): boolean {
+  return (
+    destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE &&
+    channel === "PAYOUT_IN_PERSON"
+  );
+}
+
 export function payoutInPersonNameSuffix(
   destinationCouCode: string | undefined,
+  recipientType?: UaePayoutRecipientType | "",
 ): string {
   if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
+    if (recipientType === "VISITOR") return " (as per passport)";
     return " (as per emirates id)";
   }
   return " (as per passport/ national id)";
@@ -268,10 +292,11 @@ export function payoutInPersonIdFieldLabel(
 export function beneficiaryNameLabelSuffix(
   channel: BeneficiaryDeliveryChannel,
   destinationCouCode: string | undefined,
+  uaeRecipientType?: UaePayoutRecipientType | "",
 ): string {
   if (channel === "BANK_TRANSFER") return " (as per bank account)";
   if (channel === "PAYOUT_IN_PERSON") {
-    return payoutInPersonNameSuffix(destinationCouCode);
+    return payoutInPersonNameSuffix(destinationCouCode, uaeRecipientType);
   }
   return "";
 }

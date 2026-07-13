@@ -296,6 +296,23 @@ export function fmtMoney(n: number): string {
   });
 }
 
+/** Exchange rate display — preserve Flex precision, no forced 2dp rounding. */
+export function fmtFxRate(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  const s = String(n);
+  if (s.includes("e") || s.includes("E")) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 10 });
+  }
+  return s.includes(".") ? s.replace(/\.?0+$/, "") || "0" : s;
+}
+
+/** Fee display — exact for whole numbers, trim trailing zeros otherwise. */
+export function fmtFee(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  if (Number.isInteger(n)) return n.toLocaleString(undefined);
+  return fmtFxRate(n);
+}
+
 export const AFRICAN_MOBILE_PAYIN_ISO2 = new Set([
   "KE",
   "TZ",

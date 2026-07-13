@@ -4,6 +4,12 @@ import Image from "next/image";
 import { Globe } from "lucide-react";
 
 const FEATURED_COUNTRIES = [
+  { name: "USA", code: "us", currency: "USD" },
+  { name: "Canada", code: "ca", currency: "CAD" },
+  { name: "Europe", code: "eu", currency: "EUR" },
+  { name: "Australia", code: "au", currency: "AUD" },
+  { name: "Malaysia", code: "my", currency: "MYR" },
+  { name: "Singapore", code: "sg", currency: "SGD" },
   { name: "India", code: "in", currency: "INR" },
   { name: "Kenya", code: "ke", currency: "KES" },
   { name: "Ghana", code: "gh", currency: "GHS" },
@@ -20,7 +26,7 @@ const FEATURED_COUNTRIES = [
 
 export function CountriesSection() {
   return (
-    <section id="countries" className="py-16 lg:py-24 bg-white">
+    <section id="countries" className="py-16 lg:py-24 bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 lg:mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-sm font-medium mb-4">
@@ -32,7 +38,7 @@ export function CountriesSection() {
           </h2>
           <p className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto">
             Transfer to family and friends in Africa, Asia, Europe, and beyond.
-            Bank accounts, mobile wallets, and cash pickup available.
+            Bank accounts and mobile money available.
           </p>
         </div>
 
@@ -64,8 +70,7 @@ export function CountriesSection() {
 
         <div className="mt-10 text-center">
           <p className="text-sm text-slate-500">
-            And many more including USA, Canada, Europe, Australia, and across
-            Asia and Africa.
+            And many more across the globe.
           </p>
         </div>
       </div>

@@ -22,11 +22,11 @@ const SOLUTIONS: SolutionCard[] = [
     title: "Personal Payments",
     description: "Send money to your loved ones quickly and securely.",
     features: [
+      "Bank Transfers",
+      "Mobile Money",
       "Family Support",
       "Friends & Relatives",
       "Emergency Transfers",
-      "Travel Money",
-      "Real-time Tracking",
     ],
     chips: [
       { label: "Kenya", iso2: "KE" },
@@ -68,17 +68,13 @@ const SOLUTIONS: SolutionCard[] = [
     title: "Education Payments",
     description:
       "Pay tuition fees and living expenses directly to institutions and students abroad.",
-    features: [
-      "Tuition Fees",
-      "Accommodation",
-      "Student Living Expenses",
-    ],
+    features: ["Tuition Fees", "Accommodation", "Student Living Expenses"],
     chips: [
       { label: "UK", iso2: "GB" },
       { label: "USA", iso2: "US" },
       { label: "Canada", iso2: "CA" },
       { label: "Australia", iso2: "AU" },
-      { label: "Europe" },
+      { label: "Europe", iso2: "EU" },
       { label: "Malaysia", iso2: "MY" },
       { label: "Singapore", iso2: "SG" },
     ],
@@ -93,7 +89,7 @@ export function SolutionsSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 lg:mb-16 max-w-3xl mx-auto">
           <p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-3">
-            One App. Three Powerful Solutions.
+            One App
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
             Multiple payment needs, one app.
@@ -141,6 +137,9 @@ export function SolutionsSection() {
                       {chip.label}
                     </span>
                   ))}
+                  <span className="text-xs font-medium text-slate-500">
+                    and many more…
+                  </span>
                 </div>
                 <Link
                   href={solution.href}

@@ -22,7 +22,7 @@ const STEPS = [
     step: 3,
     title: "Add Recipient",
     description:
-      "Save your recipient's details once — bank account, mobile wallet, or cash pickup location.",
+      "Save your recipient's details once — bank account, mobile money.",
   },
   {
     icon: Send,
@@ -37,7 +37,7 @@ export function HowItWorksSection() {
   return (
     <section
       id="how-it-works"
-      className="py-8 lg:py-16 bg-gradient-to-b from-white to-slate-50"
+      className="py-8 lg:py-16 bg-white"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 lg:mb-16">
