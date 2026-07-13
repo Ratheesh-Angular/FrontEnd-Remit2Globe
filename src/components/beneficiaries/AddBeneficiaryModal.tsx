@@ -48,12 +48,15 @@ import {
   getDeliveryChannelLabel,
   getDeliveryChannels,
   getDeliveryChannelsFromFlexServices,
+  inferUaePayoutRecipientType,
+  isUaePayoutInPerson,
   MOBILE_WALLET_ONLY_COUNTRY_CODES,
   FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES,
   PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE,
   payoutInPersonCollectionNotice,
   payoutInPersonIdFieldLabel,
   type BeneficiaryDeliveryChannel,
+  type UaePayoutRecipientType,
 } from "@/lib/beneficiary-delivery-channels";
 import {
   emiratesIdFormatHint,
@@ -164,6 +167,7 @@ interface FormData {
   mobileNumber: string;
   // Payout in person
   payoutInPersonIdNumber: string;
+  uaePayoutRecipientType: UaePayoutRecipientType | "";
 }
 
 const emptyForm: FormData = {
@@ -189,15 +193,33 @@ const emptyForm: FormData = {
   mobileMoneyProvider: "",
   mobileNumber: "",
   payoutInPersonIdNumber: "",
+  uaePayoutRecipientType: "",
 };
 
-function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
+function isUaeCountryName(country: string): boolean {
+  const c = country.trim().toLowerCase();
+  return (
+    c.includes("united arab emirates") || c === "uae" || c.includes("emirates")
+  );
+}
+
+function beneficiaryRecordToForm(
+  b: CreatedBeneficiaryPayload,
+  options?: { destinationCouCode?: string },
+): FormData {
   const acct = String(b.accountNumber ?? "");
   const channel: BeneficiaryDeliveryChannel =
     b.deliveryChannel === "MOBILE_MONEY" ||
     b.deliveryChannel === "PAYOUT_IN_PERSON"
       ? b.deliveryChannel
       : "BANK_TRANSFER";
+  const id = String(b.payoutInPersonIdNumber ?? "");
+  const couCode = options?.destinationCouCode;
+  const isUae =
+    couCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE ||
+    isUaeCountryName(String(b.country ?? ""));
+  const uaePayoutRecipientType: UaePayoutRecipientType | "" =
+    channel === "PAYOUT_IN_PERSON" && isUae ? inferUaePayoutRecipientType(id) : "";
   return {
     deliveryChannel: channel,
     firstName: String(b.firstName ?? ""),
@@ -220,7 +242,8 @@ function beneficiaryRecordToForm(b: CreatedBeneficiaryPayload): FormData {
     payoutCurrency: String(b.payoutCurrency ?? ""),
     mobileMoneyProvider: String(b.mobileMoneyProvider ?? ""),
     mobileNumber: "",
-    payoutInPersonIdNumber: String(b.payoutInPersonIdNumber ?? ""),
+    payoutInPersonIdNumber: id,
+    uaePayoutRecipientType,
   };
 }
 
@@ -323,6 +346,11 @@ export function AddBeneficiaryModal({
     }
     return "";
   }, [selectedDestinationCountry?.couCode, lockCountry?.couCode]);
+
+  const isUaePayoutInPersonChannel = useMemo(
+    () => isUaePayoutInPerson(destinationCouCode, formData.deliveryChannel),
+    [destinationCouCode, formData.deliveryChannel],
+  );
 
   /** ISO alpha-2 for destination — used as IBAN length hint before prefix is typed. */
   const ibanHintAlpha2 = useMemo(() => {
@@ -474,7 +502,12 @@ export function AddBeneficiaryModal({
         .then((res) => {
           if (cancelled) return;
           const b = res.data.data.beneficiary;
-          setFormData(beneficiaryRecordToForm(b));
+          const match =
+            matchFlexCountryByLabel(catalogCountryList, String(b.country ?? "")) ??
+            matchFlexCountryByLabel(flexCountries, String(b.country ?? ""));
+          setFormData(
+            beneficiaryRecordToForm(b, { destinationCouCode: match?.couCode }),
+          );
           setLocalMobileNumber(nationalMobileFromStored(b.mobileNumber));
           setEditLoading(false);
         })
@@ -712,23 +745,47 @@ export function AddBeneficiaryModal({
   }
 
   function handlePayoutInPersonIdChange(raw: string) {
-    const isUae =
-      destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE;
-    const next = isUae ? sanitizeEmiratesId(raw) : raw;
+    const isUaeResident =
+      isUaePayoutInPersonChannel &&
+      formData.uaePayoutRecipientType === "RESIDENT";
+    const isUaeVisitor =
+      isUaePayoutInPersonChannel &&
+      formData.uaePayoutRecipientType === "VISITOR";
+
+    let next = raw;
+    if (isUaeResident) {
+      next = sanitizeEmiratesId(raw);
+    } else if (isUaeVisitor) {
+      next = raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 20);
+    }
+
     setFormData((prev) => ({ ...prev, payoutInPersonIdNumber: next }));
 
-    if (!isUae) {
-      setErrors((prev) => ({ ...prev, payoutInPersonIdNumber: undefined }));
+    if (isUaeResident) {
+      const formatError = validateEmiratesId(next, {
+        allowEmpty: true,
+        allowIncomplete: true,
+      });
+      setErrors((prev) => ({
+        ...prev,
+        payoutInPersonIdNumber: formatError ?? undefined,
+      }));
       return;
     }
 
-    const formatError = validateEmiratesId(next, {
-      allowEmpty: true,
-      allowIncomplete: true,
-    });
+    setErrors((prev) => ({ ...prev, payoutInPersonIdNumber: undefined }));
+  }
+
+  function handleUaePayoutRecipientTypeChange(type: UaePayoutRecipientType) {
+    setFormData((prev) => ({
+      ...prev,
+      uaePayoutRecipientType: type,
+      payoutInPersonIdNumber: "",
+    }));
     setErrors((prev) => ({
       ...prev,
-      payoutInPersonIdNumber: formatError ?? undefined,
+      uaePayoutRecipientType: undefined,
+      payoutInPersonIdNumber: undefined,
     }));
   }
 
@@ -780,6 +837,7 @@ export function AddBeneficiaryModal({
       ifsc: "",
       mobileMoneyProvider: "",
       payoutInPersonIdNumber: "",
+      uaePayoutRecipientType: "",
     }));
     setLocalMobileNumber("");
     setBankIdLookupStatus("idle");
@@ -816,7 +874,9 @@ export function AddBeneficiaryModal({
           }
         : {}),
       ...(channel !== "MOBILE_MONEY" ? { mobileMoneyProvider: "" } : {}),
-      ...(channel !== "PAYOUT_IN_PERSON" ? { payoutInPersonIdNumber: "" } : {}),
+      ...(channel !== "PAYOUT_IN_PERSON"
+        ? { payoutInPersonIdNumber: "", uaePayoutRecipientType: "" as const }
+        : {}),
     }));
     if (channel !== "MOBILE_MONEY") setLocalMobileNumber("");
     setErrors((prev) => ({ ...prev, deliveryChannel: undefined }));
@@ -962,11 +1022,22 @@ export function AddBeneficiaryModal({
     }
 
     if (formData.deliveryChannel === "PAYOUT_IN_PERSON") {
-      if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
-        const formatError = validateEmiratesId(
-          formData.payoutInPersonIdNumber,
-        );
-        if (formatError) errs.payoutInPersonIdNumber = formatError;
+      if (isUaePayoutInPersonChannel) {
+        if (!formData.uaePayoutRecipientType) {
+          errs.uaePayoutRecipientType = "Please select Resident or Visitor";
+        } else if (formData.uaePayoutRecipientType === "RESIDENT") {
+          const formatError = validateEmiratesId(
+            formData.payoutInPersonIdNumber,
+          );
+          if (formatError) errs.payoutInPersonIdNumber = formatError;
+        } else {
+          const passport = formData.payoutInPersonIdNumber.trim();
+          if (!passport) {
+            errs.payoutInPersonIdNumber = "Passport number is required";
+          } else if (passport.length > 20) {
+            errs.payoutInPersonIdNumber = "Passport number is too long";
+          }
+        }
       } else if (!formData.payoutInPersonIdNumber.trim()) {
         errs.payoutInPersonIdNumber = `${payoutInPersonIdFieldLabel(destinationCouCode)} is required`;
       }
@@ -1019,6 +1090,12 @@ export function AddBeneficiaryModal({
           dial && digits ? `+${dial}${digits}` : digits || localMobileNumber;
       } else if (formData.deliveryChannel === "PAYOUT_IN_PERSON") {
         payload.payoutInPersonIdNumber = formData.payoutInPersonIdNumber.trim();
+        if (
+          isUaePayoutInPersonChannel &&
+          formData.uaePayoutRecipientType
+        ) {
+          payload.uaePayoutRecipientType = formData.uaePayoutRecipientType;
+        }
       }
 
       if (editBeneficiaryId) {
@@ -1452,6 +1529,7 @@ export function AddBeneficiaryModal({
 
             {/* Delivery Channel */}
             <div>
+              
               <label className="text-sm font-medium text-slate-700 block mb-1.5">
                 Delivery Channel <span className="text-red-500">*</span>
               </label>
@@ -1517,6 +1595,9 @@ export function AddBeneficiaryModal({
                   {beneficiaryNameLabelSuffix(
                     formData.deliveryChannel,
                     destinationCouCode,
+                    isUaePayoutInPersonChannel
+                      ? formData.uaePayoutRecipientType
+                      : undefined,
                   )}{" "}
                   <span className="text-red-500">*</span>
                 </label>
@@ -1542,6 +1623,9 @@ export function AddBeneficiaryModal({
                   {beneficiaryNameLabelSuffix(
                     formData.deliveryChannel,
                     destinationCouCode,
+                    isUaePayoutInPersonChannel
+                      ? formData.uaePayoutRecipientType
+                      : undefined,
                   )}{" "}
                   <span className="text-red-500">*</span>
                 </label>
@@ -1969,48 +2053,138 @@ export function AddBeneficiaryModal({
 
             {formData.deliveryChannel === "PAYOUT_IN_PERSON" && (
               <>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                    {payoutInPersonIdFieldLabel(destinationCouCode)}{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode={
-                      destinationCouCode ===
-                      PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE
-                        ? "numeric"
-                        : "text"
-                    }
-                    placeholder={
-                      destinationCouCode ===
-                      PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE
-                        ? emiratesIdFormatHint()
-                        : payoutInPersonIdFieldLabel(destinationCouCode)
-                    }
-                    autoComplete="off"
-                    value={formData.payoutInPersonIdNumber}
-                    onChange={(e) =>
-                      handlePayoutInPersonIdChange(e.target.value)
-                    }
-                    className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
-                      errors.payoutInPersonIdNumber
-                        ? "border-red-400"
-                        : "border-slate-200"
-                    }`}
-                  />
-                  {destinationCouCode ===
-                    PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      15 digits starting with 784 (e.g. {emiratesIdFormatHint()})
-                    </p>
-                  )}
-                  {errors.payoutInPersonIdNumber && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {errors.payoutInPersonIdNumber}
-                    </p>
-                  )}
-                </div>
+                {isUaePayoutInPersonChannel ? (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 block mb-2">
+                        Recipient type <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex items-center gap-6 p-3 bg-slate-50 rounded-lg">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="uaePayoutRecipientType"
+                            checked={formData.uaePayoutRecipientType === "RESIDENT"}
+                            onChange={() =>
+                              handleUaePayoutRecipientTypeChange("RESIDENT")
+                            }
+                            className="w-4 h-4 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-slate-700">Resident</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="uaePayoutRecipientType"
+                            checked={formData.uaePayoutRecipientType === "VISITOR"}
+                            onChange={() =>
+                              handleUaePayoutRecipientTypeChange("VISITOR")
+                            }
+                            className="w-4 h-4 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-slate-700">Visitor</span>
+                        </label>
+                      </div>
+                      {errors.uaePayoutRecipientType && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.uaePayoutRecipientType}
+                        </p>
+                      )}
+                    </div>
+
+                    {formData.uaePayoutRecipientType === "RESIDENT" && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                          Emirates Id Number{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={emiratesIdFormatHint()}
+                          autoComplete="off"
+                          value={formData.payoutInPersonIdNumber}
+                          onChange={(e) =>
+                            handlePayoutInPersonIdChange(e.target.value)
+                          }
+                          className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+                            errors.payoutInPersonIdNumber
+                              ? "border-red-400"
+                              : "border-slate-200"
+                          }`}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                          15 digits starting with 784 (e.g.{" "}
+                          {emiratesIdFormatHint()})
+                        </p>
+                        {errors.payoutInPersonIdNumber && (
+                          <p className="mt-1 text-xs text-red-500">
+                            {errors.payoutInPersonIdNumber}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {formData.uaePayoutRecipientType === "VISITOR" && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                          Passport number{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="text"
+                          placeholder="Passport number"
+                          autoComplete="off"
+                          value={formData.payoutInPersonIdNumber}
+                          onChange={(e) =>
+                            handlePayoutInPersonIdChange(e.target.value)
+                          }
+                          className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+                            errors.payoutInPersonIdNumber
+                              ? "border-red-400"
+                              : "border-slate-200"
+                          }`}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                          Visitor visa is required for transaction
+                        </p>
+                        {errors.payoutInPersonIdNumber && (
+                          <p className="mt-1 text-xs text-red-500">
+                            {errors.payoutInPersonIdNumber}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                      {payoutInPersonIdFieldLabel(destinationCouCode)}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="text"
+                      placeholder={payoutInPersonIdFieldLabel(destinationCouCode)}
+                      autoComplete="off"
+                      value={formData.payoutInPersonIdNumber}
+                      onChange={(e) =>
+                        handlePayoutInPersonIdChange(e.target.value)
+                      }
+                      className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+                        errors.payoutInPersonIdNumber
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      }`}
+                    />
+                    {errors.payoutInPersonIdNumber && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.payoutInPersonIdNumber}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                   {payoutInPersonCollectionNotice(
                     destinationCouCode,
