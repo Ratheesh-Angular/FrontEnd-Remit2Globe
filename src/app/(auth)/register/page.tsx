@@ -52,6 +52,9 @@ const ACCOUNT_TYPE_TO_API_ROLE: Record<
   corporate: "CORPORATE",
 };
 
+const OAUTH_BTN_CLASS =
+  "cursor-pointer inline-flex items-center justify-center gap-2.5 w-full h-12 rounded-full border border-slate-800/80 bg-white hover:bg-slate-50 transition-colors text-slate-900 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed";
+
 interface FormData {
   email: string;
   phone: string;
@@ -114,6 +117,8 @@ export default function RegisterPage() {
     const raw = searchParams.get("accountType")?.trim().toLowerCase();
     if (raw === "corporate" || raw === "business") {
       setAccountType("corporate");
+    } else if (raw === "individual" || raw === "personal") {
+      setAccountType("individual");
     }
   }, [searchParams]);
 
@@ -431,18 +436,19 @@ export default function RegisterPage() {
 
               {/* Social Login Buttons */}
               <div className="space-y-3">
-                {/* Continue with Google */}
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isLoading}
-                  className="cursor-pointer w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={OAUTH_BTN_CLASS}
                 >
                   <svg
                     width="18"
                     height="18"
                     viewBox="0 0 18 18"
                     xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden
+                    className="cursor-pointer"
                   >
                     <path
                       d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
@@ -464,20 +470,23 @@ export default function RegisterPage() {
                   Continue with Google
                 </button>
 
-                {/* Continue with Apple */}
                 <button
                   type="button"
                   disabled={isLoading}
-                  className="cursor-pointer w-full h-11 flex items-center justify-center gap-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors text-slate-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={OAUTH_BTN_CLASS}
                 >
                   <svg
                     width="18"
                     height="18"
-                    viewBox="0 0 18 18"
-                    fill="currentColor"
+                    viewBox="0 0 16 20"
                     xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden
+                    className="cursor-pointer"
                   >
-                    <path d="M14.94 13.52c-.26.56-.39.81-.73 1.3-.48.69-1.16 1.55-2 1.56-.75.01-0.94-.48-1.96-.48s-1.24.47-1.98.49c-.82.02-1.48-.82-1.96-1.51-1.33-1.93-1.48-4.19-.65-5.39.58-.84 1.5-1.33 2.36-1.33.88 0 1.43.48 2.15.48.7 0 1.12-.48 2.13-.48.76 0 1.59.41 2.17 1.12-1.91 1.05-1.6 3.78.47 4.74zM12.03 3.78c.41-.51.73-1.23.61-1.96-.66.03-1.44.46-1.9 1-.41.47-.76 1.21-.63 1.91.74.05 1.5-.41 1.92-.95z" />
+                    <path
+                      d="M12.671 10.627c-.024-2.535 2.07-3.75 2.164-3.81-1.178-1.723-3.013-1.959-3.665-1.985-1.561-.158-3.045.92-3.834.92-.804 0-2.043-.897-3.359-.872-1.73.025-3.322 1.005-4.209 2.553-1.794 3.113-.459 7.722 1.289 10.255.853 1.233 1.868 2.614 3.203 2.565 1.287-.05 1.773-.832 3.327-.832 1.538 0 1.983.832 3.338.806 1.378-.024 2.251-1.255 3.097-2.49.975-1.426 1.375-2.805 1.395-2.875-.031-.014-2.678-1.027-2.704-4.076zM10.478 3.196C11.218 2.314 11.727 1.09 11.585 0c-1.078.043-2.385.719-3.161 1.605-.692.8-1.297 2.05-1.134 3.258 1.197.093 2.43-.608 3.188-1.667z"
+                      fill="#1d1d1f"
+                    />
                   </svg>
                   Continue with Apple
                 </button>

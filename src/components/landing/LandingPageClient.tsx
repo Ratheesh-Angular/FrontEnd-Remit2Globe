@@ -2,12 +2,11 @@
 
 import { LandingCountryProvider } from "@/components/landing/LandingCountryContext";
 import { LandingHeader } from "@/components/landing/LandingHeader";
-import { HeroSection } from "@/components/landing/HeroSection";
-import { RateCalculator } from "@/components/landing/RateCalculator";
+import { LandingHeroBlock } from "@/components/landing/LandingHeroBlock";
 import { SolutionsSection } from "@/components/landing/SolutionsSection";
-import { AccountTypesSection } from "@/components/landing/AccountTypesSection";
 import { FeaturesSection } from "@/components/landing/FeaturesSection";
 import { CountriesSection } from "@/components/landing/CountriesSection";
+import { MobileMoneyNetworksSection } from "@/components/landing/MobileMoneyNetworksSection";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { FaqSection } from "@/components/landing/FaqSection";
@@ -20,12 +19,11 @@ export function LandingPageClient() {
       <div className="min-h-screen flex flex-col bg-white">
         <LandingHeader />
         <main className="flex-1">
-          <HeroSection />
-          <RateCalculator />
+          <LandingHeroBlock />
           <SolutionsSection />
-          <AccountTypesSection />
           <FeaturesSection />
           <CountriesSection />
+          <MobileMoneyNetworksSection />
           <HowItWorksSection />
           <TestimonialsSection />
           <FaqSection />

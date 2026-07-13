@@ -20,6 +20,22 @@ const TESTIMONIALS = [
       "The app is so easy to use. I set up my family as recipients once, and now I can send money home with just a few taps. Great service!",
   },
   {
+    name: "Akuol Deng",
+    location: "South Sudan → Kenya",
+    avatar: "AD",
+    rating: 5,
+    quote:
+      "Paying my sister's tuition and accommodation in Nairobi is straightforward now. Education payments go through reliably, and I can track every transfer.",
+  },
+  {
+    name: "Michael Thon",
+    location: "South Sudan → Australia",
+    avatar: "MT",
+    rating: 5,
+    quote:
+      "We use Flex Money for supplier payments to Australia. Competitive rates, clear fees, and our partners receive funds on time, exactly what our business needs.",
+  },
+  {
     name: "Sarah Ahmed",
     location: "Tanzania → Pakistan",
     avatar: "SA",
@@ -28,12 +44,12 @@ const TESTIMONIALS = [
       "Finally a service that works reliably to Pakistan. The exchange rates are competitive, and customer support is always helpful when I have questions.",
   },
   {
-    name: "Daniel Mensah",
-    location: "Tanzania → Ghana",
+    name: "Daniel Mwangi",
+    location: "Kenya → Ghana",
     avatar: "DM",
     rating: 5,
     quote:
-      "My mother can pick up cash directly at a local agent. No bank account needed. This has made supporting my family so much easier.",
+      "Sending money directly to mobile wallets in Ghana has never been easier! Flex Money delivers instantly, and I get notified the moment the money arrives.",
   },
 ];
 
@@ -51,7 +67,7 @@ export function TestimonialsSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
           {TESTIMONIALS.map((testimonial) => (
             <div
               key={testimonial.name}

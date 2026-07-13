@@ -90,7 +90,44 @@ export async function fetchFlexForexRate(
   return { rate, currPair, raw };
 }
 
-/** Forward + reverse Flex rates; derives missing direction as reciprocal when Flex only lists one pair. */
+async function tryFlexRate(
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<number | null> {
+  try {
+    const { rate } = await fetchFlexForexRate(fromCurrency, toCurrency);
+    return rate;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve Flex rate for pay→receive: receiveAmount = payAmount × rate.
+ * Tries FROM-TO first, then TO-FROM (returns Flex value as-is for either pair).
+ * Matches backend resolveFlexExchangeRate semantics.
+ */
+export async function resolveFlexExchangeRate(
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<number> {
+  const from = fromCurrency.trim().toUpperCase();
+  const to = toCurrency.trim().toUpperCase();
+  if (!from || !to) {
+    throw new Error("Currency pair is required");
+  }
+  if (from === to) return 1;
+
+  const forwardRate = await tryFlexRate(from, to);
+  if (forwardRate != null) return forwardRate;
+
+  const reverseRate = await tryFlexRate(to, from);
+  if (reverseRate != null) return reverseRate;
+
+  throw new Error(`Flex did not return a rate for ${from} → ${to}`);
+}
+
+/** @deprecated Use resolveFlexExchangeRate for corridor rates. */
 export async function fetchFlexForexRateBidirectional(
   fromCurrency: string,
   toCurrency: string,
@@ -99,32 +136,10 @@ export async function fetchFlexForexRateBidirectional(
   reverseRate: number;
   currPair: string;
 }> {
-  const [forwardResult, reverseResult] = await Promise.allSettled([
-    fetchFlexForexRate(fromCurrency, toCurrency),
-    fetchFlexForexRate(toCurrency, fromCurrency),
-  ]);
-
-  if (forwardResult.status === "fulfilled") {
-    const forwardRate = forwardResult.value.rate;
-    const reverseRate =
-      reverseResult.status === "fulfilled"
-        ? reverseResult.value.rate
-        : 1 / forwardRate;
-    return {
-      forwardRate,
-      reverseRate,
-      currPair: forwardResult.value.currPair,
-    };
-  }
-
-  if (reverseResult.status === "fulfilled") {
-    const reverseRate = reverseResult.value.rate;
-    return {
-      forwardRate: 1 / reverseRate,
-      reverseRate,
-      currPair: buildFlexCurrPair(fromCurrency, toCurrency),
-    };
-  }
-
-  throw forwardResult.reason;
+  const rate = await resolveFlexExchangeRate(fromCurrency, toCurrency);
+  return {
+    forwardRate: rate,
+    reverseRate: rate,
+    currPair: buildFlexCurrPair(fromCurrency, toCurrency),
+  };
 }
