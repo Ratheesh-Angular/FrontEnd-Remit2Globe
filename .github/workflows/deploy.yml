@@ -18,4 +18,13 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo chown -R ubuntu:ubuntu /var/www/payment-frontend
-            sudo -u ubuntu bash /var/www/payment-frontend/deploy.sh
+            # Pull first so the memory-safe deploy.sh / package.json land on disk,
+            # then run deploy (swap + stop pm2 + build).
+            sudo -u ubuntu bash -lc '
+              set -e
+              cd /var/www/payment-frontend
+              git fetch origin main
+              git reset --hard origin/main
+              chmod +x deploy.sh
+              bash deploy.sh
+            '

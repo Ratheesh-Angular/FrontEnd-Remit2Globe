@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && node --max-old-space-size=3072 ./node_modules/next/dist/bin/next build",
+    "build:low-mem": "prisma generate && node --max-old-space-size=2048 ./node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
