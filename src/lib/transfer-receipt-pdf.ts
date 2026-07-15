@@ -132,7 +132,7 @@ function addFooter(doc: jsPDF) {
   doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
   doc.line(PAGE_MARGIN, pageH - 34, PAGE_WIDTH - PAGE_MARGIN, pageH - 34);
   setTextStyle(doc, { size: 8, color: MUTED });
-  doc.text("Remit 2 Globe transfer receipt", PAGE_MARGIN, pageH - 22);
+  doc.text("Flex Money - Transfer receipt", PAGE_MARGIN, pageH - 22);
   doc.text("Page 1", PAGE_WIDTH - PAGE_MARGIN, pageH - 22, { align: "right" });
 }
 
@@ -199,7 +199,16 @@ function drawCard(
 ): number {
   const h = cardHeight(doc, groups);
   const x = PAGE_MARGIN;
-  roundedRect(doc, x, y, CONTENT_WIDTH, h, 12, { r: 255, g: 255, b: 255 }, BORDER);
+  roundedRect(
+    doc,
+    x,
+    y,
+    CONTENT_WIDTH,
+    h,
+    12,
+    { r: 255, g: 255, b: 255 },
+    BORDER,
+  );
   let cursorY = y + CARD_PADDING;
 
   setTextStyle(doc, { size: 9.5, bold: true, color: INK });
@@ -270,20 +279,30 @@ export function downloadTransferReceiptPdf(data: TransferReceiptPdfData): void {
     { r: 153, g: 246, b: 228 },
   );
   setTextStyle(doc, { size: 9, bold: true, color: BRAND });
-  doc.text(status, PAGE_WIDTH - PAGE_MARGIN - CARD_PADDING - pillW / 2, y + CARD_PADDING + 8, {
-    align: "center",
-    baseline: "top",
-  });
+  doc.text(
+    status,
+    PAGE_WIDTH - PAGE_MARGIN - CARD_PADDING - pillW / 2,
+    y + CARD_PADDING + 8,
+    {
+      align: "center",
+      baseline: "top",
+    },
+  );
   setTextStyle(doc, { size: 9, color: MUTED });
   doc.text("Reference", PAGE_WIDTH - PAGE_MARGIN - CARD_PADDING, y + 56, {
     align: "right",
     baseline: "top",
   });
   setTextStyle(doc, { size: 11, bold: true, color: INK });
-  doc.text(data.referenceCode, PAGE_WIDTH - PAGE_MARGIN - CARD_PADDING, y + 72, {
-    align: "right",
-    baseline: "top",
-  });
+  doc.text(
+    data.referenceCode,
+    PAGE_WIDTH - PAGE_MARGIN - CARD_PADDING,
+    y + 72,
+    {
+      align: "right",
+      baseline: "top",
+    },
+  );
   y += 106;
 
   let summaryGroups: ReceiptGroup[];
