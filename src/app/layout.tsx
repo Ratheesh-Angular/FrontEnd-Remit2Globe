@@ -18,7 +18,7 @@ const siteUrl =
   process.env.NEXT_PUBLIC_APP_URL?.trim() ||
   "https://flex-money.app";
 
-const siteTitle = "Flex Money - Send Money Abroad with Confidence";
+const siteTitle = "Flex Money - Global Payments Made Simple";
 const siteDescription =
   "Send money to family, pay overseas suppliers, or transfer tuition fees securely from one powerful app. Fast, competitive, and trusted since 2013.";
 
