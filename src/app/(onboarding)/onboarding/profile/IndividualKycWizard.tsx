@@ -170,6 +170,7 @@ function buildSanitizedKycPayload(form: IndividualForm): IndividualForm {
       out.passportExpiry = "";
       out.passportIssuingCountry = "";
       out.nationalIdExpiry = "";
+      out.nationalIdIssuingCountry = form.country.trim();
     }
   }
   return out;
@@ -256,7 +257,7 @@ function inferSavedSectionsFromForm(f: IndividualForm): Section[] {
   } else if (f.citizenPrimaryDocumentType === "NATIONAL_ID") {
     identityComplete = Boolean(
       f.nationalIdNumber.trim() &&
-      f.nationalIdIssuingCountry.trim() &&
+      (f.nationalIdIssuingCountry.trim() || f.country.trim()) &&
       f.nationalIdIssue,
     );
   }
@@ -448,11 +449,13 @@ export function IndividualKycWizard() {
   useEffect(() => {
     const c = form.country.trim();
     if (!c) return;
-    setForm((prev) => {
-      if (prev.nationalIdIssuingCountry === c) return prev;
-      return { ...prev, nationalIdIssuingCountry: c };
-    });
-  }, [form.country]);
+    if (form.nationalIdIssuingCountry.trim() === c) return;
+    setForm((prev) =>
+      prev.nationalIdIssuingCountry === c
+        ? prev
+        : { ...prev, nationalIdIssuingCountry: c },
+    );
+  }, [form.country, form.nationalIdIssuingCountry]);
 
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
@@ -850,7 +853,7 @@ export function IndividualKycWizard() {
         if (form.citizenPrimaryDocumentType === "NATIONAL_ID") {
           if (!form.nationalIdNumber.trim())
             newErrors.nationalIdNumber = "National ID number is required";
-          if (!form.nationalIdIssuingCountry.trim())
+          if (!(form.nationalIdIssuingCountry.trim() || form.country.trim()))
             newErrors.nationalIdIssuingCountry =
               "National ID issuing country is required";
           if (!form.nationalIdIssue)
@@ -1568,16 +1571,31 @@ export function IndividualKycWizard() {
                         required
                         error={errors.nationalIdIssuingCountry}
                       >
-                        <FlexCountrySelect
-                          value={form.nationalIdIssuingCountry || form.country}
-                          onChange={() => {}}
-                          disabled
-                          error={Boolean(errors.nationalIdIssuingCountry)}
-                          placeholder="Same as country of residence"
-                          countries={flexCountryList}
-                          countriesLoading={flexCountriesLoading}
-                          countriesError={flexCountriesError}
-                        />
+                        <div
+                          className={`flex items-center gap-2.5 w-full border rounded-lg px-3 h-10 text-sm text-left bg-slate-50 text-slate-700 cursor-not-allowed select-none ${
+                            errors.nationalIdIssuingCountry
+                              ? "border-red-400"
+                              : "border-slate-200"
+                          }`}
+                          title="Same as the country you selected at registration."
+                        >
+                          {form.country ? (
+                            <>
+                              <span className="text-base leading-none shrink-0 opacity-90">
+                                {residenceFlexCountry ? (
+                                  <FlexCountryFlag
+                                    couCode={residenceFlexCountry.couCode}
+                                  />
+                                ) : (
+                                  <span className="inline-block w-5 h-3.5 bg-slate-200 rounded" />
+                                )}
+                              </span>
+                              <span className="font-medium">{form.country}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">Loading…</span>
+                          )}
+                        </div>
                         <p className="mt-1.5 text-xs text-slate-500">
                           Same as the country you selected at registration.
                         </p>

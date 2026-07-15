@@ -253,7 +253,7 @@ export function downloadTransferReceiptPdf(data: TransferReceiptPdfData): void {
 
   roundedRect(doc, x, y, CONTENT_WIDTH, 92, 14, SOFT, BORDER);
   setTextStyle(doc, { size: 9, bold: true, color: BRAND });
-  doc.text("REMIT 2 GLOBE", x + CARD_PADDING, y + CARD_PADDING, {
+  doc.text("FLEX MONEY", x + CARD_PADDING, y + CARD_PADDING, {
     baseline: "top",
   });
   setTextStyle(doc, { size: 21, bold: true, color: INK });

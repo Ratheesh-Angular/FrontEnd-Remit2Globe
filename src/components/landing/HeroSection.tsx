@@ -29,7 +29,7 @@ export function HeroSection({ variant = "default" }: HeroSectionProps) {
         }`}
       >
         <Globe className={isCompact ? "w-3.5 h-3.5" : "w-4 h-4"} />
-        <span>Trusted by thousands worldwide</span>
+        <span>Since 2013 · Licensed &amp; Regulated</span>
       </div>
 
       <h1
@@ -39,8 +39,7 @@ export function HeroSection({ variant = "default" }: HeroSectionProps) {
             : "text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-tight"
         }
       >
-        Send Money Abroad{" "}
-        <span className="text-red-600">with Confidence</span>
+        Global Payments <span className="text-red-600">Made Simple</span>
       </h1>
 
       <p
@@ -50,8 +49,9 @@ export function HeroSection({ variant = "default" }: HeroSectionProps) {
             : "mt-6 text-lg sm:text-xl max-w-2xl mx-auto"
         }`}
       >
-        Fast, secure transfers to 100+ countries. Bank accounts and mobile
-        money. Your money arrives safely, every time.
+        Send money to family, pay overseas suppliers, or transfer tuition fees
+        securely from one powerful app. Fast, competitive, and trusted since
+        2013.
       </p>
 
       {isCompact ? (

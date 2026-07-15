@@ -146,11 +146,40 @@ export const MOBILE_WALLET_ONLY_COUNTRY_CODES = new Set([
  */
 export const FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES = new Set(["ZWE"]);
 
+/**
+ * Always expose Mobile Money even when Flex `/banks/{couCode}` has no Mobile Wallet rows.
+ * (Static Africa/Asia rules include MOBILE_MONEY; Flex catalogs sometimes omit wallets.)
+ */
+export const FORCE_MOBILE_MONEY_COUNTRY_CODES = new Set(["KEN"]);
+
 const AFRICA_COUNTRY_CODES = new Set<string>(AFRICA_COUNTRIES);
 const ASIA_COUNTRY_CODES = new Set<string>(ASIA_COUNTRIES);
 const PAYOUT_IN_PERSON_COUNTRY_CODES = new Set<string>(
   PAYOUT_IN_PERSON_COUNTRIES,
 );
+
+/** Insert MOBILE_MONEY in static-rule order when forced for the corridor. */
+function withForcedMobileMoney(
+  code: string,
+  channels: BeneficiaryDeliveryChannel[],
+): BeneficiaryDeliveryChannel[] {
+  if (!FORCE_MOBILE_MONEY_COUNTRY_CODES.has(code)) return channels;
+  if (channels.includes("MOBILE_MONEY")) return channels;
+
+  const next = [...channels];
+  const bankIdx = next.indexOf("BANK_TRANSFER");
+  if (bankIdx >= 0) {
+    next.splice(bankIdx + 1, 0, "MOBILE_MONEY");
+    return next;
+  }
+  const payoutIdx = next.indexOf("PAYOUT_IN_PERSON");
+  if (payoutIdx >= 0) {
+    next.splice(payoutIdx, 0, "MOBILE_MONEY");
+    return next;
+  }
+  next.push("MOBILE_MONEY");
+  return next;
+}
 
 export function isAfricaCountryCode(countryCode: string): boolean {
   return AFRICA_COUNTRY_CODES.has(countryCode.trim().toUpperCase());
@@ -211,14 +240,16 @@ export function getDeliveryChannelsFromFlexServices(
     if (PAYOUT_IN_PERSON_COUNTRY_CODES.has(code)) {
       channels.push("PAYOUT_IN_PERSON");
     }
-    return channels;
+    return withForcedMobileMoney(code, channels);
   }
 
   if (FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES.has(code)) {
     const channels: BeneficiaryDeliveryChannel[] = [];
     if (hasMobileWallet) channels.push("MOBILE_MONEY");
     if (hasBank) channels.push("PAYOUT_IN_PERSON");
-    return channels.length > 0 ? channels : getDeliveryChannels(code);
+    return channels.length > 0
+      ? withForcedMobileMoney(code, channels)
+      : getDeliveryChannels(code);
   }
 
   const channels: BeneficiaryDeliveryChannel[] = [];
@@ -233,7 +264,7 @@ export function getDeliveryChannelsFromFlexServices(
     channels.push("PAYOUT_IN_PERSON");
   }
 
-  return channels;
+  return withForcedMobileMoney(code, channels);
 }
 
 export const DELIVERY_CHANNEL_LABELS: Record<

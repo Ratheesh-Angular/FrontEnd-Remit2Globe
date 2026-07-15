@@ -20,7 +20,7 @@ const siteUrl =
 
 const siteTitle = "Flex Money - Send Money Abroad with Confidence";
 const siteDescription =
-  "Fast, secure international money transfers to 100+ countries. Send to bank accounts, mobile wallets, or cash pickup. Competitive exchange rates and transparent fees.";
+  "Send money to family, pay overseas suppliers, or transfer tuition fees securely from one powerful app. Fast, competitive, and trusted since 2013.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -37,6 +37,10 @@ export const metadata: Metadata = {
     "international transfer",
     "cross border payments",
   ],
+  robots: {
+    index: true,
+    follow: true,
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -46,9 +50,11 @@ export const metadata: Metadata = {
     description: siteDescription,
     images: [
       {
-        url: "/images/og-thumbnail.jpeg",
-        width: 1200,
-        height: 630,
+        url: "/images/flex-money-og.jpeg",
+        secureUrl: "/images/flex-money-og.jpeg",
+        type: "image/jpeg",
+        width: 1600,
+        height: 840,
         alt: "Flex Money Transfer — Global payments, made simple",
       },
     ],
@@ -57,7 +63,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
-    images: ["/images/og-thumbnail.jpeg"],
+    images: ["/images/flex-money-og.jpeg"],
   },
 };
 
