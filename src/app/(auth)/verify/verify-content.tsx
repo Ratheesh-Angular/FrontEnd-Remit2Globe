@@ -143,15 +143,20 @@ export default function VerifyContent() {
           fullyVerified?: boolean;
           passwordSetupToken?: string;
         };
-        notifySuccess("Verification complete! Redirecting…");
         if (data?.fullyVerified && data.passwordSetupToken) {
+          notifySuccess("Verification complete! Redirecting…");
           sessionStorage.setItem(
             PASSWORD_SETUP_SESSION_KEY,
             data.passwordSetupToken,
           );
           setTimeout(() => router.push("/set-password"), 1200);
         } else if (data?.fullyVerified) {
+          notifySuccess("Verification complete! Redirecting…");
           setTimeout(() => router.push("/login"), 1200);
+        } else {
+          notifyError(
+            "Phone verified, but email verification is still required. Complete email verification first.",
+          );
         }
       }
     } catch (error: unknown) {
@@ -355,7 +360,8 @@ export default function VerifyContent() {
                     emailVerified ? "text-slate-500" : "text-slate-400"
                   }`}
                 >
-                  Code sent to {maskPhone(phone)}
+                  Demo mode — enter any 6-digit code
+                  {phone ? ` (${maskPhone(phone)})` : ""}
                 </p>
               </div>
             </div>
@@ -398,7 +404,7 @@ export default function VerifyContent() {
               disabled={!canResend || isLoading}
               className="w-full text-sm text-red-600 hover:text-red-700 font-medium disabled:text-slate-400 disabled:cursor-not-allowed"
             >
-              {canResend ? "Resend code" : `Resend code in ${resendTimer}s`}
+              {canResend ? "Resend (demo)" : `Resend in ${resendTimer}s`}
             </button>
           )}
         </div>
