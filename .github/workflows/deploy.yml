@@ -1,30 +1,29 @@
 name: Deploy Frontend to EC2
+
 on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo chown -R ubuntu:ubuntu /var/www/payment-frontend
-            # Pull first so the memory-safe deploy.sh / package.json land on disk,
-            # then run deploy (swap + stop pm2 + build).
             sudo -u ubuntu bash -lc '
               set -e
-              cd /var/www/payment-frontend
-              git fetch origin main
-              git reset --hard origin/main
-              chmod +x deploy.sh
-              bash deploy.sh
+              chmod +x /var/www/payment-frontend/deploy.sh
+              /var/www/payment-frontend/deploy.sh
             '
