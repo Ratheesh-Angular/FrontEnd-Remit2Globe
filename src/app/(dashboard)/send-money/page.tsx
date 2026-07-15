@@ -241,6 +241,30 @@ function filterLookupOpts(opts: LookupOpt[]): LookupOpt[] {
   return opts.filter((o) => String(o.value ?? "").trim() !== "");
 }
 
+/** Role-based Step 3 compliance defaults (must match remittance lookup `value`s). */
+function complianceDefaultsForRole(userRole?: "INDIVIDUAL" | "CORPORATE"): {
+  sourceOfIncome: string;
+  transferPurpose: string;
+  relationship: string;
+} {
+  if (userRole === "CORPORATE") {
+    return {
+      sourceOfIncome: "BUSINESS",
+      transferPurpose: "BUSINESS",
+      relationship: "BUSINESS_RELATIONSHIP",
+    };
+  }
+  return {
+    sourceOfIncome: "SAVINGS",
+    transferPurpose: "FAMILY_SUPPORT",
+    relationship: "FAMILY",
+  };
+}
+
+function lookupHasValue(opts: LookupOpt[], value: string): boolean {
+  return opts.some((o) => o.value === value);
+}
+
 type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY";
 
 /** Mirrors Step 3 Continue `disabled` rules and user-facing blocker copy. */
@@ -741,6 +765,32 @@ function SendMoneyPageContent() {
   useEffect(() => {
     loadInitial();
   }, [loadInitial]);
+
+  useEffect(() => {
+    if (!ctx || !lookups) return;
+    const defaults = complianceDefaultsForRole(ctx.userRole);
+    setSourceOfIncome((prev) =>
+      prev.trim()
+        ? prev
+        : lookupHasValue(lookups.sourceOfIncome, defaults.sourceOfIncome)
+          ? defaults.sourceOfIncome
+          : prev,
+    );
+    setTransferPurpose((prev) =>
+      prev.trim()
+        ? prev
+        : lookupHasValue(lookups.transferPurpose, defaults.transferPurpose)
+          ? defaults.transferPurpose
+          : prev,
+    );
+    setRelationship((prev) =>
+      prev.trim()
+        ? prev
+        : lookupHasValue(lookups.relationship, defaults.relationship)
+          ? defaults.relationship
+          : prev,
+    );
+  }, [ctx, lookups]);
 
   useEffect(() => {
     if (!beneficiaryQueryId) {
@@ -1411,9 +1461,24 @@ useEffect(() => {
     setTransferRow(null);
     setSelectedBen(null);
     setBeneficiaryId("");
-    setSourceOfIncome("");
-    setTransferPurpose("");
-    setRelationship("");
+    const defaults = complianceDefaultsForRole(ctx?.userRole);
+    setSourceOfIncome(
+      !lookups ||
+        lookupHasValue(lookups.sourceOfIncome, defaults.sourceOfIncome)
+        ? defaults.sourceOfIncome
+        : "",
+    );
+    setTransferPurpose(
+      !lookups ||
+        lookupHasValue(lookups.transferPurpose, defaults.transferPurpose)
+        ? defaults.transferPurpose
+        : "",
+    );
+    setRelationship(
+      !lookups || lookupHasValue(lookups.relationship, defaults.relationship)
+        ? defaults.relationship
+        : "",
+    );
     setPayInMethod("");
     setPayerPhone("");
     setPostConfirmMessage("");

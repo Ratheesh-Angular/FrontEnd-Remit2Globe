@@ -100,7 +100,7 @@ export function RemittanceTransfersTable({
               <th className="text-left text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3">
                 Status
               </th>
-              <th className="text-center text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3 w-28">
+              <th className="text-center text-xs font-semibold text-slate-700 uppercase tracking-wider px-4 py-3 w-36">
                 Action
               </th>
             </tr>

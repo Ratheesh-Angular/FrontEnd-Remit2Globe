@@ -51,8 +51,11 @@ export function PaymentProofRowAction({
     }
   }
 
-  const buttonClass =
+  const iconButtonClass =
     "cursor-pointer inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+
+  const uploadButtonClass =
+    "cursor-pointer inline-flex items-center gap-1 h-8 shrink-0 rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-800 hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
     <>
@@ -74,18 +77,19 @@ export function PaymentProofRowAction({
             type="button"
             disabled={uploadBusy}
             onClick={() => proofInputRef.current?.click()}
-            className={buttonClass}
+            className={uploadButtonClass}
             title="Upload payment proof"
             aria-label="Upload payment proof"
           >
-            <Upload className="w-4 h-4" aria-hidden />
+            <Upload className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            <span>Payment Proof</span>
           </button>
         </>
       ) : hasProof && latestProof ? (
         <button
           type="button"
           onClick={() => openPaymentProof(latestProof, setLightboxUrl)}
-          className={buttonClass}
+          className={iconButtonClass}
           title="View payment proof"
           aria-label="View payment proof"
         >
