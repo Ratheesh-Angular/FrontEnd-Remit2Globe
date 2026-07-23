@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import flexLogo from "../../../assets/logos/flex-logo.png";
+import { FooterVersionBadge } from "@/components/landing/FooterVersionBadge";
 
 const FOOTER_LINKS = {
   legal: [
@@ -98,9 +99,12 @@ export function LandingFooter() {
 
         <div className="mt-12 pt-8 border-t border-slate-800">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500">
-              &copy; {currentYear} Flex Money. All rights reserved.
-            </p>
+            <div className="flex flex-col items-center sm:items-start gap-1">
+              <p className="text-sm text-slate-500">
+                &copy; {currentYear} Flex Money. All rights reserved.
+              </p>
+              <FooterVersionBadge />
+            </div>
             <p className="text-sm text-slate-500">
               Licensed and regulated money transfer service.
             </p>

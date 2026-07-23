@@ -46,6 +46,7 @@ npm install
 
 echo "[deploy] Building (Node heap capped at 3072 MB)..."
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+# prebuild generates public/version.json (commit, buildTime, environment) for footer badge
 npm run build
 
 echo "[deploy] Restarting payment-frontend..."
