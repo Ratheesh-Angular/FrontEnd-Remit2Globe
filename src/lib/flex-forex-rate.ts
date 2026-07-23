@@ -104,8 +104,8 @@ async function tryFlexRate(
 
 /**
  * Resolve Flex rate for pay→receive: receiveAmount = payAmount × rate.
- * Tries FROM-TO first, then TO-FROM (returns Flex value as-is for either pair).
- * Matches backend resolveFlexExchangeRate semantics.
+ * Tries FROM-TO first; if only TO-FROM is available, inverts so rate is always
+ * units of `to` per 1 unit of `from`. Matches backend resolveFlexExchangeRate.
  */
 export async function resolveFlexExchangeRate(
   fromCurrency: string,
@@ -122,7 +122,7 @@ export async function resolveFlexExchangeRate(
   if (forwardRate != null) return forwardRate;
 
   const reverseRate = await tryFlexRate(to, from);
-  if (reverseRate != null) return reverseRate;
+  if (reverseRate != null && reverseRate > 0) return 1 / reverseRate;
 
   throw new Error(`Flex did not return a rate for ${from} → ${to}`);
 }
