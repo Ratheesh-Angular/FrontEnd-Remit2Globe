@@ -4,6 +4,8 @@
   "private": true,
   "homepage": ".",
   "scripts": {
+    "predev": "node scripts/generate-version-json.cjs",
+    "prebuild": "node scripts/generate-version-json.cjs",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
     "build": "prisma generate && node --max-old-space-size=3072 ./node_modules/next/dist/bin/next build",
