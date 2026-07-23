@@ -7,7 +7,7 @@
    bg-primary, text-primary, border-danger, font-inter, etc.
 ─────────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* Form control height: inputs, native selects, searchable select triggers (40px). */
+  /* Form control height: inputs, native selects, searchable select triggers (40px). build test */
   --height-field: 2.5rem;
 
   --color-primary: #dc2626;
