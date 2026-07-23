@@ -150,7 +150,14 @@ export const FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES = new Set(["ZWE"]);
  * Always expose Mobile Money even when Flex `/banks/{couCode}` has no Mobile Wallet rows.
  * (Static Africa/Asia rules include MOBILE_MONEY; Flex catalogs sometimes omit wallets.)
  */
-export const FORCE_MOBILE_MONEY_COUNTRY_CODES = new Set(["KEN"]);
+export const FORCE_MOBILE_MONEY_COUNTRY_CODES = new Set([
+  "KEN",
+  "UGA",
+  "RWA",
+  "BDI",
+  "TZA",
+  "GHA",
+]);
 
 const AFRICA_COUNTRY_CODES = new Set<string>(AFRICA_COUNTRIES);
 const ASIA_COUNTRY_CODES = new Set<string>(ASIA_COUNTRIES);
