@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { sessionApi as api } from "@/lib/api";
 import {
   normalizeAba,
@@ -36,6 +37,11 @@ import {
   type CountryCode,
 } from "libphonenumber-js";
 import { flexApiUrl } from "@/lib/flex-api";
+import {
+  buildMsisdnPayload,
+  fetchFlexAccountVerify,
+  fetchFlexMsisdnVerify,
+} from "@/lib/flex-verify";
 import { useAuthStore } from "@/store/auth.store";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import mobileMoneyProvidersData from "@/data/mobile-money-providers.json";
@@ -94,6 +100,39 @@ function dialCodeFromCouCode(couCode: string): string | undefined {
 
 function payCurrencyFlagCode(currency: string): string {
   return CURRENCY_TO_FLAG_ALPHA2[currency.toUpperCase()] ?? "US";
+}
+
+type VerifyHintState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; name: string }
+  | { status: "error"; message: string };
+
+function VerifyNameHint({ state }: { state: VerifyHintState }) {
+  if (state.status === "idle") return null;
+  if (state.status === "loading") {
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+        Looking up registered name…
+      </div>
+    );
+  }
+  if (state.status === "success") {
+    return (
+      <div className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        <span>
+          Registered as <span className="font-semibold">{state.name}</span>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      {state.message}
+    </div>
+  );
 }
 
 export interface CreatedBeneficiaryPayload {
@@ -283,6 +322,14 @@ export function AddBeneficiaryModal({
   const [isConfirmingAccount, setIsConfirmingAccount] = useState(false);
   const [isConfirmingIban, setIsConfirmingIban] = useState(false);
   const [localMobileNumber, setLocalMobileNumber] = useState("");
+  const [msisdnVerify, setMsisdnVerify] = useState<VerifyHintState>({
+    status: "idle",
+  });
+  const [accountVerify, setAccountVerify] = useState<VerifyHintState>({
+    status: "idle",
+  });
+  const msisdnVerifyGen = useRef(0);
+  const accountVerifyGen = useRef(0);
   const userRole = useAuthStore((s) => s.user?.role ?? "INDIVIDUAL");
   const { countries: flexCountries } = useFlexCountries(open);
   const {
@@ -538,6 +585,10 @@ export function AddBeneficiaryModal({
     setErrors({});
     setIsConfirmingAccount(false);
     setLocalMobileNumber("");
+    setMsisdnVerify({ status: "idle" });
+    setAccountVerify({ status: "idle" });
+    msisdnVerifyGen.current += 1;
+    accountVerifyGen.current += 1;
     setFlexBankCatalog([]);
     setBankOpen(false);
     setPayoutCurrencyOpen(false);
@@ -613,6 +664,133 @@ export function AddBeneficiaryModal({
       });
     return () => ac.abort();
   }, [open, selectedDestinationCountry?.couCode, useFlexBankListUi]);
+
+  useEffect(() => {
+    if (!open || formData.deliveryChannel !== "MOBILE_MONEY") {
+      setMsisdnVerify({ status: "idle" });
+      return;
+    }
+
+    const digits = localMobileNumber.replace(/\D/g, "");
+    if (!digits || !selectedDestinationCountry) {
+      setMsisdnVerify({ status: "idle" });
+      return;
+    }
+
+    let valid = false;
+    if (destinationPhoneCountry) {
+      const mobileErr = validateNationalPhoneDigits(
+        destinationPhoneCountry,
+        localMobileNumber,
+      );
+      valid = !mobileErr;
+    } else {
+      valid = digits.length >= 7 && digits.length <= 15;
+    }
+
+    if (!valid) {
+      setMsisdnVerify({ status: "idle" });
+      return;
+    }
+
+    const dial = dialCodeFromCouCode(selectedDestinationCountry.couCode);
+    const payload = buildMsisdnPayload(dial, digits);
+    if (payload.length < 10) {
+      setMsisdnVerify({ status: "idle" });
+      return;
+    }
+
+    const gen = ++msisdnVerifyGen.current;
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setMsisdnVerify({ status: "loading" });
+        try {
+          const result = await fetchFlexMsisdnVerify(payload, ac.signal);
+          if (gen !== msisdnVerifyGen.current) return;
+          if (result.ok) {
+            setMsisdnVerify({ status: "success", name: result.name });
+          } else {
+            setMsisdnVerify({ status: "error", message: result.error });
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          if (gen !== msisdnVerifyGen.current) return;
+          setMsisdnVerify({
+            status: "error",
+            message: "Could not verify mobile number.",
+          });
+        }
+      })();
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
+  }, [
+    open,
+    formData.deliveryChannel,
+    localMobileNumber,
+    selectedDestinationCountry,
+    destinationPhoneCountry,
+  ]);
+
+  useEffect(() => {
+    if (!open || formData.deliveryChannel !== "BANK_TRANSFER") {
+      setAccountVerify({ status: "idle" });
+      return;
+    }
+
+    const account = formData.accountNumber.trim();
+    const confirm = formData.confirmAccountNumber.trim();
+    const bankCode = formData.flexBankCode.trim();
+    const couCode = destinationCouCode;
+
+    if (!account || !confirm || account !== confirm || !bankCode || !couCode) {
+      setAccountVerify({ status: "idle" });
+      return;
+    }
+
+    const gen = ++accountVerifyGen.current;
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setAccountVerify({ status: "loading" });
+        try {
+          const result = await fetchFlexAccountVerify(
+            { payload: confirm, bankCode, couCode },
+            ac.signal,
+          );
+          if (gen !== accountVerifyGen.current) return;
+          if (result.ok) {
+            setAccountVerify({ status: "success", name: result.name });
+          } else {
+            setAccountVerify({ status: "error", message: result.error });
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          if (gen !== accountVerifyGen.current) return;
+          setAccountVerify({
+            status: "error",
+            message: "Could not verify account number.",
+          });
+        }
+      })();
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
+  }, [
+    open,
+    formData.deliveryChannel,
+    formData.accountNumber,
+    formData.confirmAccountNumber,
+    formData.flexBankCode,
+    destinationCouCode,
+  ]);
 
   useEffect(() => {
     if (!open || formData.deliveryChannel !== "BANK_TRANSFER") return;
@@ -840,6 +1018,10 @@ export function AddBeneficiaryModal({
       uaePayoutRecipientType: "",
     }));
     setLocalMobileNumber("");
+    setMsisdnVerify({ status: "idle" });
+    setAccountVerify({ status: "idle" });
+    msisdnVerifyGen.current += 1;
+    accountVerifyGen.current += 1;
     setBankIdLookupStatus("idle");
     setBankSearch("");
     setBankOpen(false);
@@ -879,6 +1061,10 @@ export function AddBeneficiaryModal({
         : {}),
     }));
     if (channel !== "MOBILE_MONEY") setLocalMobileNumber("");
+    setMsisdnVerify({ status: "idle" });
+    setAccountVerify({ status: "idle" });
+    msisdnVerifyGen.current += 1;
+    accountVerifyGen.current += 1;
     setErrors((prev) => ({ ...prev, deliveryChannel: undefined }));
   }
 
@@ -1915,6 +2101,7 @@ export function AddBeneficiaryModal({
                           {errors.confirmAccountNumber}
                         </p>
                       )}
+                      <VerifyNameHint state={accountVerify} />
                     </div>
                   </>
                 )}
@@ -2047,6 +2234,7 @@ export function AddBeneficiaryModal({
                       {errors.mobileNumber}
                     </p>
                   )}
+                  <VerifyNameHint state={msisdnVerify} />
                 </div>
               </>
             )}
