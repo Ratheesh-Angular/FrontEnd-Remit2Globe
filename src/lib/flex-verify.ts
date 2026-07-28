@@ -1,4 +1,11 @@
+import {
+  normalizeAba,
+  normalizeIfsc,
+  type BankIdentifierConfig,
+} from "@/lib/beneficiary-bank-identifier";
 import { flexApiUrl } from "@/lib/flex-api";
+
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const FLEX_SUCCESS_CODES = new Set(["0", "100"]);
 
@@ -17,6 +24,8 @@ function isFoundFalse(value: unknown): boolean {
 
 function pickNameField(o: Record<string, unknown>): string | null {
   const candidates = [
+    o.databaseName,
+    o.dbName,
     o.registeredName,
     o.accountName,
     o.accountHolderName,
@@ -84,6 +93,30 @@ export function parseFlexVerifyName(data: unknown): FlexVerifyParseResult {
   }
 
   return { ok: false, error: "No registered name returned." };
+}
+
+export function resolveAccountVerifyBankCode(input: {
+  flexBankCode: string;
+  ifsc: string;
+  routingNumber: string;
+  bankIdConfig: BankIdentifierConfig;
+}): string {
+  const flex = input.flexBankCode.trim();
+  if (flex) return flex;
+
+  const hasIfsc = input.bankIdConfig.fields.some((f) => f.lookup === "ifsc");
+  if (hasIfsc) {
+    const ifsc = normalizeIfsc(input.ifsc);
+    if (IFSC_RE.test(ifsc)) return ifsc;
+  }
+
+  const hasAba = input.bankIdConfig.fields.some((f) => f.lookup === "aba");
+  if (hasAba) {
+    const aba = normalizeAba(input.routingNumber);
+    if (aba.length === 9) return aba;
+  }
+
+  return "";
 }
 
 export function buildMsisdnPayload(

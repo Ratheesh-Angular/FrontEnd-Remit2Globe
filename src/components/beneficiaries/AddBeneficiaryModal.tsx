@@ -41,6 +41,7 @@ import {
   buildMsisdnPayload,
   fetchFlexAccountVerify,
   fetchFlexMsisdnVerify,
+  resolveAccountVerifyBankCode,
 } from "@/lib/flex-verify";
 import { useAuthStore } from "@/store/auth.store";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
@@ -744,7 +745,12 @@ export function AddBeneficiaryModal({
 
     const account = formData.accountNumber.trim();
     const confirm = formData.confirmAccountNumber.trim();
-    const bankCode = formData.flexBankCode.trim();
+    const bankCode = resolveAccountVerifyBankCode({
+      flexBankCode: formData.flexBankCode,
+      ifsc: formData.ifsc,
+      routingNumber: formData.routingNumber,
+      bankIdConfig,
+    });
     const couCode = destinationCouCode;
 
     if (!account || !confirm || account !== confirm || !bankCode || !couCode) {
@@ -789,6 +795,9 @@ export function AddBeneficiaryModal({
     formData.accountNumber,
     formData.confirmAccountNumber,
     formData.flexBankCode,
+    formData.ifsc,
+    formData.routingNumber,
+    bankIdConfig,
     destinationCouCode,
   ]);
 
