@@ -5,6 +5,9 @@ export type RemittanceTransferRow = {
   id: string;
   referenceCode: string;
   status: string;
+  failureReason?: string | null;
+  flexStkStatus?: string | null;
+  flexPayoutStatus?: string | null;
   createdAt?: string;
   paymentProofs?: {
     id: string;
