@@ -12,10 +12,16 @@ import {
   buildTransferReceiptDataFromRow,
   type RemittanceTransferRow,
 } from "@/lib/transfer-receipt-from-transfer";
+import {
+  canRetryMobileMoneyPayment,
+  resolveTransferFailureDetail,
+  resolveTransferStatusDisplay,
+  statusBadgeClassForTransfer,
+} from "@/lib/flex-response-codes";
 import { PaymentProofLightbox } from "@/components/transactions/PaymentProofLightbox";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import {
   PAYMENT_PROOF_ACCEPT,
   canUploadMorePaymentProof,
@@ -32,6 +38,7 @@ import {
   FileText,
   Image as ImageIcon,
   Upload,
+  RotateCcw,
 } from "lucide-react";
 
 type Lookups = {
@@ -62,30 +69,6 @@ function Detail({
       </dd>
     </div>
   );
-}
-
-function statusLabel(s: string) {
-  const map: Record<string, string> = {
-    DRAFT: "Draft",
-    PENDING_PAYMENT: "Pending payment",
-    PAYMENT_SUBMITTED: "Payment submitted",
-    UNDER_REVIEW: "Under review",
-    PROCESSING: "Processing",
-    COMPLETED: "Completed",
-    FAILED: "Failed",
-    CANCELLED: "Cancelled",
-  };
-  return map[s] ?? s.replace(/_/g, " ");
-}
-
-function statusBadgeClass(s: string) {
-  if (s === "COMPLETED")
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  if (s === "FAILED" || s === "CANCELLED")
-    return "bg-red-50 text-red-800 border-red-200";
-  if (s === "PENDING_PAYMENT")
-    return "bg-amber-50 text-amber-900 border-amber-200";
-  return "bg-slate-50 text-slate-800 border-slate-200";
 }
 
 function fmtMoney(n: number) {
@@ -128,6 +111,7 @@ export function ViewTransactionModal({
   const [loadFailed, setLoadFailed] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [retryBusy, setRetryBusy] = useState(false);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -188,6 +172,30 @@ export function ViewTransactionModal({
     }
   }
 
+  async function handleRetryPayment() {
+    if (!transferId) return;
+    setRetryBusy(true);
+    try {
+      const res = await api.post<{ message?: string }>(
+        `/remittance/transfers/${transferId}/retry-payment`,
+      );
+      notifySuccess(
+        typeof res.data.message === "string"
+          ? res.data.message
+          : "Check your phone to approve the mobile money payment prompt.",
+      );
+      await reloadTransfer();
+      onTransferUpdated?.();
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not retry payment. Please try again.";
+      notifyError(msg);
+    } finally {
+      setRetryBusy(false);
+    }
+  }
+
   const receiptPayload = useMemo(() => {
     if (!row) return null;
     return buildTransferReceiptDataFromRow(row, lookups);
@@ -202,13 +210,19 @@ export function ViewTransactionModal({
       ? Number(row.payAmount) + Number(row.feeAmount ?? 0)
       : null;
 
+  const failureDetail = row ? resolveTransferFailureDetail(row) : null;
+  const showRetry = row ? canRetryMobileMoneyPayment(row) : false;
+
   if (!open) return null;
 
   return (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
         <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200/80 relative sm:max-w-2xl">
-          <AppLoadingOverlay show={uploadBusy} label="Uploading proof…" />
+          <AppLoadingOverlay
+            show={uploadBusy || retryBusy}
+            label={retryBusy ? "Sending payment prompt…" : "Uploading proof…"}
+          />
           <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-100 bg-gradient-to-b from-slate-50/80 to-white">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 mb-1">
@@ -237,9 +251,9 @@ export function ViewTransactionModal({
                       )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <span
-                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${statusBadgeClass(row.status)}`}
+                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${statusBadgeClassForTransfer(row)}`}
                         >
-                          {statusLabel(row.status)}
+                          {resolveTransferStatusDisplay(row)}
                         </span>
                         <span className="text-xs text-slate-500">
                           {fmtDate(row.createdAt)}
@@ -271,6 +285,11 @@ export function ViewTransactionModal({
             )}
             {!loading && !loadFailed && row && (
               <div className="space-y-2 pb-4">
+                {failureDetail && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+                    {failureDetail}
+                  </div>
+                )}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-3">
                     Amounts
@@ -558,6 +577,19 @@ export function ViewTransactionModal({
             >
               Close
             </button>
+            {showRetry && (
+              <button
+                type="button"
+                disabled={retryBusy}
+                onClick={() => {
+                  void handleRetryPayment();
+                }}
+                className="flex-1 h-10 inline-flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Retry payment
+              </button>
+            )}
             <button
               type="button"
               disabled={!receiptPayload}

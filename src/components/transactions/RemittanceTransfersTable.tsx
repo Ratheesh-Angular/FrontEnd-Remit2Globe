@@ -1,35 +1,15 @@
 "use client";
 
 import { PaymentProofRowAction } from "@/components/transactions/PaymentProofRowAction";
+import { RetryPaymentRowAction } from "@/components/transactions/RetryPaymentRowAction";
 import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
+import {
+  resolveTransferStatusDisplay,
+  statusBadgeClassForTransfer,
+} from "@/lib/flex-response-codes";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
 import { formatDate } from "date-fns";
 import { Eye } from "lucide-react";
-
-function statusLabel(s: string) {
-  const map: Record<string, string> = {
-    PENDING_PAYMENT: "Pending payment",
-    PAYMENT_SUBMITTED: "Payment submitted",
-    UNDER_REVIEW: "Under review",
-    PROCESSING: "Processing",
-    COMPLETED: "Completed",
-    FAILED: "Failed",
-    CANCELLED: "Cancelled",
-  };
-  return map[s] ?? s.replace(/_/g, " ");
-}
-
-function statusBadgeClass(s: string) {
-  if (s === "COMPLETED")
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  if (s === "FAILED" || s === "CANCELLED")
-    return "bg-red-50 text-red-800 border-red-200";
-  if (s === "PENDING_PAYMENT")
-    return "bg-amber-50 text-amber-900 border-amber-200";
-  if (s === "PROCESSING" || s === "UNDER_REVIEW" || s === "PAYMENT_SUBMITTED")
-    return "bg-sky-50 text-sky-800 border-sky-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
 
 function fmtMoney(n: number) {
   return n.toLocaleString(undefined, {
@@ -146,13 +126,13 @@ export function RemittanceTransfersTable({
                   </td>
                   <td className="px-4 py-4">
                     <span
-                      className={`inline-flex items-center text-[10px] uppercase font-semibold tracking-wide px-2.5 py-1 rounded-md border ${statusBadgeClass(t.status)}`}
+                      className={`inline-flex items-center text-[10px] uppercase font-semibold tracking-wide px-2.5 py-1 rounded-md border ${statusBadgeClassForTransfer(t)}`}
                     >
-                      {statusLabel(t.status)}
+                      {resolveTransferStatusDisplay(t)}
                     </span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <div className="inline-flex items-center justify-center gap-1">
+                    <div className="inline-flex items-center justify-center gap-1 flex-wrap">
                       <button
                         type="button"
                         onClick={() => onViewTransfer(t.id)}
@@ -162,6 +142,10 @@ export function RemittanceTransfersTable({
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      <RetryPaymentRowAction
+                        transfer={t}
+                        onRetried={onTransferUpdated}
+                      />
                       <PaymentProofRowAction
                         transfer={t}
                         onUploaded={onTransferUpdated}
@@ -190,7 +174,7 @@ export function RemittanceTransfersTable({
                     {t.referenceCode}
                   </p>
                 </div>
-                <div className="shrink-0 inline-flex items-center gap-1">
+                <div className="shrink-0 inline-flex items-center gap-1 flex-wrap justify-end">
                   <button
                     type="button"
                     onClick={() => onViewTransfer(t.id)}
@@ -200,6 +184,10 @@ export function RemittanceTransfersTable({
                   >
                     <Eye className="w-4 h-4" />
                   </button>
+                  <RetryPaymentRowAction
+                    transfer={t}
+                    onRetried={onTransferUpdated}
+                  />
                   <PaymentProofRowAction
                     transfer={t}
                     onUploaded={onTransferUpdated}
@@ -237,9 +225,9 @@ export function RemittanceTransfersTable({
 
               <div>
                 <span
-                  className={`inline-flex items-center text-[10px] uppercase font-semibold tracking-wide px-2.5 py-1 rounded-md border ${statusBadgeClass(t.status)}`}
+                  className={`inline-flex items-center text-[10px] uppercase font-semibold tracking-wide px-2.5 py-1 rounded-md border ${statusBadgeClassForTransfer(t)}`}
                 >
-                  {statusLabel(t.status)}
+                  {resolveTransferStatusDisplay(t)}
                 </span>
               </div>
             </div>
