@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { FlexLogo } from "@/components/brand/FlexLogo";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
-import { notifyApiError, notifyError, notifyInfo } from "@/lib/notify";
+import { notifyApiError, notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -35,6 +35,9 @@ export default function ForgotPasswordPage() {
 
       const userId = res.data.data?.userId ?? null;
       if (userId) {
+        notifySuccess(
+          `We sent a 6-digit verification code to ${trimmed}. Check your inbox and spam folder.`,
+        );
         const q = new URLSearchParams({
           email: trimmed,
           userId,
@@ -43,11 +46,20 @@ export default function ForgotPasswordPage() {
       } else {
         notifyInfo(
           res.data.message ??
-            "If an account with a password exists for that email, check your inbox. Otherwise you may need to register or use another sign-in method.",
+            "If an account with a password exists for that email, check your inbox. Otherwise verify the address, sign in with Google if you used it, or register.",
         );
       }
     } catch (err: unknown) {
-      notifyApiError(err);
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 503) {
+        notifyApiError(
+          err,
+          "We could not send a verification code right now. Please try again shortly or contact support.",
+        );
+      } else {
+        notifyApiError(err);
+      }
     } finally {
       setIsLoading(false);
     }
