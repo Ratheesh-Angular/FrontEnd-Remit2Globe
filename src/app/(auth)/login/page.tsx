@@ -65,7 +65,25 @@ export default function LoginPage() {
 
       window.location.assign("/dashboard");
     } catch (error: unknown) {
-      notifyApiError(error);
+      const ax = error as {
+        response?: { data?: { message?: unknown } };
+        message?: unknown;
+        code?: unknown;
+      };
+      const hasResponse = Boolean(ax.response);
+      const msg =
+        typeof ax.message === "string" ? ax.message.toLowerCase() : "";
+      const isNetworkFailure =
+        !hasResponse &&
+        (ax.code === "ERR_NETWORK" ||
+          msg.includes("network error") ||
+          msg.includes("failed to fetch"));
+      notifyApiError(
+        error,
+        isNetworkFailure
+          ? "Cannot reach the server. Check your connection."
+          : "Something went wrong",
+      );
     } finally {
       setIsLoading(false);
     }

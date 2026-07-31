@@ -26,12 +26,16 @@ function Detail({
   label,
   value,
   mono,
+  hideIfEmpty,
 }: {
   label: string;
   value: string | null | undefined;
   mono?: boolean;
+  /** Skip the row when value is blank (optional bank identifiers). */
+  hideIfEmpty?: boolean;
 }) {
   const v = value?.trim();
+  if (hideIfEmpty && !v) return null;
   return (
     <div className="py-3 border-b border-slate-100 last:border-0">
       <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">
@@ -203,14 +207,41 @@ export function ViewBeneficiaryModal({
                     <Detail label="Bank name" value={row.bankName} />
                     <Detail label="Branch" value={row.branchName} />
                     <Detail
-                      label="Account number / IBAN"
+                      label="Account number"
                       value={row.accountNumber}
                       mono
                     />
+                    <Detail label="IBAN" value={row.iban} mono hideIfEmpty />
+                    <Detail label="IFSC" value={row.ifsc} mono hideIfEmpty />
                     <Detail
-                      label="IFSC / SWIFT / Routing"
+                      label="SWIFT / BIC"
                       value={row.swiftBic}
                       mono
+                      hideIfEmpty
+                    />
+                    <Detail
+                      label="Routing number"
+                      value={row.routingNumber}
+                      mono
+                      hideIfEmpty
+                    />
+                    <Detail
+                      label="Sort code"
+                      value={row.sortCode}
+                      mono
+                      hideIfEmpty
+                    />
+                    <Detail label="BSB" value={row.bsb} mono hideIfEmpty />
+                    <Detail
+                      label="Transit number"
+                      value={row.transitNumber}
+                      mono
+                      hideIfEmpty
+                    />
+                    <Detail
+                      label="Payout currency"
+                      value={row.payoutCurrency}
+                      hideIfEmpty
                     />
                   </>
                 ) : (
