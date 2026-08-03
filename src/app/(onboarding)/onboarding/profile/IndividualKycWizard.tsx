@@ -398,7 +398,7 @@ export function IndividualKycWizard() {
   };
 
   if (isLoading) {
-    return <AppLoadingOverlay label="Loading your profile…" />;
+    return <AppLoadingOverlay show label="Loading your profile…" />;
   }
 
   return (
