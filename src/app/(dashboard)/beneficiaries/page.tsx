@@ -28,6 +28,7 @@ import {
   Plus,
   Search,
   SendHorizontal,
+  Star,
   Trash2,
   Users,
 } from "lucide-react";
@@ -53,6 +54,9 @@ interface Beneficiary {
   createdAt: string;
   /** false = hidden from Send money picker */
   active?: boolean;
+  /** User-marked favourite for dashboard quick send */
+  isFavorite?: boolean;
+  upiId?: string | null;
 }
 
 type DialogFields = Pick<
@@ -301,9 +305,7 @@ export default function BeneficiariesPage() {
         </div>
       ) : filteredBeneficiaries.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-8 py-12 text-center">
-          <h3 className="text-base font-semibold text-slate-900">
-            No matches
-          </h3>
+          <h3 className="text-base font-semibold text-slate-900">No matches</h3>
           <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
             No beneficiaries match “{nameQuery.trim()}”. Try a different name.
           </p>
@@ -328,16 +330,21 @@ export default function BeneficiariesPage() {
             {pageSlice.map((b) => {
               const isBank = b.deliveryChannel === "BANK_TRANSFER";
               const isMobile = b.deliveryChannel === "MOBILE_MONEY";
+              const isUpi = b.deliveryChannel === "UPI";
               const subtitle = isBank
                 ? b.bankName?.trim() || "Bank account"
                 : isMobile
                   ? b.mobileMoneyProvider?.trim() || "Mobile wallet"
-                  : getDeliveryChannelLabel(b.deliveryChannel);
+                  : isUpi
+                    ? "UPI"
+                    : getDeliveryChannelLabel(b.deliveryChannel);
               const masked = isBank
                 ? b.accountNumber
                 : isMobile
                   ? b.mobileNumber
-                  : "";
+                  : isUpi
+                    ? b.upiId
+                    : "";
               const name = formatBeneficiaryName(b);
 
               const isActive = b.active !== false;
@@ -348,13 +355,65 @@ export default function BeneficiariesPage() {
               return (
                 <li key={b.id}>
                   <div
-                    className={`group rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${
+                    className={`relative group rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${
                       isActive
                         ? "border-slate-200 hover:border-slate-300"
                         : "border-slate-200/80 border-dashed opacity-95"
                     }`}
                   >
-                    <div className="flex gap-4">
+                    <button
+                      type="button"
+                      title={
+                        b.isFavorite
+                          ? "Remove from favourites"
+                          : "Add to favourites"
+                      }
+                      aria-label={
+                        b.isFavorite
+                          ? "Remove from favourites"
+                          : "Add to favourites"
+                      }
+                      aria-pressed={Boolean(b.isFavorite)}
+                      onClick={async () => {
+                        const next = !b.isFavorite;
+                        setBeneficiaries((prev) =>
+                          prev.map((row) =>
+                            row.id === b.id
+                              ? { ...row, isFavorite: next }
+                              : row,
+                          ),
+                        );
+                        try {
+                          await api.patch(`/beneficiaries/${b.id}`, {
+                            isFavorite: next,
+                          });
+                        } catch (e) {
+                          setBeneficiaries((prev) =>
+                            prev.map((row) =>
+                              row.id === b.id
+                                ? { ...row, isFavorite: !next }
+                                : row,
+                            ),
+                          );
+                          notifyApiError(
+                            e,
+                            "Could not update favourite. Please try again.",
+                          );
+                        }
+                      }}
+                      className={`cursor-pointer absolute top-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                        b.isFavorite
+                          ? "border-amber-300 bg-amber-50 text-amber-500 hover:bg-amber-100"
+                          : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-amber-500"
+                      }`}
+                    >
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          b.isFavorite ? "fill-current" : ""
+                        }`}
+                      />
+                    </button>
+                    <div className="flex gap-4 pr-8">
                       <div
                         className="shrink-0 w-9 h-9 rounded-full overflow-hidden ring-2 ring-white shadow-sm bg-slate-100 flex items-center justify-center"
                         aria-hidden
@@ -392,10 +451,12 @@ export default function BeneficiariesPage() {
                             className={`shrink-0 text-[10px] uppercase font-semibold tracking-wide px-2 py-1 rounded-md ${
                               isBank
                                 ? "bg-sky-50 text-sky-800"
-                                : "bg-violet-50 text-violet-800"
+                                : isUpi
+                                  ? "bg-emerald-50 text-emerald-800"
+                                  : "bg-violet-50 text-violet-800"
                             }`}
                           >
-                            {isBank ? "Bank" : "Mobile"}
+                            {isBank ? "Bank" : isUpi ? "UPI" : "Mobile"}
                           </span>
                         </div>
                         <div className="flex flex-col gap-3 mt-4 pt-3 border-t border-slate-100 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between">

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Legacy URL: submission confirmation is the final step on the profile KYC flow. */
+/** Legacy URL: KYC outcome is shown on the Signzy result page or profile. */
 export default function OnboardingStatusRedirectPage() {
-  redirect("/onboarding/profile?step=submitted");
+  redirect("/onboarding/kyc/result");
 }

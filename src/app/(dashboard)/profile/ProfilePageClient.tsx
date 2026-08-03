@@ -842,10 +842,10 @@ export default function ProfilePageClient() {
                 description="Files submitted for identity verification"
                 action={
                   <Link
-                    href="/onboarding/profile?step=documents"
+                    href="/onboarding/profile"
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
                   >
-                    Manage uploads
+                    Manage verification
                     <ExternalLink className="w-3.5 h-3.5" />
                   </Link>
                 }

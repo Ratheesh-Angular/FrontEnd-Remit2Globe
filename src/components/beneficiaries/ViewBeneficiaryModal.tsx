@@ -8,6 +8,7 @@ import { AppDialog } from "@/components/ui/AppDialog";
 import type { AppDialogProps } from "@/components/ui/AppDialog";
 import { Loader } from "@/components/ui/Loader";
 import { Pencil, Trash2, X } from "lucide-react";
+import { getDeliveryChannelLabel } from "@/lib/beneficiary-delivery-channels";
 
 type BeneficiaryDetail = CreatedBeneficiaryPayload & { id: string };
 
@@ -109,6 +110,8 @@ export function ViewBeneficiaryModal({
   if (!open || !beneficiaryId) return null;
 
   const isBank = row?.deliveryChannel === "BANK_TRANSFER";
+  const isUpi = row?.deliveryChannel === "UPI";
+  const isMobile = row?.deliveryChannel === "MOBILE_MONEY";
   const displayName = row ? formatBeneficiaryName(row) : "";
 
   function requestDelete() {
@@ -163,10 +166,12 @@ export function ViewBeneficiaryModal({
                   className={`inline-flex mt-2 text-xs px-2.5 py-0.5 rounded-full font-medium ${
                     isBank
                       ? "bg-sky-100 text-sky-800"
-                      : "bg-violet-100 text-violet-800"
+                      : isUpi
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-violet-100 text-violet-800"
                   }`}
                 >
-                  {isBank ? "Bank transfer" : "Mobile money"}
+                  {getDeliveryChannelLabel(row.deliveryChannel)}
                 </span>
               )}
             </div>
@@ -211,6 +216,12 @@ export function ViewBeneficiaryModal({
                       value={row.accountNumber}
                       mono
                     />
+                    <Detail
+                      label="Mobile number"
+                      value={row.mobileNumber}
+                      mono
+                      hideIfEmpty
+                    />
                     <Detail label="IBAN" value={row.iban} mono hideIfEmpty />
                     <Detail label="IFSC" value={row.ifsc} mono hideIfEmpty />
                     <Detail
@@ -244,7 +255,16 @@ export function ViewBeneficiaryModal({
                       hideIfEmpty
                     />
                   </>
-                ) : (
+                ) : isUpi ? (
+                  <>
+                    <Detail label="UPI ID" value={row.upiId} mono />
+                    <Detail
+                      label="Payout currency"
+                      value={row.payoutCurrency}
+                      hideIfEmpty
+                    />
+                  </>
+                ) : isMobile ? (
                   <>
                     <Detail
                       label="Mobile money provider"
@@ -254,6 +274,26 @@ export function ViewBeneficiaryModal({
                       label="Mobile number"
                       value={row.mobileNumber}
                       mono
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Detail
+                      label="ID document number"
+                      value={row.payoutInPersonIdNumber}
+                      mono
+                      hideIfEmpty
+                    />
+                    <Detail
+                      label="Mobile number"
+                      value={row.mobileNumber}
+                      mono
+                      hideIfEmpty
+                    />
+                    <Detail
+                      label="Payout currency"
+                      value={row.payoutCurrency}
+                      hideIfEmpty
                     />
                   </>
                 )}

@@ -100,7 +100,7 @@ interface LookupOpt {
 
 interface Beneficiary {
   id: string;
-  deliveryChannel: "BANK_TRANSFER" | "MOBILE_MONEY";
+  deliveryChannel: "BANK_TRANSFER" | "MOBILE_MONEY" | "PAYOUT_IN_PERSON" | "UPI";
   firstName: string;
   lastName: string;
   country?: string | null;
@@ -110,6 +110,7 @@ interface Beneficiary {
   swiftBic?: string | null;
   mobileMoneyProvider?: string | null;
   mobileNumber?: string | null;
+  upiId?: string | null;
 }
 
 interface CompanyAccount {
@@ -162,6 +163,16 @@ function alpha2FromCouCode(couCode: string): string | undefined {
   if (!u) return undefined;
   return countriesIso.alpha3ToAlpha2(u) || undefined;
 }
+
+/** ISO3 fallback when catalog has no row for a receive-currency deep-link. */
+const CURRENCY_TO_COU3_FALLBACK: Record<string, string> = {
+  INR: "IND",
+  RWF: "RWA",
+  TZS: "TZA",
+  AED: "ARE",
+  UGX: "UGA",
+  KES: "KEN",
+};
 
 /** Map beneficiary `country` (country name) to catalog row for currency + filters. */
 function resolveRecipientFromBeneficiaryCountry(
@@ -217,9 +228,21 @@ function payoutDetailsForReceipt(b: Beneficiary): string {
       .filter(Boolean)
       .join(" · ");
   }
+  if (b.deliveryChannel === "UPI") {
+    return b.upiId?.trim() || "UPI";
+  }
   return (
     [b.mobileMoneyProvider, b.mobileNumber].filter(Boolean).join(" · ") || "—"
   );
+}
+
+function beneficiaryDeliveryLabel(
+  channel: Beneficiary["deliveryChannel"],
+): string {
+  if (channel === "BANK_TRANSFER") return "Bank transfer";
+  if (channel === "UPI") return "UPI";
+  if (channel === "PAYOUT_IN_PERSON") return "Payout in person";
+  return "Mobile money";
 }
 
 const STEPS = [
@@ -358,7 +381,10 @@ function SendMoneyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const beneficiaryQueryId = searchParams.get("beneficiaryId");
+  const toCountryQuery = searchParams.get("toCountry");
+  const receiveCurrencyQuery = searchParams.get("receiveCurrency");
   const beneficiaryQueryProcessedRef = useRef<string | null>(null);
+  const corridorQueryProcessedRef = useRef<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState(1);
@@ -823,6 +849,106 @@ function SendMoneyPageContent() {
     setSelectedBen(b);
   }, [loading, beneficiaryQueryId, beneficiaries, dedupedCatalogCountries]);
 
+  /** Rate deep-link: `?toCountry=` / `?receiveCurrency=` when no beneficiaryId. */
+  useEffect(() => {
+    if (beneficiaryQueryId) {
+      corridorQueryProcessedRef.current = null;
+      return;
+    }
+    const toCountry = (toCountryQuery ?? "").trim().toUpperCase();
+    const recvCur = (receiveCurrencyQuery ?? "").trim().toUpperCase();
+    if (!toCountry && !recvCur) {
+      corridorQueryProcessedRef.current = null;
+      return;
+    }
+    if (loading || !dedupedCatalogCountries.length) return;
+
+    const key = `${toCountry}|${recvCur}`;
+    if (corridorQueryProcessedRef.current === key) return;
+    corridorQueryProcessedRef.current = key;
+
+    let couCode = "";
+    let couName = "";
+    let currency = recvCur;
+
+    if (toCountry) {
+      const byCode = dedupedCatalogCountries.find(
+        (c) => c.couCode.toUpperCase() === toCountry,
+      );
+      if (byCode) {
+        couCode = byCode.couCode;
+        couName = byCode.couName;
+      } else {
+        const a2 =
+          toCountry.length === 2
+            ? toCountry
+            : countriesIso.alpha3ToAlpha2(toCountry);
+        const a3 =
+          toCountry.length === 3
+            ? toCountry
+            : typeof a2 === "string"
+              ? countriesIso.alpha2ToAlpha3(a2)
+              : undefined;
+        if (typeof a3 === "string") {
+          const match = dedupedCatalogCountries.find(
+            (c) => c.couCode.toUpperCase() === a3.toUpperCase(),
+          );
+          if (match) {
+            couCode = match.couCode;
+            couName = match.couName;
+          } else {
+            couCode = a3;
+            couName =
+              (typeof a2 === "string"
+                ? countriesIso.getName(a2, "en")
+                : undefined) || a3;
+          }
+        }
+      }
+      if (!currency && couCode) {
+        currency = legalCurrencyForCouCode(couCode);
+      }
+    }
+
+    if (currency && !couCode) {
+      const opts = recipientCurrencyOptions;
+      const opt =
+        opts.find((o) => o.currency.toUpperCase() === currency) ?? null;
+      if (opt) {
+        couCode = opt.couCode;
+        couName = opt.couName;
+        currency = opt.currency;
+      } else {
+        const preferred = CURRENCY_TO_COU3_FALLBACK[currency];
+        if (preferred) {
+          const match = dedupedCatalogCountries.find(
+            (c) => c.couCode.toUpperCase() === preferred,
+          );
+          if (match) {
+            couCode = match.couCode;
+            couName = match.couName;
+          } else {
+            couCode = preferred;
+            couName = preferred;
+          }
+        }
+      }
+    }
+
+    if (currency) setReceiveCurrency(currency);
+    if (couCode) {
+      setRecipientCouCode(couCode);
+      setRecipientCouName(couName || couCode);
+    }
+  }, [
+    loading,
+    beneficiaryQueryId,
+    toCountryQuery,
+    receiveCurrencyQuery,
+    dedupedCatalogCountries,
+    recipientCurrencyOptions,
+  ]);
+
   /** Default receive currency when none chosen yet. */
   useEffect(() => {
     if (loading) return;
@@ -844,6 +970,8 @@ function SendMoneyPageContent() {
       }
     }
 
+    if (toCountryQuery || receiveCurrencyQuery) return;
+
     const usd = opts.find((o) => o.currency.toUpperCase() === "USD");
     const pick = usd ?? opts[0];
     setReceiveCurrency(pick.currency);
@@ -856,6 +984,8 @@ function SendMoneyPageContent() {
     beneficiaryQueryId,
     beneficiaries,
     dedupedCatalogCountries,
+    toCountryQuery,
+    receiveCurrencyQuery,
   ]);
 
   /** Changing receive currency clears a beneficiary that no longer matches. */
@@ -1550,10 +1680,7 @@ useEffect(() => {
       recipientCountry: recipientCouName,
       beneficiary: {
         displayName: formatBeneficiaryName(ben),
-        deliveryLabel:
-          ben.deliveryChannel === "BANK_TRANSFER"
-            ? "Bank transfer"
-            : "Mobile money",
+        deliveryLabel: beneficiaryDeliveryLabel(ben.deliveryChannel),
         payoutDetails: payoutDetailsForReceipt(ben),
       },
       compliance: complianceLabels,
@@ -2119,6 +2246,8 @@ useEffect(() => {
                             <span>
                               {b.bankName} · {b.accountNumber}
                             </span>
+                          ) : b.deliveryChannel === "UPI" ? (
+                            <span className="font-mono">{b.upiId}</span>
                           ) : (
                             <span>
                               {b.mobileMoneyProvider} · {b.mobileNumber}
@@ -2441,9 +2570,7 @@ useEffect(() => {
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Delivery channel</dt>
                 <dd className="text-right">
-                  {selectedBen.deliveryChannel === "BANK_TRANSFER"
-                    ? "Bank transfer"
-                    : "Mobile money"}
+                  {beneficiaryDeliveryLabel(selectedBen.deliveryChannel)}
                 </dd>
               </div>
               <div className="flex justify-between gap-4 items-start">
@@ -2463,6 +2590,8 @@ useEffect(() => {
                           : "—"}
                       </span>
                     </>
+                  ) : selectedBen.deliveryChannel === "UPI" ? (
+                    <span className="font-mono">{selectedBen.upiId ?? "—"}</span>
                   ) : (
                     <>
                       {selectedBen.mobileMoneyProvider ?? "—"}
