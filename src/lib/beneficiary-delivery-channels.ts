@@ -13,7 +13,15 @@ import { validateEmiratesId } from "@/lib/emirates-id-validation";
 export type BeneficiaryDeliveryChannel =
   | "BANK_TRANSFER"
   | "MOBILE_MONEY"
-  | "PAYOUT_IN_PERSON";
+  | "PAYOUT_IN_PERSON"
+  | "UPI";
+
+/** India: Bank Transfer + UPI only (no Mobile Money). */
+export const INDIA_COU_CODE = "IND" as const;
+
+export function getIndiaDeliveryChannels(): BeneficiaryDeliveryChannel[] {
+  return ["BANK_TRANSFER", "UPI"];
+}
 
 /** UN Africa region — ISO3 couCodes */
 export const AFRICA_COUNTRIES = [
@@ -202,6 +210,10 @@ export function getDeliveryChannels(
   const code = countryCode.trim().toUpperCase();
   if (!code) return [];
 
+  if (code === INDIA_COU_CODE) {
+    return getIndiaDeliveryChannels();
+  }
+
   const channels: BeneficiaryDeliveryChannel[] = ["BANK_TRANSFER"];
 
   if (isAfricaCountryCode(code) || isAsiaCountryCode(code)) {
@@ -225,6 +237,11 @@ export function getDeliveryChannelsFromFlexServices(
 ): BeneficiaryDeliveryChannel[] {
   const code = countryCode.trim().toUpperCase();
   if (!code) return [];
+
+  // India always: Bank Transfer + UPI (never Mobile Money from Flex catalog).
+  if (code === INDIA_COU_CODE) {
+    return getIndiaDeliveryChannels();
+  }
 
   if (services.length === 0) {
     if (MOBILE_WALLET_ONLY_COUNTRY_CODES.has(code)) {
@@ -281,6 +298,7 @@ export const DELIVERY_CHANNEL_LABELS: Record<
   BANK_TRANSFER: "Bank Transfer",
   MOBILE_MONEY: "Mobile Money",
   PAYOUT_IN_PERSON: "Payout In Person (cash collection)",
+  UPI: "UPI",
 };
 
 /** UAE payout-in-person corridors collect Emirates ID; others use passport/national ID. */
@@ -333,6 +351,7 @@ export function beneficiaryNameLabelSuffix(
   uaeRecipientType?: UaePayoutRecipientType | "",
 ): string {
   if (channel === "BANK_TRANSFER") return " (as per bank account)";
+  if (channel === "UPI") return " (as per UPI ID)";
   if (channel === "PAYOUT_IN_PERSON") {
     return payoutInPersonNameSuffix(destinationCouCode, uaeRecipientType);
   }

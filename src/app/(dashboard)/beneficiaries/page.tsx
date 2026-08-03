@@ -26,7 +26,9 @@ import {
   Eye,
   Pencil,
   Plus,
+  Search,
   SendHorizontal,
+  Star,
   Trash2,
   Users,
 } from "lucide-react";
@@ -52,6 +54,9 @@ interface Beneficiary {
   createdAt: string;
   /** false = hidden from Send money picker */
   active?: boolean;
+  /** User-marked favourite for dashboard quick send */
+  isFavorite?: boolean;
+  upiId?: string | null;
 }
 
 type DialogFields = Pick<
@@ -82,20 +87,36 @@ export default function BeneficiariesPage() {
   const [dialogLoading, setDialogLoading] = useState(false);
   const [listLoadError, setListLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [nameQuery, setNameQuery] = useState("");
 
   const formModalOpen = showAddModal || editId !== null;
 
+  const filteredBeneficiaries = useMemo(() => {
+    const q = nameQuery.trim().toLowerCase();
+    if (!q) return beneficiaries;
+    return beneficiaries.filter((b) => {
+      const full = formatBeneficiaryName(b).toLowerCase();
+      const first = (b.firstName ?? "").toLowerCase();
+      const last = (b.lastName ?? "").toLowerCase();
+      return full.includes(q) || first.includes(q) || last.includes(q);
+    });
+  }, [beneficiaries, nameQuery]);
+
   const totalPages = Math.max(
     1,
-    Math.ceil(beneficiaries.length / PAGE_SIZE) || 1,
+    Math.ceil(filteredBeneficiaries.length / PAGE_SIZE) || 1,
   );
 
   const pageSlice = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return beneficiaries.slice(start, start + PAGE_SIZE);
-  }, [beneficiaries, page]);
+    return filteredBeneficiaries.slice(start, start + PAGE_SIZE);
+  }, [filteredBeneficiaries, page]);
 
   const { countries: catalogCountries } = useCatalogCountries(true);
+
+  useEffect(() => {
+    setPage(1);
+  }, [nameQuery]);
 
   useEffect(() => {
     setPage((p) => Math.min(Math.max(1, p), totalPages));
@@ -182,8 +203,9 @@ export default function BeneficiariesPage() {
   }
 
   const rangeStart =
-    beneficiaries.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, beneficiaries.length);
+    filteredBeneficiaries.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, filteredBeneficiaries.length);
+  const hasSearch = nameQuery.trim().length > 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-10 relative">
@@ -241,6 +263,23 @@ export default function BeneficiariesPage() {
         </button>
       </div>
 
+      {beneficiaries.length > 0 ? (
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={nameQuery}
+            onChange={(e) => setNameQuery(e.target.value)}
+            placeholder="Search by beneficiary name…"
+            aria-label="Search beneficiaries by name"
+            className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600"
+          />
+        </div>
+      ) : null}
+
       {beneficiaries.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-8 py-16 text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 mb-4 shadow-sm">
@@ -264,22 +303,48 @@ export default function BeneficiariesPage() {
             Add your first beneficiary
           </button>
         </div>
+      ) : filteredBeneficiaries.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-8 py-12 text-center">
+          <h3 className="text-base font-semibold text-slate-900">No matches</h3>
+          <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+            No beneficiaries match “{nameQuery.trim()}”. Try a different name.
+          </p>
+          <button
+            type="button"
+            onClick={() => setNameQuery("")}
+            className="cursor-pointer mt-5 inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-red-700 hover:text-red-800 transition-colors"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
+          {hasSearch ? (
+            <p className="text-xs text-slate-500">
+              {filteredBeneficiaries.length} match
+              {filteredBeneficiaries.length === 1 ? "" : "es"} for “
+              {nameQuery.trim()}”
+            </p>
+          ) : null}
           <ul className="space-y-3">
             {pageSlice.map((b) => {
               const isBank = b.deliveryChannel === "BANK_TRANSFER";
               const isMobile = b.deliveryChannel === "MOBILE_MONEY";
+              const isUpi = b.deliveryChannel === "UPI";
               const subtitle = isBank
                 ? b.bankName?.trim() || "Bank account"
                 : isMobile
                   ? b.mobileMoneyProvider?.trim() || "Mobile wallet"
-                  : getDeliveryChannelLabel(b.deliveryChannel);
+                  : isUpi
+                    ? "UPI"
+                    : getDeliveryChannelLabel(b.deliveryChannel);
               const masked = isBank
-                ? maskAccountLast4(b.accountNumber)
+                ? b.accountNumber
                 : isMobile
-                  ? maskPhoneLast4(b.mobileNumber)
-                  : "";
+                  ? b.mobileNumber
+                  : isUpi
+                    ? b.upiId
+                    : "";
               const name = formatBeneficiaryName(b);
 
               const isActive = b.active !== false;
@@ -290,13 +355,65 @@ export default function BeneficiariesPage() {
               return (
                 <li key={b.id}>
                   <div
-                    className={`group rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${
+                    className={`relative group rounded-2xl border bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all ${
                       isActive
                         ? "border-slate-200 hover:border-slate-300"
                         : "border-slate-200/80 border-dashed opacity-95"
                     }`}
                   >
-                    <div className="flex gap-4">
+                    <button
+                      type="button"
+                      title={
+                        b.isFavorite
+                          ? "Remove from favourites"
+                          : "Add to favourites"
+                      }
+                      aria-label={
+                        b.isFavorite
+                          ? "Remove from favourites"
+                          : "Add to favourites"
+                      }
+                      aria-pressed={Boolean(b.isFavorite)}
+                      onClick={async () => {
+                        const next = !b.isFavorite;
+                        setBeneficiaries((prev) =>
+                          prev.map((row) =>
+                            row.id === b.id
+                              ? { ...row, isFavorite: next }
+                              : row,
+                          ),
+                        );
+                        try {
+                          await api.patch(`/beneficiaries/${b.id}`, {
+                            isFavorite: next,
+                          });
+                        } catch (e) {
+                          setBeneficiaries((prev) =>
+                            prev.map((row) =>
+                              row.id === b.id
+                                ? { ...row, isFavorite: !next }
+                                : row,
+                            ),
+                          );
+                          notifyApiError(
+                            e,
+                            "Could not update favourite. Please try again.",
+                          );
+                        }
+                      }}
+                      className={`cursor-pointer absolute top-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                        b.isFavorite
+                          ? "border-amber-300 bg-amber-50 text-amber-500 hover:bg-amber-100"
+                          : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-amber-500"
+                      }`}
+                    >
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          b.isFavorite ? "fill-current" : ""
+                        }`}
+                      />
+                    </button>
+                    <div className="flex gap-4 pr-8">
                       <div
                         className="shrink-0 w-9 h-9 rounded-full overflow-hidden ring-2 ring-white shadow-sm bg-slate-100 flex items-center justify-center"
                         aria-hidden
@@ -334,10 +451,12 @@ export default function BeneficiariesPage() {
                             className={`shrink-0 text-[10px] uppercase font-semibold tracking-wide px-2 py-1 rounded-md ${
                               isBank
                                 ? "bg-sky-50 text-sky-800"
-                                : "bg-violet-50 text-violet-800"
+                                : isUpi
+                                  ? "bg-emerald-50 text-emerald-800"
+                                  : "bg-violet-50 text-violet-800"
                             }`}
                           >
-                            {isBank ? "Bank" : "Mobile"}
+                            {isBank ? "Bank" : isUpi ? "UPI" : "Mobile"}
                           </span>
                         </div>
                         <div className="flex flex-col gap-3 mt-4 pt-3 border-t border-slate-100 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between">
@@ -422,7 +541,7 @@ export default function BeneficiariesPage() {
             })}
           </ul>
 
-          {beneficiaries.length > PAGE_SIZE ? (
+          {filteredBeneficiaries.length > PAGE_SIZE ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1 border-t border-slate-200/80">
               <p className="text-sm text-slate-500 text-center sm:text-left order-2 sm:order-1">
                 Showing{" "}
@@ -430,7 +549,7 @@ export default function BeneficiariesPage() {
                 –<span className="font-medium text-slate-700">{rangeEnd}</span>{" "}
                 of{" "}
                 <span className="font-medium text-slate-700">
-                  {beneficiaries.length}
+                  {filteredBeneficiaries.length}
                 </span>
               </p>
               <nav
