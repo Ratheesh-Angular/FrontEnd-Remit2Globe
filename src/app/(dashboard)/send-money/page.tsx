@@ -11,6 +11,11 @@ import {
 } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { formatBeneficiaryName } from "@/lib/beneficiaryDisplay";
+import {
+  ALFARDAN_BRANCHES_URL,
+  isUaePayoutInPerson,
+  UAE_COU_CODE,
+} from "@/lib/beneficiary-delivery-channels";
 import { AddBeneficiaryModal } from "@/components/beneficiaries/AddBeneficiaryModal";
 import {
   PhoneCountryInput,
@@ -654,6 +659,22 @@ function SendMoneyPageContent() {
     const match = DUMMY_PAYOUT_ACCOUNTS.filter((a) => a.currency === cur);
     return match.length > 0 ? match : DUMMY_PAYOUT_ACCOUNTS;
   }, [companyAccounts, payCurrency]);
+
+  const showUaePayoutInPersonInfo = useMemo(() => {
+    const ben = selectedBen ?? transferRow?.beneficiary ?? null;
+    if (!ben || ben.deliveryChannel !== "PAYOUT_IN_PERSON") return false;
+    if (isUaePayoutInPerson(recipientCouCode, ben.deliveryChannel)) return true;
+    const resolved = resolveRecipientFromBeneficiaryCountry(
+      ben.country,
+      dedupedCatalogCountries,
+    );
+    return resolved?.couCode === UAE_COU_CODE;
+  }, [
+    selectedBen,
+    transferRow?.beneficiary,
+    recipientCouCode,
+    dedupedCatalogCountries,
+  ]);
 
   /** Amounts for the confirmation step (quote still in memory, or transfer from API). */
   const confirmationAmounts = useMemo(() => {
@@ -2957,6 +2978,22 @@ useEffect(() => {
               </div>
             </div>
           )}
+
+          {showUaePayoutInPersonInfo ? (
+            <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-red-100 bg-red-50/30 px-3 py-2 max-w-2xl mx-auto text-center">
+              Please collect funds in person at any Alfardan Exchange House
+              branch{" "}
+              <a
+                href={ALFARDAN_BRANCHES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-red-700 underline underline-offset-2 hover:text-red-800"
+              >
+                Alfardhan branches
+              </a>
+              .
+            </p>
+          ) : null}
 
           {payInMethod === "MOBILE_MONEY" ||
           transferRow?.payInMethod === "MOBILE_MONEY" ? (

@@ -2,11 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { flexApiUrl } from "@/lib/flex-api";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 
-type TabId = "general" | "ifsc" | "forex" | "verify";
+type TabId = "general" | "ifsc" | "forex" | "verify" | "banks";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "general", label: "General API" },
+  { id: "banks", label: "Bank List" },
   { id: "ifsc", label: "IFSC Validate" },
   { id: "forex", label: "Forex Rate" },
   { id: "verify", label: "Verify MSISDN / Account" },
@@ -70,24 +74,32 @@ export default function FlexTestPage() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountResult, setAccountResult] = useState<unknown>(null);
 
+  const [banksCountryName, setBanksCountryName] = useState("");
+  const [banksCouCode, setBanksCouCode] = useState("");
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [banksResult, setBanksResult] = useState<unknown>(null);
+
+  const {
+    countries: catalogCountryList,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(activeTab === "banks");
+
   const resolvedCurrPair = useMemo(() => {
     if (currPairOverride.trim()) return currPairOverride.trim();
     return `${fromCurrency} - ${toCurrency}`;
   }, [currPairOverride, fromCurrency, toCurrency]);
 
-  const countryOptions = useMemo(() => {
-    if (!response || typeof response !== "object" || response === null)
-      return [];
-    const data = (response as { data?: { data?: unknown } }).data;
-    if (
-      !data ||
-      typeof data !== "object" ||
-      !Array.isArray((data as { data?: unknown }).data)
-    ) {
-      return [];
-    }
-    return (data as { data: { couCode: string; couName: string }[] }).data;
-  }, [response]);
+  const banksRows = useMemo(() => {
+    if (!banksResult || typeof banksResult !== "object") return [];
+    const body = banksResult as { data?: unknown };
+    const rows = Array.isArray(body.data) ? body.data : [];
+    return rows as {
+      serviceType?: string;
+      bankCode?: string;
+      bankName?: string;
+    }[];
+  }, [banksResult]);
 
   const callAPI = async (endpoint: string) => {
     try {
@@ -103,21 +115,37 @@ export default function FlexTestPage() {
     }
   };
 
-  const getBanks = async (couCode: string) => {
+  const fetchBanksForCountry = async (couCode: string) => {
+    if (!couCode.trim()) {
+      setBanksResult(null);
+      return;
+    }
+
     try {
-      const res = await fetch(flexApiUrl(`/banks/${couCode}`), {
+      setBanksLoading(true);
+      const res = await fetch(flexApiUrl(`/banks/${encodeURIComponent(couCode)}`), {
         credentials: "include",
       });
-      const data = await res.json();
-      setResponse(data);
+      const data = await res.json().catch(() => ({ error: "Invalid JSON" }));
+      setBanksResult({ httpStatus: res.status, ...data });
     } catch (err) {
       console.error(err);
-      setResponse({ error: "Request failed" });
+      setBanksResult({ success: false, error: "Request failed" });
+    } finally {
+      setBanksLoading(false);
     }
   };
 
-  const handleGetBanks = (couCode: string) => {
-    if (couCode) getBanks(couCode);
+  const handleBanksCountryChange = (couName: string) => {
+    setBanksCountryName(couName);
+    const match = matchFlexCountryByLabel(catalogCountryList, couName);
+    const couCode = match?.couCode ?? "";
+    setBanksCouCode(couCode);
+    if (couCode) {
+      void fetchBanksForCountry(couCode);
+    } else {
+      setBanksResult(null);
+    }
   };
 
   const validateIfsc = async () => {
@@ -305,27 +333,86 @@ export default function FlexTestPage() {
                 <p className="text-sm text-slate-500 mb-3">Loading…</p>
               )}
 
-              {countryOptions.length > 0 && (
-                <div className="mb-5">
-                  <label className="text-sm font-medium text-slate-700">
-                    Select country for banks
-                  </label>
-                  <select
-                    className="mt-1.5 block w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    onChange={(e) => handleGetBanks(e.target.value)}
-                    defaultValue=""
-                  >
-                    <option value="">— Select country —</option>
-                    {countryOptions.map((country) => (
-                      <option key={country.couCode} value={country.couCode}>
-                        {country.couName}
-                      </option>
-                    ))}
-                  </select>
+              <JsonBlock value={response} />
+            </div>
+          )}
+
+          {activeTab === "banks" && (
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Bank list (Flex)</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Select a country to call our backend{" "}
+                <code className="text-red-700">GET /api/flex/banks/:couCode</code>
+                , which POSTs to Flex{" "}
+                <code className="text-red-700">/banks</code> with{" "}
+                <code className="text-red-700">
+                  {`{ "couCode": "IND" }`}
+                </code>
+                .
+              </p>
+
+              <div className="mb-5">
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Destination country
+                </label>
+                <CatalogCountrySelect
+                  value={banksCountryName}
+                  onChange={handleBanksCountryChange}
+                  disabled={banksLoading}
+                  placeholder="Select destination country…"
+                  countries={catalogCountryList}
+                  countriesLoading={catalogCountriesLoading}
+                  countriesError={catalogCountriesError}
+                />
+                {banksCouCode ? (
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    ISO code:{" "}
+                    <code className="text-red-700 font-mono">{banksCouCode}</code>
+                  </p>
+                ) : null}
+              </div>
+
+              {banksLoading && (
+                <p className="text-sm text-slate-500 mb-3">Loading banks…</p>
+              )}
+
+              {banksRows.length > 0 && (
+                <div className="mb-5 overflow-auto max-h-[360px] rounded-lg border border-slate-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left">
+                      <tr>
+                        <th className="px-3 py-2 font-medium text-slate-600">
+                          Bank code
+                        </th>
+                        <th className="px-3 py-2 font-medium text-slate-600">
+                          Bank name
+                        </th>
+                        <th className="px-3 py-2 font-medium text-slate-600">
+                          Service type
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {banksRows.map((row, idx) => (
+                        <tr
+                          key={`${row.bankCode}-${row.bankName}-${idx}`}
+                          className="border-t border-slate-100"
+                        >
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {row.bankCode ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">{row.bankName ?? "—"}</td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {row.serviceType ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              <JsonBlock value={response} />
+              <JsonBlock value={banksResult} />
             </div>
           )}
 
