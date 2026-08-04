@@ -51,6 +51,26 @@ function Detail({
   );
 }
 
+function formatDisplayDate(value: string | null | undefined): string {
+  const v = value?.trim();
+  if (!v) return "";
+  return v.slice(0, 10);
+}
+
+function isUaeCountryName(country: string | null | undefined): boolean {
+  const c = (country ?? "").trim().toLowerCase();
+  return (
+    c.includes("united arab emirates") || c === "uae" || c.includes("emirates")
+  );
+}
+
+function uaeRecipientTypeLabel(value: string | null | undefined): string {
+  const v = (value ?? "").trim().toUpperCase();
+  if (v === "RESIDENT") return "Resident";
+  if (v === "VISITOR") return "Visitor";
+  return "";
+}
+
 function apiErrorMessage(error: unknown, fallback: string): string {
   return (
     (error as { response?: { data?: { message?: string } } })?.response?.data
@@ -112,6 +132,8 @@ export function ViewBeneficiaryModal({
   const isBank = row?.deliveryChannel === "BANK_TRANSFER";
   const isUpi = row?.deliveryChannel === "UPI";
   const isMobile = row?.deliveryChannel === "MOBILE_MONEY";
+  const isPayout = row?.deliveryChannel === "PAYOUT_IN_PERSON";
+  const isUae = isUaeCountryName(row?.country);
   const displayName = row ? formatBeneficiaryName(row) : "";
 
   function requestDelete() {
@@ -217,11 +239,33 @@ export function ViewBeneficiaryModal({
                       mono
                     />
                     <Detail
-                      label="Mobile number"
+                      label={
+                        isUae ? "Beneficiary mobile number" : "Mobile number"
+                      }
                       value={row.mobileNumber}
                       mono
                       hideIfEmpty
                     />
+                    {isUae ? (
+                      <>
+                        <Detail
+                          label="Beneficiary Emirates ID"
+                          value={row.payoutInPersonIdNumber}
+                          mono
+                          hideIfEmpty
+                        />
+                        <Detail
+                          label="Emirates ID issue date"
+                          value={formatDisplayDate(row.receiverDocumentIssueDate)}
+                          hideIfEmpty
+                        />
+                        <Detail
+                          label="Emirates ID expiry date"
+                          value={formatDisplayDate(row.receiverDocumentExpiryDate)}
+                          hideIfEmpty
+                        />
+                      </>
+                    ) : null}
                     <Detail label="IBAN" value={row.iban} mono hideIfEmpty />
                     <Detail label="IFSC" value={row.ifsc} mono hideIfEmpty />
                     <Detail
@@ -278,12 +322,47 @@ export function ViewBeneficiaryModal({
                   </>
                 ) : (
                   <>
+                    {isUae && isPayout ? (
+                      <Detail
+                        label="Recipient type"
+                        value={uaeRecipientTypeLabel(row.uaePayoutRecipientType)}
+                        hideIfEmpty
+                      />
+                    ) : null}
                     <Detail
-                      label="ID document number"
+                      label={
+                        isUae && isPayout
+                          ? row.uaePayoutRecipientType === "VISITOR"
+                            ? "Passport number"
+                            : "Emirates ID"
+                          : "ID document number"
+                      }
                       value={row.payoutInPersonIdNumber}
                       mono
                       hideIfEmpty
                     />
+                    {isUae && isPayout ? (
+                      <>
+                        <Detail
+                          label={
+                            row.uaePayoutRecipientType === "VISITOR"
+                              ? "Passport issue date"
+                              : "Emirates ID issue date"
+                          }
+                          value={formatDisplayDate(row.receiverDocumentIssueDate)}
+                          hideIfEmpty
+                        />
+                        <Detail
+                          label={
+                            row.uaePayoutRecipientType === "VISITOR"
+                              ? "Passport expiry date"
+                              : "Emirates ID expiry date"
+                          }
+                          value={formatDisplayDate(row.receiverDocumentExpiryDate)}
+                          hideIfEmpty
+                        />
+                      </>
+                    ) : null}
                     <Detail
                       label="Mobile number"
                       value={row.mobileNumber}
