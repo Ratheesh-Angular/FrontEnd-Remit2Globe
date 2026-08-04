@@ -23,6 +23,13 @@ export function getIndiaDeliveryChannels(): BeneficiaryDeliveryChannel[] {
   return ["BANK_TRANSFER", "UPI"];
 }
 
+/** UAE: Bank Transfer + Payout in Person only (no Mobile Money). */
+export const UAE_COU_CODE = "ARE" as const;
+
+export function getUaeDeliveryChannels(): BeneficiaryDeliveryChannel[] {
+  return ["BANK_TRANSFER", "PAYOUT_IN_PERSON"];
+}
+
 /** UN Africa region — ISO3 couCodes */
 export const AFRICA_COUNTRIES = [
   "DZA",
@@ -214,6 +221,10 @@ export function getDeliveryChannels(
     return getIndiaDeliveryChannels();
   }
 
+  if (code === UAE_COU_CODE) {
+    return getUaeDeliveryChannels();
+  }
+
   const channels: BeneficiaryDeliveryChannel[] = ["BANK_TRANSFER"];
 
   if (isAfricaCountryCode(code) || isAsiaCountryCode(code)) {
@@ -241,6 +252,11 @@ export function getDeliveryChannelsFromFlexServices(
   // India always: Bank Transfer + UPI (never Mobile Money from Flex catalog).
   if (code === INDIA_COU_CODE) {
     return getIndiaDeliveryChannels();
+  }
+
+  // UAE always: Bank Transfer + Payout in Person (never Mobile Money).
+  if (code === UAE_COU_CODE) {
+    return getUaeDeliveryChannels();
   }
 
   if (services.length === 0) {
