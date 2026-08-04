@@ -320,6 +320,9 @@ export const DELIVERY_CHANNEL_LABELS: Record<
 /** UAE payout-in-person corridors collect Emirates ID; others use passport/national ID. */
 export const PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE = "ARE" as const;
 
+export const ALFARDAN_BRANCHES_URL =
+  "https://alfardanexchange.com/branches/all";
+
 export type UaePayoutRecipientType = "RESIDENT" | "VISITOR";
 
 /** Infer UAE payout recipient type from a stored ID value (edit mode). */
@@ -375,12 +378,9 @@ export function beneficiaryNameLabelSuffix(
 }
 
 export function payoutInPersonCollectionNotice(
-  destinationCouCode: string | undefined,
+  _destinationCouCode: string | undefined,
   countryName: string,
 ): string {
-  if (destinationCouCode === PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE) {
-    return "The beneficiary will collect funds in person at any Alfardan Exchange House branch in the United Arab Emirates.";
-  }
   const place = countryName.trim() || "the selected country";
   return `The beneficiary will collect funds in person in ${place}. No bank or mobile wallet details are required.`;
 }

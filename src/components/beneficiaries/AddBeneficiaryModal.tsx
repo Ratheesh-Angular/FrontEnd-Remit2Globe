@@ -44,6 +44,7 @@ import {
   resolveAccountVerifyBankCode,
 } from "@/lib/flex-verify";
 import { validateUpiId, upiHandleFromId } from "@/lib/upi-validation";
+import { parseFlexIfscLookup } from "@/lib/flex-ifsc-lookup";
 import { validateUaeMobileNationalDigits } from "@/lib/uae-mobile-validation";
 import { useAuthStore } from "@/store/auth.store";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
@@ -64,6 +65,7 @@ import {
   PAYOUT_IN_PERSON_EMIRATES_ID_COUNTRY_CODE,
   payoutInPersonCollectionNotice,
   payoutInPersonIdFieldLabel,
+  UAE_COU_CODE,
   type BeneficiaryDeliveryChannel,
   type UaePayoutRecipientType,
 } from "@/lib/beneficiary-delivery-channels";
@@ -644,7 +646,18 @@ export function AddBeneficiaryModal({
     if (channels.length === 0) return;
     setFormData((prev) => {
       if (channels.includes(prev.deliveryChannel)) return prev;
-      return { ...prev, deliveryChannel: channels[0] };
+      const nextChannel = channels[0];
+      const defaultUaeRecipientType =
+        nextChannel === "PAYOUT_IN_PERSON" &&
+        destinationCouCode === UAE_COU_CODE &&
+        !prev.uaePayoutRecipientType
+          ? ("RESIDENT" as const)
+          : prev.uaePayoutRecipientType;
+      return {
+        ...prev,
+        deliveryChannel: nextChannel,
+        uaePayoutRecipientType: defaultUaeRecipientType,
+      };
     });
   }, [
     open,
@@ -986,37 +999,16 @@ export function AddBeneficiaryModal({
                 ? body.data
                 : ((body as Record<string, unknown>) ?? {});
 
-            const pick = (...keys: string[]) => {
-              for (const k of keys) {
-                const v = flex[k];
-                if (typeof v === "string" && v.trim()) return v.trim();
-              }
-              return "";
-            };
-
-            const bank = pick(
-              "BANK",
-              "bank",
-              "bankName",
-              "BANKNAME",
-              "BankName",
-            );
-            const branch = pick(
-              "BRANCH",
-              "branch",
-              "branchName",
-              "BRANCHNAME",
-              "BranchName",
-            );
-            if (!bank && !branch) {
+            const parsed = parseFlexIfscLookup(flex as Record<string, unknown>);
+            if (!parsed) {
               setBankIdLookupStatus("not_found");
               return;
             }
 
             setFormData((prev) => ({
               ...prev,
-              bankName: bank || prev.bankName,
-              branchName: branch || prev.branchName,
+              bankName: parsed.bank || prev.bankName,
+              branchName: parsed.branch || prev.branchName,
             }));
             setBankIdLookupStatus("ok");
           } catch {
@@ -1200,7 +1192,11 @@ export function AddBeneficiaryModal({
       mobileMoneyProvider: "",
       upiId: "",
       payoutInPersonIdNumber: "",
-      uaePayoutRecipientType: "",
+      uaePayoutRecipientType:
+        match?.couCode === UAE_COU_CODE &&
+        prev.deliveryChannel === "PAYOUT_IN_PERSON"
+          ? "RESIDENT"
+          : "",
       receiverDocumentIssueDate: "",
       receiverDocumentExpiryDate: "",
     }));
@@ -1252,7 +1248,9 @@ export function AddBeneficiaryModal({
             receiverDocumentIssueDate: "",
             receiverDocumentExpiryDate: "",
           }
-        : {}),
+        : destinationCouCode === UAE_COU_CODE
+          ? { uaePayoutRecipientType: "RESIDENT" as const }
+          : {}),
       ...(channel !== "BANK_TRANSFER" && channel !== "PAYOUT_IN_PERSON"
         ? {
             receiverDocumentIssueDate: "",
@@ -2400,12 +2398,14 @@ export function AddBeneficiaryModal({
                     )}
                   </div>
                 )}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  {payoutInPersonCollectionNotice(
-                    destinationCouCode,
-                    formData.country,
-                  )}
-                </div>
+                {!isUaePayoutInPersonChannel ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    {payoutInPersonCollectionNotice(
+                      destinationCouCode,
+                      formData.country,
+                    )}
+                  </div>
+                ) : null}
               </>
             )}
 
