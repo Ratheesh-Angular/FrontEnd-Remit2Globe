@@ -331,6 +331,7 @@ export default function BeneficiariesPage() {
               const isBank = b.deliveryChannel === "BANK_TRANSFER";
               const isMobile = b.deliveryChannel === "MOBILE_MONEY";
               const isUpi = b.deliveryChannel === "UPI";
+              const isPayout = b.deliveryChannel === "PAYOUT_IN_PERSON";
               const subtitle = isBank
                 ? b.bankName?.trim() || "Bank account"
                 : isMobile
@@ -453,10 +454,18 @@ export default function BeneficiariesPage() {
                                 ? "bg-sky-50 text-sky-800"
                                 : isUpi
                                   ? "bg-emerald-50 text-emerald-800"
-                                  : "bg-violet-50 text-violet-800"
+                                  : isPayout
+                                    ? "bg-amber-50 text-amber-800"
+                                    : "bg-violet-50 text-violet-800"
                             }`}
                           >
-                            {isBank ? "Bank" : isUpi ? "UPI" : "Mobile"}
+                            {isBank
+                              ? "Bank"
+                              : isUpi
+                                ? "UPI"
+                                : isPayout
+                                  ? "In Person"
+                                  : "Mobile"}
                           </span>
                         </div>
                         <div className="flex flex-col gap-3 mt-4 pt-3 border-t border-slate-100 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between">

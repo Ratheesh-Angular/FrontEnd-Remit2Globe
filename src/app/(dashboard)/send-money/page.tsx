@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { downloadTransferReceiptPdf } from "@/lib/transfer-receipt-pdf";
 import { CorporateSupportingDocumentsSection } from "@/components/remittance/CorporateSupportingDocumentsSection";
+import { TransactionSummaryPanel } from "@/components/remittance/TransactionSummaryPanel";
 import { FIELD_HEIGHT, fieldNativeSelectClasses } from "@/lib/field-styles";
 import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
@@ -1318,6 +1319,93 @@ useEffect(() => {
         : !!parseFloat(receiveAmount))) ||
     (flexForexLoading && !quote);
 
+  const transactionSummary = useMemo(() => {
+    const recipientCountryDisplay = recipientCouName.trim()
+      ? recipientIso2
+        ? `${recipientIso2} ${recipientCouName.trim()}`
+        : recipientCouName.trim()
+      : null;
+
+    const beneficiary = selectedBen ?? transferRow?.beneficiary ?? null;
+
+    if (quote) {
+      return {
+        recipientCountryDisplay,
+        beneficiary,
+        youSend: Number(quote.payAmount),
+        youSendCurrency: quote.fromCurrency,
+        rate: quote.rate,
+        rateFromCurrency: quote.fromCurrency,
+        rateToCurrency: quote.toCurrency,
+        fee: Number(quote.feeAmount),
+        feeCurrency: quote.fromCurrency,
+        receive: Number(quote.receiveAmount),
+        receiveCurrency: quote.toCurrency,
+      };
+    }
+
+    const tr = transferRow;
+    if (tr?.payAmount != null && tr.payCurrency) {
+      const youSend = Number(tr.payAmount);
+      const fee =
+        tr.feeAmount != null && tr.feeAmount !== "" ? Number(tr.feeAmount) : 0;
+      const recv =
+        tr.receiveAmount != null && tr.receiveAmount !== ""
+          ? Number(tr.receiveAmount)
+          : null;
+      const recvCurrency = (tr.receiveCurrency ?? receiveCurrency) || "—";
+      const payCur = tr.payCurrency;
+      const derivedRate =
+        youSend > 0 && recv != null ? recv / youSend : displayedFxRate;
+
+      return {
+        recipientCountryDisplay,
+        beneficiary,
+        youSend,
+        youSendCurrency: payCur,
+        rate: derivedRate,
+        rateFromCurrency: payCur,
+        rateToCurrency: recvCurrency,
+        fee,
+        feeCurrency: payCur,
+        receive: recv,
+        receiveCurrency: recvCurrency,
+      };
+    }
+
+    const pay = parseFloat(payAmount);
+    const recv = parseFloat(receiveAmount);
+    const hasPay = pay > 0;
+    const hasRecv = recv > 0;
+
+    return {
+      recipientCountryDisplay,
+      beneficiary,
+      youSend: hasPay ? pay : null,
+      youSendCurrency: payCurrency || "—",
+      rate: displayedFxRate,
+      rateFromCurrency: displayedFromCurrency || "—",
+      rateToCurrency: displayedToCurrency || "—",
+      fee: hasPay || hasRecv ? 0 : null,
+      feeCurrency: payCurrency || "—",
+      receive: hasRecv ? recv : null,
+      receiveCurrency: receiveCurrency || "—",
+    };
+  }, [
+    recipientCouName,
+    recipientIso2,
+    selectedBen,
+    transferRow,
+    quote,
+    payAmount,
+    receiveAmount,
+    payCurrency,
+    receiveCurrency,
+    displayedFxRate,
+    displayedFromCurrency,
+    displayedToCurrency,
+  ]);
+
   useEffect(() => {
     if (payInMethod !== "BANK_TRANSFER" || !payCurrency) return;
     if (step < 3 || step > STEPS.length) return;
@@ -1732,7 +1820,7 @@ useEffect(() => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-16 relative">
+    <div className="max-w-6xl mx-auto pb-16 relative">
       <AppLoadingOverlay show={submitting} label="Processing…" />
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-slate-900">Send money</h1>
@@ -1770,6 +1858,9 @@ useEffect(() => {
         </div>
       )}
 
+      {step <= 4 && (
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+          <div>
       {/* Step 1 — calculator layout */}
       {step === 1 && ctx && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
@@ -2689,6 +2780,15 @@ useEffect(() => {
               Proceed & Confirm
             </button>
           </div>
+        </div>
+      )}
+          </div>
+          <aside className="lg:sticky lg:top-6 self-start">
+            <TransactionSummaryPanel
+              {...transactionSummary}
+              loading={quoteLoading}
+            />
+          </aside>
         </div>
       )}
 

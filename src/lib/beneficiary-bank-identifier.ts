@@ -185,8 +185,8 @@ const BY_CURRENCY = new Map<string, BankIdentifierConfig>([
     "INR",
     {
       fields: [FIELD_IFSC, FIELD_ACCOUNT],
-      showIdentifiersFirst: true,
-      hideFlexBankPicker: true,
+      showIdentifiersFirst: false,
+      hideFlexBankPicker: false,
     },
   ],
   [
