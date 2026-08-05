@@ -65,3 +65,23 @@ export function requiresActualBankNameInput(
 ): boolean {
   return isAllBanksCountry(couCode) && isAllBanksFlexEntryName(flexBankName);
 }
+
+export function normalizeBankNameForMatch(name: string): string {
+  return name.trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+export function findFlexBankByName(
+  banks: { bankCode: string; bankName: string }[],
+  bankName: string,
+): { bankCode: string; bankName: string } | undefined {
+  const target = normalizeBankNameForMatch(bankName);
+  if (!target) return undefined;
+  return (
+    banks.find((b) => normalizeBankNameForMatch(b.bankName) === target) ??
+    banks.find(
+      (b) =>
+        normalizeBankNameForMatch(b.bankName).includes(target) ||
+        target.includes(normalizeBankNameForMatch(b.bankName)),
+    )
+  );
+}

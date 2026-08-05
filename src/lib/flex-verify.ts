@@ -100,9 +100,13 @@ export function resolveAccountVerifyBankCode(input: {
   ifsc: string;
   routingNumber: string;
   bankIdConfig: BankIdentifierConfig;
+  couCode?: string;
 }): string {
   const flex = input.flexBankCode.trim();
   if (flex) return flex;
+
+  // India requires Flex bank-list code; never use IFSC as bankCode.
+  if (input.couCode?.trim().toUpperCase() === "IND") return "";
 
   const hasIfsc = input.bankIdConfig.fields.some((f) => f.lookup === "ifsc");
   if (hasIfsc) {

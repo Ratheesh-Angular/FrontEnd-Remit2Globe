@@ -59,6 +59,7 @@ import {
   getDeliveryChannels,
   getDeliveryChannelsFromFlexServices,
   inferUaePayoutRecipientType,
+  INDIA_COU_CODE,
   isUaePayoutInPerson,
   MOBILE_WALLET_ONLY_COUNTRY_CODES,
   FLEX_BANK_MEANS_PAYOUT_IN_PERSON_COUNTRY_CODES,
@@ -75,8 +76,10 @@ import {
   validateEmiratesId,
 } from "@/lib/emirates-id-validation";
 import {
+  findFlexBankByName,
   isAllBanksCountry,
   isFlexBankServiceTypeAllowed,
+  normalizeBankNameForMatch,
   requiresActualBankNameInput,
 } from "@/lib/beneficiary-flex-banks";
 import Flag from "react-world-flags";
@@ -379,6 +382,7 @@ export function AddBeneficiaryModal({
     "idle" | "loading" | "ok" | "not_found" | "error"
   >("idle");
   const bankIdLookupGen = useRef(0);
+  const pendingIfscBankNameRef = useRef<string | null>(null);
   const isEditMode = Boolean(editBeneficiaryId);
   const [editLoading, setEditLoading] = useState(false);
   const [editLoadError, setEditLoadError] = useState("");
@@ -807,6 +811,7 @@ export function AddBeneficiaryModal({
       ifsc: formData.ifsc,
       routingNumber: formData.routingNumber,
       bankIdConfig,
+      couCode: destinationCouCode,
     });
     const couCode = destinationCouCode;
 
@@ -937,6 +942,7 @@ export function AddBeneficiaryModal({
       if (isIfsc) {
         const code = normalizeIfsc(triggerValue);
         if (code.length !== 11) {
+          pendingIfscBankNameRef.current = null;
           if (finish()) setBankIdLookupStatus("idle");
           return;
         }
@@ -977,10 +983,12 @@ export function AddBeneficiaryModal({
             if (!finish()) return;
 
             if (res.status === 404 || res.status === 422) {
+              pendingIfscBankNameRef.current = null;
               setBankIdLookupStatus("not_found");
               return;
             }
             if (res.status < 200 || res.status >= 300) {
+              pendingIfscBankNameRef.current = null;
               setBankIdLookupStatus("error");
               return;
             }
@@ -990,6 +998,7 @@ export function AddBeneficiaryModal({
               data?: Record<string, unknown>;
             };
             if (body?.success === false) {
+              pendingIfscBankNameRef.current = null;
               setBankIdLookupStatus("not_found");
               return;
             }
@@ -1001,15 +1010,51 @@ export function AddBeneficiaryModal({
 
             const parsed = parseFlexIfscLookup(flex as Record<string, unknown>);
             if (!parsed) {
+              pendingIfscBankNameRef.current = null;
               setBankIdLookupStatus("not_found");
               return;
             }
 
-            setFormData((prev) => ({
-              ...prev,
-              bankName: parsed.bank || prev.bankName,
-              branchName: parsed.branch || prev.branchName,
-            }));
+            pendingIfscBankNameRef.current = parsed.bank || null;
+            setFormData((prev) => {
+              const current = flexBanks.find(
+                (b) => b.bankCode === prev.flexBankCode,
+              );
+              const bankAlreadyCorrect =
+                current &&
+                normalizeBankNameForMatch(current.bankName) ===
+                  normalizeBankNameForMatch(parsed.bank);
+
+              if (bankAlreadyCorrect) {
+                pendingIfscBankNameRef.current = null;
+                return {
+                  ...prev,
+                  branchName: parsed.branch || prev.branchName,
+                };
+              }
+
+              const matched = findFlexBankByName(flexBanks, parsed.bank);
+              if (matched) {
+                pendingIfscBankNameRef.current = null;
+                const needsActual = requiresActualBankNameInput(
+                  destinationCouCode,
+                  matched.bankName,
+                );
+                return {
+                  ...prev,
+                  flexBankName: needsActual ? matched.bankName : "",
+                  flexBankCode: matched.bankCode,
+                  bankName: needsActual ? "" : matched.bankName,
+                  branchName: parsed.branch || prev.branchName,
+                };
+              }
+
+              return {
+                ...prev,
+                bankName: parsed.bank || prev.bankName,
+                branchName: parsed.branch || prev.branchName,
+              };
+            });
             setBankIdLookupStatus("ok");
           } catch {
             if (finish()) setBankIdLookupStatus("error");
@@ -1068,9 +1113,46 @@ export function AddBeneficiaryModal({
     formData.deliveryChannel,
     formData.payoutCurrency,
     selectedDestinationCountry?.couCode,
+    destinationCouCode,
     formData.ifsc,
     formData.routingNumber,
+    flexBanks,
   ]);
+
+  /** Re-match IFSC bank name when Flex bank list finishes loading after lookup. */
+  useEffect(() => {
+    const pending = pendingIfscBankNameRef.current;
+    if (!pending || flexBanks.length === 0 || bankIdLookupStatus !== "ok") {
+      return;
+    }
+
+    setFormData((prev) => {
+      const current = flexBanks.find((b) => b.bankCode === prev.flexBankCode);
+      if (
+        current &&
+        normalizeBankNameForMatch(current.bankName) ===
+          normalizeBankNameForMatch(pending)
+      ) {
+        pendingIfscBankNameRef.current = null;
+        return prev;
+      }
+
+      const matched = findFlexBankByName(flexBanks, pending);
+      if (!matched) return prev;
+
+      pendingIfscBankNameRef.current = null;
+      const needsActual = requiresActualBankNameInput(
+        destinationCouCode,
+        matched.bankName,
+      );
+      return {
+        ...prev,
+        flexBankName: needsActual ? matched.bankName : "",
+        flexBankCode: matched.bankCode,
+        bankName: needsActual ? "" : matched.bankName,
+      };
+    });
+  }, [flexBanks, bankIdLookupStatus, destinationCouCode]);
 
   function handleChange(field: keyof FormData, value: string) {
     const next = value == null ? "" : String(value);
@@ -1206,6 +1288,7 @@ export function AddBeneficiaryModal({
     msisdnVerifyGen.current += 1;
     accountVerifyGen.current += 1;
     setBankIdLookupStatus("idle");
+    pendingIfscBankNameRef.current = null;
     setBankSearch("");
     setBankOpen(false);
     setErrors((prev) => ({
@@ -1268,6 +1351,10 @@ export function AddBeneficiaryModal({
     setAccountVerify({ status: "idle" });
     msisdnVerifyGen.current += 1;
     accountVerifyGen.current += 1;
+    if (channel !== "BANK_TRANSFER") {
+      pendingIfscBankNameRef.current = null;
+      setBankIdLookupStatus("idle");
+    }
     setErrors((prev) => ({
       ...prev,
       deliveryChannel: undefined,
@@ -1350,6 +1437,14 @@ export function AddBeneficiaryModal({
     }
 
     if (formData.deliveryChannel === "BANK_TRANSFER") {
+      if (
+        destinationCouCode === INDIA_COU_CODE &&
+        showFlexBankDropdown &&
+        !formData.flexBankCode.trim()
+      ) {
+        errs.bankName = "Select a bank from the list";
+      }
+
       if (showActualBankNameInput) {
         if (!formData.flexBankName.trim()) {
           errs.flexBankName = "Select a bank from the list";
@@ -1786,9 +1881,111 @@ export function AddBeneficiaryModal({
     );
   }
 
+  function renderBeneficiaryNameFields() {
+    const nameSuffix = beneficiaryNameLabelSuffix(
+      formData.deliveryChannel,
+      destinationCouCode,
+      isUaePayoutInPersonChannel
+        ? formData.uaePayoutRecipientType
+        : undefined,
+    );
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium text-slate-700 block mb-1.5">
+            First name
+            {nameSuffix} <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="First name"
+            autoComplete="given-name"
+            value={formData.firstName}
+            onChange={(e) => handleChange("firstName", e.target.value)}
+            className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+              errors.firstName ? "border-red-400" : "border-slate-200"
+            }`}
+          />
+          {errors.firstName && (
+            <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>
+          )}
+        </div>
+        <div>
+          <label className="text-sm font-medium text-slate-700 block mb-1.5">
+            Last name
+            {nameSuffix} <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="Last name"
+            autoComplete="family-name"
+            value={formData.lastName}
+            onChange={(e) => handleChange("lastName", e.target.value)}
+            className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+              errors.lastName ? "border-red-400" : "border-slate-200"
+            }`}
+          />
+          {errors.lastName && (
+            <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderUaeBankTransferIdentityFields() {
+    return (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {renderDestinationMobileField({
+            uaeOnlyHint: true,
+            label: "Beneficiary Mobile Number",
+          })}
+          <div>
+            <label className="text-sm font-medium text-slate-700 block mb-1.5">
+              Beneficiary Emirates ID <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder={emiratesIdFormatHint()}
+              autoComplete="off"
+              value={formData.payoutInPersonIdNumber}
+              onChange={(e) => handleUaeEmiratesIdChange(e.target.value)}
+              className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
+                errors.payoutInPersonIdNumber
+                  ? "border-red-400"
+                  : "border-slate-200"
+              }`}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              15 digits starting with 784 (e.g. {emiratesIdFormatHint()})
+            </p>
+            {errors.payoutInPersonIdNumber && (
+              <p className="mt-1 text-xs text-red-500">
+                {errors.payoutInPersonIdNumber}
+              </p>
+            )}
+          </div>
+        </div>
+        {renderUaeDocumentDateFields({
+          issueLabel: "Emirates ID Issue Date",
+          expiryLabel: "Emirates ID Expiry Date",
+        })}
+      </>
+    );
+  }
+
   // ── Bank field display helpers ────────────────────────────────────────────
+  const isIndiaBankTransfer =
+    destinationCouCode === INDIA_COU_CODE &&
+    formData.deliveryChannel === "BANK_TRANSFER";
+  const ifscField =
+    bankIdConfig.fields.find((f) => f.lookup === "ifsc") ?? null;
   const bankIdentFields = bankIdConfig.fields.filter(
-    (f) => f.key !== "accountNumber",
+    (f) =>
+      f.key !== "accountNumber" && !(isIndiaBankTransfer && f.lookup === "ifsc"),
   );
   const bankIbanField = bankIdentFields.find((f) => f.key === "iban") ?? null;
   const bankGroupableFields = bankIdentFields.filter((f) => f.key !== "iban");
@@ -2289,6 +2486,8 @@ export function AddBeneficiaryModal({
                       )}
                     </div>
 
+                    {renderBeneficiaryNameFields()}
+
                     {formData.uaePayoutRecipientType === "RESIDENT" && (
                       <>
                         <div>
@@ -2410,62 +2609,7 @@ export function AddBeneficiaryModal({
             )}
 
             {/* First / last name (as per bank account) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  First name
-                  {beneficiaryNameLabelSuffix(
-                    formData.deliveryChannel,
-                    destinationCouCode,
-                    isUaePayoutInPersonChannel
-                      ? formData.uaePayoutRecipientType
-                      : undefined,
-                  )}{" "}
-                  <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="First name"
-                  autoComplete="given-name"
-                  value={formData.firstName}
-                  onChange={(e) => handleChange("firstName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
-                    errors.firstName ? "border-red-400" : "border-slate-200"
-                  }`}
-                />
-                {errors.firstName && (
-                  <p className="mt-1 text-xs text-red-500">
-                    {errors.firstName}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                  Last name
-                  {beneficiaryNameLabelSuffix(
-                    formData.deliveryChannel,
-                    destinationCouCode,
-                    isUaePayoutInPersonChannel
-                      ? formData.uaePayoutRecipientType
-                      : undefined,
-                  )}{" "}
-                  <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Last name"
-                  autoComplete="family-name"
-                  value={formData.lastName}
-                  onChange={(e) => handleChange("lastName", e.target.value)}
-                  className={`w-full border rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
-                    errors.lastName ? "border-red-400" : "border-slate-200"
-                  }`}
-                />
-                {errors.lastName && (
-                  <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
-                )}
-              </div>
-            </div>
+            {!isUaePayoutInPersonChannel && renderBeneficiaryNameFields()}
 
             {/* Bank Transfer Fields */}
             {formData.deliveryChannel === "BANK_TRANSFER" && (
@@ -2635,6 +2779,10 @@ export function AddBeneficiaryModal({
                   </div>
                 )}
 
+                {isIndiaBankTransfer &&
+                  ifscField &&
+                  renderSingleBankField(ifscField)}
+
                 <div>
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">
                     Branch name
@@ -2647,51 +2795,6 @@ export function AddBeneficiaryModal({
                     className="w-full border border-slate-200 rounded-lg px-3 h-10 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors"
                   />
                 </div>
-
-                {isUaeDestination ? (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {renderDestinationMobileField({
-                        uaeOnlyHint: true,
-                        label: "Beneficiary Mobile Number",
-                      })}
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1.5">
-                          Beneficiary Emirates ID{" "}
-                          <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder={emiratesIdFormatHint()}
-                          autoComplete="off"
-                          value={formData.payoutInPersonIdNumber}
-                          onChange={(e) =>
-                            handleUaeEmiratesIdChange(e.target.value)
-                          }
-                          className={`w-full border rounded-lg px-3 h-10 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-colors ${
-                            errors.payoutInPersonIdNumber
-                              ? "border-red-400"
-                              : "border-slate-200"
-                          }`}
-                        />
-                        <p className="mt-1 text-xs text-slate-500">
-                          15 digits starting with 784 (e.g.{" "}
-                          {emiratesIdFormatHint()})
-                        </p>
-                        {errors.payoutInPersonIdNumber && (
-                          <p className="mt-1 text-xs text-red-500">
-                            {errors.payoutInPersonIdNumber}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {renderUaeDocumentDateFields({
-                      issueLabel: "Emirates ID Issue Date",
-                      expiryLabel: "Emirates ID Expiry Date",
-                    })}
-                  </>
-                ) : null}
 
                 {/* Account Number + Confirm — only when accountNumber is in the field config */}
                 {bankHasAccountField && (
@@ -2789,6 +2892,8 @@ export function AddBeneficiaryModal({
 
                 {/* Identifier fields — AFTER account number when !showIdentifiersFirst */}
                 {!bankIdConfig.showIdentifiersFirst && renderIdentifierBlock()}
+
+                {isUaeDestination && renderUaeBankTransferIdentityFields()}
               </>
             )}
 
