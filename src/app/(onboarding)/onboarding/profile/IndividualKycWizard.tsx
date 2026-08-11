@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { StateSearchSelect } from "@/components/address/StateSearchSelect";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import Flag from "react-world-flags";
 import type { Country } from "@/lib/phone-countries";
@@ -31,6 +33,8 @@ interface IndividualForm {
   lastName: string;
   dateOfBirth: string;
   isNational: boolean;
+  /** Issuing country of passport — required for Residents only. */
+  passportIssuingCountry: string;
   residenceAddress: ResidenceAddressForm;
   country: string;
   contactEmail: string;
@@ -54,6 +58,7 @@ const empty: IndividualForm = {
   lastName: "",
   dateOfBirth: "",
   isNational: false,
+  passportIssuingCountry: "",
   residenceAddress: { ...emptyResidenceAddress },
   country: "",
   contactEmail: "",
@@ -99,6 +104,9 @@ function buildPayload(form: IndividualForm) {
     dateOfBirth: form.dateOfBirth,
     isNational: form.isNational,
     country: form.country.trim(),
+    passportIssuingCountry: form.isNational
+      ? null
+      : form.passportIssuingCountry.trim() || null,
     residenceAddress: {
       line1: form.residenceAddress.line1.trim(),
       line2: form.residenceAddress.line2.trim(),
@@ -144,6 +152,11 @@ export function IndividualKycWizard() {
     countries: flexCountryList,
     loading: flexCountriesLoading,
   } = useFlexCountries(true);
+  const {
+    countries: catalogCountryList,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(true);
 
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
@@ -222,6 +235,7 @@ export function IndividualKycWizard() {
             lastName,
             dateOfBirth: isoDate(p.dateOfBirth),
             isNational: Boolean(p.isNational),
+            passportIssuingCountry: String(p.passportIssuingCountry ?? "").trim(),
             residenceAddress: {
               ...raParsed,
               country: raParsed.country || countryLine,
@@ -315,6 +329,9 @@ export function IndividualKycWizard() {
     if (!form.country.trim()) newErrors.country = "Country is required";
     if (form.isNational === undefined || form.isNational === null) {
       newErrors.isNational = "Please select Resident or Citizen";
+    }
+    if (!form.isNational && !form.passportIssuingCountry.trim()) {
+      newErrors.passportIssuingCountry = "Passport country is required";
     }
     const ra = form.residenceAddress;
     const raErrors: Partial<Record<keyof ResidenceAddressForm, string>> = {};
@@ -674,6 +691,71 @@ export function IndividualKycWizard() {
                 </div>
               )}
 
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-2 block">
+                  Residency Status <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-4 sm:gap-6 px-3 bg-slate-50 rounded-lg border border-transparent h-10">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="residencyStatus"
+                      checked={form.isNational === false}
+                      onChange={() => setField("isNational", false)}
+                      className="w-4 h-4 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-slate-700">Resident</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="residencyStatus"
+                      checked={form.isNational === true}
+                      onChange={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          isNational: true,
+                          passportIssuingCountry: "",
+                        }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          isNational: undefined,
+                          passportIssuingCountry: undefined,
+                        }));
+                      }}
+                      className="w-4 h-4 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-slate-700">Citizen</span>
+                  </label>
+                </div>
+                {errors.isNational && (
+                  <p className="mt-1.5 text-xs text-red-500">
+                    {errors.isNational}
+                  </p>
+                )}
+              </div>
+
+              {!form.isNational && (
+                <Field
+                  label="Passport country"
+                  required
+                  error={errors.passportIssuingCountry}
+                >
+                  <CatalogCountrySelect
+                    value={form.passportIssuingCountry}
+                    onChange={(couName) => {
+                      setField("passportIssuingCountry", couName);
+                    }}
+                    error={Boolean(errors.passportIssuingCountry)}
+                    disabled={isSaving}
+                    placeholder="Select passport issuing country"
+                    countries={catalogCountryList}
+                    countriesLoading={catalogCountriesLoading}
+                    countriesError={catalogCountriesError}
+                  />
+                </Field>
+              )}
+
               <Field
                 label="Address Line"
                 required
@@ -716,54 +798,19 @@ export function IndividualKycWizard() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field
-                  label="Postal code"
-                  error={errors.residenceAddress?.postalCode}
-                >
-                  <input
-                    className={addrInputClass("postalCode")}
-                    placeholder="Postal or ZIP code (optional)"
-                    value={form.residenceAddress.postalCode}
-                    onChange={(e) =>
-                      setResidenceField("postalCode", e.target.value)
-                    }
-                  />
-                </Field>
-
-                <div>
-                  <label className="text-sm font-medium text-slate-700 mb-2 block">
-                    Residency Status <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center gap-4 sm:gap-6 px-3 bg-slate-50 rounded-lg border border-transparent h-10">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="residencyStatus"
-                        checked={form.isNational === false}
-                        onChange={() => setField("isNational", false)}
-                        className="w-4 h-4 text-red-600 focus:ring-red-500"
-                      />
-                      <span className="text-sm text-slate-700">Resident</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="residencyStatus"
-                        checked={form.isNational === true}
-                        onChange={() => setField("isNational", true)}
-                        className="w-4 h-4 text-red-600 focus:ring-red-500"
-                      />
-                      <span className="text-sm text-slate-700">Citizen</span>
-                    </label>
-                  </div>
-                  {errors.isNational && (
-                    <p className="mt-1.5 text-xs text-red-500">
-                      {errors.isNational}
-                    </p>
-                  )}
-                </div>
-              </div>
+              <Field
+                label="Postal code"
+                error={errors.residenceAddress?.postalCode}
+              >
+                <input
+                  className={addrInputClass("postalCode")}
+                  placeholder="Postal or ZIP code (optional)"
+                  value={form.residenceAddress.postalCode}
+                  onChange={(e) =>
+                    setResidenceField("postalCode", e.target.value)
+                  }
+                />
+              </Field>
             </div>
 
             <div className="flex justify-end pt-2">
