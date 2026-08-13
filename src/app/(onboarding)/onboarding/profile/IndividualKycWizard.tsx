@@ -4,10 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { StateSearchSelect } from "@/components/address/StateSearchSelect";
-import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
-import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import Flag from "react-world-flags";
 import type { Country } from "@/lib/phone-countries";
@@ -33,7 +31,7 @@ interface IndividualForm {
   lastName: string;
   dateOfBirth: string;
   isNational: boolean;
-  /** Issuing country of passport — required for Residents only. */
+  /** Kept for profile load; new saves always send null. Residents pick document country in Signzy. */
   passportIssuingCountry: string;
   residenceAddress: ResidenceAddressForm;
   country: string;
@@ -104,9 +102,8 @@ function buildPayload(form: IndividualForm) {
     dateOfBirth: form.dateOfBirth,
     isNational: form.isNational,
     country: form.country.trim(),
-    passportIssuingCountry: form.isNational
-      ? null
-      : form.passportIssuingCountry.trim() || null,
+    /** Residents pick document country in Signzy; do not collect or send it from this form. */
+    passportIssuingCountry: null,
     residenceAddress: {
       line1: form.residenceAddress.line1.trim(),
       line2: form.residenceAddress.line2.trim(),
@@ -152,11 +149,6 @@ export function IndividualKycWizard() {
     countries: flexCountryList,
     loading: flexCountriesLoading,
   } = useFlexCountries(true);
-  const {
-    countries: catalogCountryList,
-    loading: catalogCountriesLoading,
-    error: catalogCountriesError,
-  } = useCatalogCountries(true);
 
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
@@ -329,9 +321,6 @@ export function IndividualKycWizard() {
     if (!form.country.trim()) newErrors.country = "Country is required";
     if (form.isNational === undefined || form.isNational === null) {
       newErrors.isNational = "Please select Resident or Citizen";
-    }
-    if (!form.isNational && !form.passportIssuingCountry.trim()) {
-      newErrors.passportIssuingCountry = "Passport country is required";
     }
     const ra = form.residenceAddress;
     const raErrors: Partial<Record<keyof ResidenceAddressForm, string>> = {};
@@ -734,27 +723,6 @@ export function IndividualKycWizard() {
                   </p>
                 )}
               </div>
-
-              {!form.isNational && (
-                <Field
-                  label="Passport country"
-                  required
-                  error={errors.passportIssuingCountry}
-                >
-                  <CatalogCountrySelect
-                    value={form.passportIssuingCountry}
-                    onChange={(couName) => {
-                      setField("passportIssuingCountry", couName);
-                    }}
-                    error={Boolean(errors.passportIssuingCountry)}
-                    disabled={isSaving}
-                    placeholder="Select passport issuing country"
-                    countries={catalogCountryList}
-                    countriesLoading={catalogCountriesLoading}
-                    countriesError={catalogCountriesError}
-                  />
-                </Field>
-              )}
 
               <Field
                 label="Address Line"
