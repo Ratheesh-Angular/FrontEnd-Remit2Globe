@@ -16,6 +16,8 @@ import { notifyApiError } from "@/lib/notify";
 
 type View = "personal" | "in_progress" | "approved" | "rejected";
 
+type KycDocumentType = "ALIEN_CARD" | "PASSPORT" | "NATIONAL_ID" | "";
+
 interface ResidenceAddressForm {
   line1: string;
   line2: string;
@@ -31,7 +33,8 @@ interface IndividualForm {
   lastName: string;
   dateOfBirth: string;
   isNational: boolean;
-  /** Kept for profile load; new saves always send null. Residents pick document country in Signzy. */
+  citizenPrimaryDocumentType: KycDocumentType;
+  /** Kenya Resident + Passport only; otherwise saved as null. */
   passportIssuingCountry: string;
   residenceAddress: ResidenceAddressForm;
   country: string;
@@ -39,6 +42,17 @@ interface IndividualForm {
   contactPhone: string;
   occupation: string;
   employerName: string;
+}
+
+function isKenyaCountry(country: string): boolean {
+  const n = country.trim().toLowerCase();
+  return n === "kenya" || n === "ken" || n === "ke";
+}
+
+function parseDocumentType(raw: unknown): KycDocumentType {
+  const v = String(raw ?? "").trim();
+  if (v === "ALIEN_CARD" || v === "PASSPORT" || v === "NATIONAL_ID") return v;
+  return "";
 }
 
 const emptyResidenceAddress: ResidenceAddressForm = {
@@ -56,6 +70,7 @@ const empty: IndividualForm = {
   lastName: "",
   dateOfBirth: "",
   isNational: false,
+  citizenPrimaryDocumentType: "",
   passportIssuingCountry: "",
   residenceAddress: { ...emptyResidenceAddress },
   country: "",
@@ -95,6 +110,12 @@ function parseResidenceFromProfile(
 }
 
 function buildPayload(form: IndividualForm) {
+  const kenya = isKenyaCountry(form.country);
+  const sendPassportCountry =
+    kenya &&
+    form.isNational === false &&
+    form.citizenPrimaryDocumentType === "PASSPORT";
+
   return {
     firstName: form.firstName.trim(),
     middleName: form.middleName.trim() || undefined,
@@ -102,8 +123,12 @@ function buildPayload(form: IndividualForm) {
     dateOfBirth: form.dateOfBirth,
     isNational: form.isNational,
     country: form.country.trim(),
-    /** Residents pick document country in Signzy; do not collect or send it from this form. */
-    passportIssuingCountry: null,
+    citizenPrimaryDocumentType: kenya
+      ? form.citizenPrimaryDocumentType || null
+      : null,
+    passportIssuingCountry: sendPassportCountry
+      ? form.passportIssuingCountry.trim() || null
+      : null,
     residenceAddress: {
       line1: form.residenceAddress.line1.trim(),
       line2: form.residenceAddress.line2.trim(),
@@ -227,6 +252,9 @@ export function IndividualKycWizard() {
             lastName,
             dateOfBirth: isoDate(p.dateOfBirth),
             isNational: Boolean(p.isNational),
+            citizenPrimaryDocumentType: parseDocumentType(
+              p.citizenPrimaryDocumentType,
+            ),
             passportIssuingCountry: String(p.passportIssuingCountry ?? "").trim(),
             residenceAddress: {
               ...raParsed,
@@ -321,6 +349,23 @@ export function IndividualKycWizard() {
     if (!form.country.trim()) newErrors.country = "Country is required";
     if (form.isNational === undefined || form.isNational === null) {
       newErrors.isNational = "Please select Resident or Citizen";
+    }
+    if (isKenyaCountry(form.country)) {
+      const doc = form.citizenPrimaryDocumentType;
+      if (!doc) {
+        newErrors.citizenPrimaryDocumentType =
+          "Please select the document you will upload";
+      } else if (form.isNational && doc === "ALIEN_CARD") {
+        newErrors.citizenPrimaryDocumentType =
+          "Citizens must choose National ID or Passport";
+      } else if (!form.isNational && doc === "NATIONAL_ID") {
+        newErrors.citizenPrimaryDocumentType =
+          "Residents must choose Alien card or Passport";
+      } else if (!form.isNational && doc === "PASSPORT") {
+        if (!form.passportIssuingCountry.trim()) {
+          newErrors.passportIssuingCountry = "Passport country is required";
+        }
+      }
     }
     const ra = form.residenceAddress;
     const raErrors: Partial<Record<keyof ResidenceAddressForm, string>> = {};
@@ -567,7 +612,19 @@ export function IndividualKycWizard() {
                         const fc = flexCountryList.find(
                           (c) => c.couName === couName,
                         );
-                        setForm((prev) => ({ ...prev, country: couName }));
+                        setForm((prev) => {
+                          const stillKenya = isKenyaCountry(couName);
+                          return {
+                            ...prev,
+                            country: couName,
+                            citizenPrimaryDocumentType: stillKenya
+                              ? prev.citizenPrimaryDocumentType
+                              : "",
+                            passportIssuingCountry: stillKenya
+                              ? prev.passportIssuingCountry
+                              : "",
+                          };
+                        });
                         setRegistrationPhoneCountry(
                           fc ? phoneCountryFromCouCode(fc.couCode) : null,
                         );
@@ -576,6 +633,8 @@ export function IndividualKycWizard() {
                           ...prev,
                           country: undefined,
                           registrationPhone: undefined,
+                          citizenPrimaryDocumentType: undefined,
+                          passportIssuingCountry: undefined,
                         }));
                       }}
                       error={Boolean(errors.country)}
@@ -690,7 +749,26 @@ export function IndividualKycWizard() {
                       type="radio"
                       name="residencyStatus"
                       checked={form.isNational === false}
-                      onChange={() => setField("isNational", false)}
+                      onChange={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          isNational: false,
+                          citizenPrimaryDocumentType:
+                            prev.citizenPrimaryDocumentType === "NATIONAL_ID"
+                              ? ""
+                              : prev.citizenPrimaryDocumentType,
+                          passportIssuingCountry:
+                            prev.citizenPrimaryDocumentType === "PASSPORT"
+                              ? prev.passportIssuingCountry
+                              : "",
+                        }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          isNational: undefined,
+                          citizenPrimaryDocumentType: undefined,
+                          passportIssuingCountry: undefined,
+                        }));
+                      }}
                       className="w-4 h-4 text-red-600 focus:ring-red-500"
                     />
                     <span className="text-sm text-slate-700">Resident</span>
@@ -704,11 +782,16 @@ export function IndividualKycWizard() {
                         setForm((prev) => ({
                           ...prev,
                           isNational: true,
+                          citizenPrimaryDocumentType:
+                            prev.citizenPrimaryDocumentType === "ALIEN_CARD"
+                              ? ""
+                              : prev.citizenPrimaryDocumentType,
                           passportIssuingCountry: "",
                         }));
                         setErrors((prev) => ({
                           ...prev,
                           isNational: undefined,
+                          citizenPrimaryDocumentType: undefined,
                           passportIssuingCountry: undefined,
                         }));
                       }}
@@ -723,6 +806,151 @@ export function IndividualKycWizard() {
                   </p>
                 )}
               </div>
+
+              {isKenyaCountry(form.country) && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-2 block">
+                      Document type <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex flex-wrap items-center gap-4 sm:gap-6 px-3 bg-slate-50 rounded-lg border border-transparent min-h-10 py-2">
+                      {form.isNational ? (
+                        <>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kycDocumentType"
+                              checked={
+                                form.citizenPrimaryDocumentType ===
+                                "NATIONAL_ID"
+                              }
+                              onChange={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: "NATIONAL_ID",
+                                  passportIssuingCountry: "",
+                                }));
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: undefined,
+                                  passportIssuingCountry: undefined,
+                                }));
+                              }}
+                              className="w-4 h-4 text-red-600 focus:ring-red-500"
+                            />
+                            <span className="text-sm text-slate-700">
+                              National ID
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kycDocumentType"
+                              checked={
+                                form.citizenPrimaryDocumentType === "PASSPORT"
+                              }
+                              onChange={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: "PASSPORT",
+                                  passportIssuingCountry: "",
+                                }));
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: undefined,
+                                  passportIssuingCountry: undefined,
+                                }));
+                              }}
+                              className="w-4 h-4 text-red-600 focus:ring-red-500"
+                            />
+                            <span className="text-sm text-slate-700">
+                              Passport
+                            </span>
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kycDocumentType"
+                              checked={
+                                form.citizenPrimaryDocumentType ===
+                                "ALIEN_CARD"
+                              }
+                              onChange={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: "ALIEN_CARD",
+                                  passportIssuingCountry: "",
+                                }));
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: undefined,
+                                  passportIssuingCountry: undefined,
+                                }));
+                              }}
+                              className="w-4 h-4 text-red-600 focus:ring-red-500"
+                            />
+                            <span className="text-sm text-slate-700">
+                              Alien card
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="kycDocumentType"
+                              checked={
+                                form.citizenPrimaryDocumentType === "PASSPORT"
+                              }
+                              onChange={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: "PASSPORT",
+                                }));
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  citizenPrimaryDocumentType: undefined,
+                                }));
+                              }}
+                              className="w-4 h-4 text-red-600 focus:ring-red-500"
+                            />
+                            <span className="text-sm text-slate-700">
+                              Passport
+                            </span>
+                          </label>
+                        </>
+                      )}
+                    </div>
+                    {errors.citizenPrimaryDocumentType && (
+                      <p className="mt-1.5 text-xs text-red-500">
+                        {errors.citizenPrimaryDocumentType}
+                      </p>
+                    )}
+                  </div>
+
+                  {!form.isNational &&
+                    form.citizenPrimaryDocumentType === "PASSPORT" && (
+                      <Field
+                        label="Passport country"
+                        required
+                        error={errors.passportIssuingCountry}
+                      >
+                        <FlexCountrySelect
+                          value={form.passportIssuingCountry}
+                          onChange={(couName) => {
+                            setField("passportIssuingCountry", couName);
+                          }}
+                          error={Boolean(errors.passportIssuingCountry)}
+                          disabled={isSaving}
+                          placeholder="Select the country that issued your passport"
+                          countries={flexCountryList}
+                          countriesLoading={flexCountriesLoading}
+                        />
+                      </Field>
+                    )}
+                </>
+              )}
 
               <Field
                 label="Address Line"

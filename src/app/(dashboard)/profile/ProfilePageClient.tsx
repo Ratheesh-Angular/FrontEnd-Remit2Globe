@@ -688,22 +688,22 @@ export default function ProfilePageClient() {
                     description="Passport, national ID, and work permit (as provided)"
                   >
                     <dl>
-                      {individual?.isNational ? (
-                        <DetailRow
-                          label="Primary document (citizen)"
-                          value={
-                            individual?.citizenPrimaryDocumentType ===
-                            "PASSPORT"
-                              ? "Passport"
+                      <DetailRow
+                        label="Primary document"
+                        value={
+                          individual?.citizenPrimaryDocumentType ===
+                          "PASSPORT"
+                            ? "Passport"
+                            : individual?.citizenPrimaryDocumentType ===
+                                "NATIONAL_ID"
+                              ? "National ID"
                               : individual?.citizenPrimaryDocumentType ===
-                                  "NATIONAL_ID"
-                                ? "National ID"
+                                  "ALIEN_CARD"
+                                ? "Alien card"
                                 : "—"
-                          }
-                        />
-                      ) : null}
-                      {!individual?.isNational ||
-                      individual?.citizenPrimaryDocumentType === "PASSPORT" ? (
+                        }
+                      />
+                      {individual?.citizenPrimaryDocumentType === "PASSPORT" ? (
                         <DetailRow
                           label="Passport issuing country"
                           value={individual?.passportIssuingCountry as string}
