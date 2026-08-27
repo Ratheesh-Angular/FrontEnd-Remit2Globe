@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { sessionApi as api } from "@/lib/api";
-import { canRetryMobileMoneyPayment } from "@/lib/flex-response-codes";
+import {
+  canRetryCardPayment,
+  canRetryMobileMoneyPayment,
+} from "@/lib/flex-response-codes";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
@@ -25,12 +28,33 @@ export function RetryPaymentRowAction({
   onRetried,
 }: RetryPaymentRowActionProps) {
   const [busy, setBusy] = useState(false);
+  const canRetryMm = canRetryMobileMoneyPayment(transfer);
+  const canRetryCard = canRetryCardPayment(transfer);
 
-  if (!canRetryMobileMoneyPayment(transfer)) return null;
+  if (!canRetryMm && !canRetryCard) return null;
 
   async function handleRetry() {
     setBusy(true);
     try {
+      if (canRetryCard) {
+        const res = await api.post<{
+          message?: string;
+          data?: { paymentGatewayUrl?: string };
+        }>(`/remittance/transfers/${transfer.id}/retry-card-payment`);
+        const url = res.data.data?.paymentGatewayUrl?.trim();
+        if (url) {
+          window.location.assign(url);
+          return;
+        }
+        notifySuccess(
+          typeof res.data.message === "string"
+            ? res.data.message
+            : "Card payment restarted.",
+        );
+        onRetried?.();
+        return;
+      }
+
       const res = await api.post<{ message?: string }>(
         `/remittance/transfers/${transfer.id}/retry-payment`,
       );
@@ -52,7 +76,14 @@ export function RetryPaymentRowAction({
 
   return (
     <>
-      <AppLoadingOverlay show={busy} label="Sending payment prompt…" />
+      <AppLoadingOverlay
+        show={busy}
+        label={
+          canRetryCard
+            ? "Opening card payment…"
+            : "Sending payment prompt…"
+        }
+      />
       <button
         type="button"
         disabled={busy}

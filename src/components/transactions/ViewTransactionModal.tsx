@@ -351,7 +351,9 @@ export function ViewTransactionModal({
                           ? "Mobile money"
                           : row.payInMethod === "BANK_TRANSFER"
                             ? "Bank transfer"
-                            : (row.payInMethod ?? "—")
+                            : row.payInMethod === "CARD"
+                              ? "Debit / credit card"
+                              : (row.payInMethod ?? "—")
                       }
                     />
                     {row.payInMethod === "MOBILE_MONEY" && (
@@ -359,6 +361,15 @@ export function ViewTransactionModal({
                         label="Payer number"
                         value={row.payerPhone ?? undefined}
                         mono
+                      />
+                    )}
+                    {row.payInMethod === "CARD" && (
+                      <Detail
+                        label="Card payment status"
+                        value={
+                          (row as { selcomPaymentStatus?: string | null })
+                            .selcomPaymentStatus ?? undefined
+                        }
                       />
                     )}
                   </dl>

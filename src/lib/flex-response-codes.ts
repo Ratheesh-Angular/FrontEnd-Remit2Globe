@@ -175,10 +175,18 @@ export function canRetryMobileMoneyPayment(transfer: FlexTransferFields): boolea
   );
 }
 
+/** Card pay-in can be retried while still awaiting payment or after a hard fail. */
+export function canRetryCardPayment(transfer: FlexTransferFields): boolean {
+  if (transfer.payInMethod !== "CARD") return false;
+  return (
+    transfer.status === "PENDING_PAYMENT" || transfer.status === "FAILED"
+  );
+}
+
 export function statusBadgeClassForTransfer(transfer: FlexTransferFields): string {
   const status = transfer.status;
 
-  if (canRetryMobileMoneyPayment(transfer)) {
+  if (canRetryMobileMoneyPayment(transfer) || canRetryCardPayment(transfer)) {
     return "bg-amber-50 text-amber-900 border-amber-200";
   }
 
