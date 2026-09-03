@@ -72,6 +72,7 @@ export function buildTransferReceiptDataFromRow(
       : null;
 
   const payInIsMobile = t.payInMethod === "MOBILE_MONEY";
+  const payInIsCard = t.payInMethod === "CARD";
   const recipientCountry =
     (t.recipientCountryLabel ?? ben.country ?? "").trim() || "—";
   return {
@@ -116,7 +117,9 @@ export function buildTransferReceiptDataFromRow(
         : null,
     payInLabel: payInIsMobile
       ? "Mobile money (STK / collection to us)"
-      : "Bank transfer to our company account",
+      : payInIsCard
+        ? "Debit / credit card (Selcom)"
+        : "Bank transfer to our company account",
     payerPhone: payInIsMobile
       ? (t.payerPhone?.trim() || null)
       : null,

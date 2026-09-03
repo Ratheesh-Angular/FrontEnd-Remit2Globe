@@ -73,6 +73,8 @@ interface SenderContext {
   defaultPayCurrency: string;
   payCurrencies: string[];
   canUseMobilePayIn: boolean;
+  /** True when sender is from South Sudan (Selcom card pay-in). */
+  canUseCardPayIn: boolean;
   /** Comma-separated country names where mobile pay-in (e.g. M-Pesa) is supported */
   mobilePayInMarketsLabel: string;
   /** E.164 saved at registration — used to prefill payer mobile */
@@ -294,7 +296,7 @@ function lookupHasValue(opts: LookupOpt[], value: string): boolean {
   return opts.some((o) => o.value === value);
 }
 
-type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY";
+type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD";
 
 /** Mirrors Step 3 Continue `disabled` rules and user-facing blocker copy. */
 function evaluateStep3ContinueGate(opts: {
@@ -322,7 +324,9 @@ function evaluateStep3ContinueGate(opts: {
   if (noPurpose) hintLines.push("Select purpose of transfer.");
   if (noRelationship) hintLines.push("Select relationship to recipient.");
   if (noPayMethod) {
-    hintLines.push("Choose how you pay us — bank transfer or mobile money.");
+    hintLines.push(
+      "Choose how you pay us — bank transfer, mobile money, or card.",
+    );
   }
   if (corpNeedsSupportingDoc) {
     hintLines.push(
@@ -442,9 +446,7 @@ function SendMoneyPageContent() {
   const [transferPurpose, setTransferPurpose] = useState("");
   const [relationship, setRelationship] = useState("");
 
-  const [payInMethod, setPayInMethod] = useState<
-    "BANK_TRANSFER" | "MOBILE_MONEY" | ""
-  >("");
+  const [payInMethod, setPayInMethod] = useState<PayInKind>("");
   const [payerPhone, setPayerPhone] = useState("");
   const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
 
@@ -767,7 +769,12 @@ function SendMoneyPageContent() {
   useEffect(() => {
     if (step !== 3 || !ctx) return;
     setPayInMethod((prev) => {
-      if (!ctx.canUseMobilePayIn) return "BANK_TRANSFER";
+      if (prev === "MOBILE_MONEY" && !ctx.canUseMobilePayIn) {
+        return "BANK_TRANSFER";
+      }
+      if (prev === "CARD" && !ctx.canUseCardPayIn) {
+        return "BANK_TRANSFER";
+      }
       return prev || "BANK_TRANSFER";
     });
   }, [step, ctx]);
@@ -789,7 +796,10 @@ function SendMoneyPageContent() {
         }),
       ]);
       const c = ctxRes.data.data;
-      setCtx(c);
+      setCtx({
+        ...c,
+        canUseCardPayIn: c.canUseCardPayIn === true,
+      });
       setPayerPhone((prev) =>
         prev.trim() ? prev : (c.registeredPhone?.trim() ?? ""),
       );
@@ -1050,6 +1060,10 @@ useEffect(() => {
     setQuoteError(null);
   }, [payCurrency, receiveCurrency]);
 
+  /** Only the amount the user is editing should retrigger quote fetches. */
+  const drivingAmount = amountEditSide === "pay" ? payAmount : receiveAmount;
+  const quoteRequestGenRef = useRef(0);
+
   const refreshQuote = useCallback(async () => {
     if (!payCurrency || !receiveCurrency) {
       setQuote(null);
@@ -1057,25 +1071,24 @@ useEffect(() => {
       return;
     }
 
-    const payAmt = parseFloat(payAmount);
-    const recvAmt = parseFloat(receiveAmount);
+    const amt = parseFloat(drivingAmount);
     const usePaySide = amountEditSide === "pay";
 
     if (usePaySide) {
-      if (!payAmt || payAmt <= 0) {
+      if (!amt || amt <= 0) {
         setQuote(null);
         setQuoteError(null);
         return;
       }
       if (tariffBounds) {
-        if (payAmt < tariffBounds.minPayAmount) {
+        if (amt < tariffBounds.minPayAmount) {
           setQuote(null);
           setQuoteError(
             `Minimum send amount is ${fmtFee(tariffBounds.minPayAmount)} ${tariffBounds.currency}`,
           );
           return;
         }
-        if (payAmt > tariffBounds.maxPayAmount) {
+        if (amt > tariffBounds.maxPayAmount) {
           setQuote(null);
           setQuoteError(
             `Maximum send amount is ${fmtFee(tariffBounds.maxPayAmount)} ${tariffBounds.currency}`,
@@ -1083,12 +1096,13 @@ useEffect(() => {
           return;
         }
       }
-    } else if (!recvAmt || recvAmt <= 0) {
+    } else if (!amt || amt <= 0) {
       setQuote(null);
       setQuoteError(null);
       return;
     }
 
+    const requestGen = ++quoteRequestGenRef.current;
     setQuoteLoading(true);
     setQuoteError(null);
     try {
@@ -1097,14 +1111,16 @@ useEffect(() => {
           ? {
               fromCurrency: payCurrency,
               toCurrency: receiveCurrency,
-              payAmount: payAmt,
+              payAmount: amt,
             }
           : {
               fromCurrency: payCurrency,
               toCurrency: receiveCurrency,
-              receiveAmount: recvAmt,
+              receiveAmount: amt,
             },
       });
+      if (requestGen !== quoteRequestGenRef.current) return;
+
       const q = data.data;
       if (tariffBounds || q.payAmountMin != null) {
         const min = q.payAmountMin ?? tariffBounds?.minPayAmount;
@@ -1122,9 +1138,20 @@ useEffect(() => {
         }
       }
       setQuote(q);
-      setPayAmount(String(q.payAmount));
-      setReceiveAmount(String(q.receiveAmount));
+      // Always sync derived side; only rewrite driving side when API rounded it.
+      if (usePaySide) {
+        setReceiveAmount(String(q.receiveAmount));
+        if (Number(drivingAmount) !== q.payAmount) {
+          setPayAmount(String(q.payAmount));
+        }
+      } else {
+        setPayAmount(String(q.payAmount));
+        if (Number(drivingAmount) !== q.receiveAmount) {
+          setReceiveAmount(String(q.receiveAmount));
+        }
+      }
     } catch (err: unknown) {
+      if (requestGen !== quoteRequestGenRef.current) return;
       setQuote(null);
       const apiMessage =
         err &&
@@ -1145,12 +1172,13 @@ useEffect(() => {
       setQuoteError(msg);
       notifyError(msg);
     } finally {
-      setQuoteLoading(false);
+      if (requestGen === quoteRequestGenRef.current) {
+        setQuoteLoading(false);
+      }
     }
   }, [
     amountEditSide,
-    payAmount,
-    receiveAmount,
+    drivingAmount,
     payCurrency,
     receiveCurrency,
     tariffBounds,
@@ -1160,7 +1188,11 @@ useEffect(() => {
     const t = setTimeout(() => {
       void refreshQuote();
     }, 400);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      // Invalidate in-flight quote so a stale response cannot overwrite newer input.
+      quoteRequestGenRef.current += 1;
+    };
   }, [refreshQuote]);
 
   /** Live Flex rate preview before quote is available. */
@@ -1254,24 +1286,30 @@ useEffect(() => {
     if (amountEditSide === "pay") {
       const pay = parseFloat(payAmount);
       if (!pay || pay <= 0) {
-        if (!pay) setReceiveAmount("");
+        if (!pay) {
+          setReceiveAmount((prev) => (prev === "" ? prev : ""));
+        }
         return;
       }
       const derived = pay * rate;
       if (Number.isFinite(derived) && derived > 0) {
-        setReceiveAmount(String(derived));
+        setReceiveAmount((prev) =>
+          Number(prev) === derived ? prev : String(derived),
+        );
       }
       return;
     }
 
     const recv = parseFloat(receiveAmount);
     if (!recv || recv <= 0) {
-      if (!recv) setPayAmount("");
+      if (!recv) {
+        setPayAmount((prev) => (prev === "" ? prev : ""));
+      }
       return;
     }
     const derived = recv / rate;
     if (Number.isFinite(derived) && derived > 0) {
-      setPayAmount(String(derived));
+      setPayAmount((prev) => (Number(prev) === derived ? prev : String(derived)));
     }
   }, [
     amountEditSide,
@@ -1481,7 +1519,7 @@ useEffect(() => {
     if (!sourceOfIncome || !transferPurpose || !relationship) return;
     if (!payInMethod) {
       notifyError(
-        "Choose how you will pay us — bank transfer or mobile money.",
+        "Choose how you will pay us — bank transfer, mobile money, or card.",
       );
       return;
     }
@@ -1502,6 +1540,19 @@ useEffect(() => {
       const phoneErr = validateE164Phone(p);
       if (phoneErr) {
         notifyError(phoneErr);
+        return;
+      }
+    }
+    if (payInMethod === "CARD") {
+      if (!ctx.canUseCardPayIn) {
+        notifyError("Card pay-in is not available for your profile country.");
+        return;
+      }
+      const cur = (payCurrency || quote?.fromCurrency || "").toUpperCase();
+      if (cur && cur !== "TZS" && cur !== "USD") {
+        notifyError(
+          "Card payment is currently available for TZS and USD only. Choose another pay-in method or currency.",
+        );
         return;
       }
     }
@@ -1552,7 +1603,7 @@ useEffect(() => {
     setPostConfirmMessage("");
     try {
       const res = await api.post<{
-        data: { transfer: TransferRow };
+        data: { transfer: TransferRow; paymentGatewayUrl?: string };
         message?: string;
       }>(`/remittance/transfers/${transferId}/confirm`);
       setTransferRow(res.data.data.transfer);
@@ -1560,6 +1611,17 @@ useEffect(() => {
       setPostConfirmMessage(
         typeof res.data.message === "string" ? res.data.message : "",
       );
+
+      const gatewayUrl = res.data.data.paymentGatewayUrl?.trim();
+      if (
+        (payInMethod === "CARD" ||
+          res.data.data.transfer.payInMethod === "CARD") &&
+        gatewayUrl
+      ) {
+        window.location.assign(gatewayUrl);
+        return;
+      }
+
       setStep(5);
     } catch (e: unknown) {
       const msg =
@@ -1766,6 +1828,8 @@ useEffect(() => {
     const payInIsMobile =
       payInMethod === "MOBILE_MONEY" ||
       transferRow?.payInMethod === "MOBILE_MONEY";
+    const payInIsCard =
+      payInMethod === "CARD" || transferRow?.payInMethod === "CARD";
     const payInIsBankTransfer =
       payInMethod === "BANK_TRANSFER" ||
       transferRow?.payInMethod === "BANK_TRANSFER";
@@ -1795,7 +1859,9 @@ useEffect(() => {
       compliance: complianceLabels,
       payInLabel: payInIsMobile
         ? "Mobile money (STK / collection to us)"
-        : "Bank transfer to our company account",
+        : payInIsCard
+          ? "Debit / credit card (Selcom)"
+          : "Bank transfer to our company account",
       payerPhone: payInIsMobile
         ? payerPhone.trim() || transferRow?.payerPhone || null
         : null,
@@ -2505,12 +2571,21 @@ useEffect(() => {
                     . Everyone can use <strong>Bank transfer</strong>.
                   </div>
                 )}
-                <button
-                  type="button"
-                  className="h-10 px-4 rounded-lg text-sm border cursor-pointer border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
-                >
-                  Pay by debit/credit card
-                </button>
+                {ctx.canUseCardPayIn === true &&
+                ctx.senderCountryIso2 === "SS" ? (
+                  <button
+                    type="button"
+                    onClick={() => setPayInMethod("CARD")}
+                    className={`h-10 px-4 rounded-lg text-sm border cursor-pointer ${
+                      payInMethod === "CARD"
+                        ? "bg-red-600 text-white border-red-600"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                    title="Pay with debit or credit card"
+                  >
+                    Pay by debit/credit card
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -2565,6 +2640,15 @@ useEffect(() => {
                 description.
               </p>
             )}
+            {payInMethod === "CARD" && (
+              <p className="text-xs text-slate-500 leading-relaxed">
+                After you confirm, you will be redirected to Selcom&apos;s
+                secure card payment page (Visa, Mastercard, Amex). Your billing
+                details come from your KYC profile address — keep it complete.
+                Card pay-in supports <strong>TZS</strong> and{" "}
+                <strong>USD</strong> only.
+              </p>
+            )}
           </div>
 
           {/* {!submitting && step3ContinueGate.hintLines.length > 0 && (
@@ -2609,7 +2693,7 @@ useEffect(() => {
           <h2 className="font-semibold text-slate-900">Summary</h2>
           <p className="text-xs text-slate-500">
             Review everything below. After you proceed, payment steps depend on
-            whether you pay by bank or mobile money.
+            whether you pay by bank, mobile money, or card.
           </p>
 
           <dl className="space-y-3 divide-y divide-slate-100">
@@ -2725,7 +2809,9 @@ useEffect(() => {
                 <dd className="font-medium text-right">
                   {payInMethod === "MOBILE_MONEY"
                     ? "Mobile money"
-                    : "Bank transfer"}
+                    : payInMethod === "CARD"
+                      ? "Debit / credit card"
+                      : "Bank transfer"}
                 </dd>
               </div>
               {payInMethod === "MOBILE_MONEY" && (
@@ -2735,6 +2821,12 @@ useEffect(() => {
                     {payerPhone.trim()}
                   </dd>
                 </div>
+              )}
+              {payInMethod === "CARD" && (
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  You will leave this app briefly to complete payment on
+                  Selcom&apos;s secure page, then return here.
+                </p>
               )}
               {payInMethod === "BANK_TRANSFER" && (
                 <p className="text-xs text-slate-500 leading-relaxed">
