@@ -74,7 +74,7 @@ interface SenderContext {
   payCurrencies: string[];
   canUseMobilePayIn: boolean;
   /** True when sender is from South Sudan (Selcom card pay-in). */
-  canUseCardPayIn?: boolean;
+  canUseCardPayIn: boolean;
   /** Comma-separated country names where mobile pay-in (e.g. M-Pesa) is supported */
   mobilePayInMarketsLabel: string;
   /** E.164 saved at registration — used to prefill payer mobile */
@@ -769,7 +769,12 @@ function SendMoneyPageContent() {
   useEffect(() => {
     if (step !== 3 || !ctx) return;
     setPayInMethod((prev) => {
-      if (!ctx.canUseMobilePayIn) return "BANK_TRANSFER";
+      if (prev === "MOBILE_MONEY" && !ctx.canUseMobilePayIn) {
+        return "BANK_TRANSFER";
+      }
+      if (prev === "CARD" && !ctx.canUseCardPayIn) {
+        return "BANK_TRANSFER";
+      }
       return prev || "BANK_TRANSFER";
     });
   }, [step, ctx]);
@@ -791,7 +796,10 @@ function SendMoneyPageContent() {
         }),
       ]);
       const c = ctxRes.data.data;
-      setCtx(c);
+      setCtx({
+        ...c,
+        canUseCardPayIn: c.canUseCardPayIn === true,
+      });
       setPayerPhone((prev) =>
         prev.trim() ? prev : (c.registeredPhone?.trim() ?? ""),
       );
@@ -2563,7 +2571,8 @@ useEffect(() => {
                     . Everyone can use <strong>Bank transfer</strong>.
                   </div>
                 )}
-                {ctx.canUseCardPayIn ? (
+                {ctx.canUseCardPayIn === true &&
+                ctx.senderCountryIso2 === "SS" ? (
                   <button
                     type="button"
                     onClick={() => setPayInMethod("CARD")}
