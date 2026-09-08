@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { sessionApi as api } from "@/lib/api";
 import { notifyApiError } from "@/lib/notify";
+import { buildKycRejectionDisplay } from "@/lib/kyc-messaging";
 
 type PollState = "checking" | "approved" | "rejected" | "pending" | "error";
 
@@ -38,7 +39,7 @@ function KycResultInner() {
         }
         if (kycStatus === "REJECTED") {
           setState("rejected");
-          setMessage("Identity verification did not pass.");
+          setMessage("Verification unsuccessful");
           return;
         }
       } catch (e) {
@@ -86,6 +87,9 @@ function KycResultInner() {
     }
   };
 
+  const rejection =
+    state === "rejected" ? buildKycRejectionDisplay(reason) : null;
+
   return (
     <div className="mx-auto max-w-lg">
       <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4">
@@ -107,8 +111,16 @@ function KycResultInner() {
 
         <h1 className="text-xl font-semibold text-slate-900">{message}</h1>
 
-        {reason && state === "rejected" && (
-          <p className="text-sm text-slate-500">{reason}</p>
+        {rejection && (
+          <div className="space-y-3 text-left">
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-slate-900">Reason: </span>
+              {rejection.reason}
+            </p>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              {rejection.supportMessage}
+            </p>
+          </div>
         )}
 
         {state === "approved" && (
