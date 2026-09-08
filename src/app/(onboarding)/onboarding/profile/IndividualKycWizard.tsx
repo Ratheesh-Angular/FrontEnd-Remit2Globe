@@ -13,6 +13,7 @@ import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
 import { Field } from "./KycFormPrimitives";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { notifyApiError } from "@/lib/notify";
+import { buildKycRejectionDisplay } from "@/lib/kyc-messaging";
 
 type View = "personal" | "in_progress" | "approved" | "rejected";
 
@@ -536,12 +537,22 @@ export function IndividualKycWizard() {
         {view === "rejected" && (
           <div className="space-y-4 text-center py-6">
             <h2 className="text-base font-semibold text-slate-900">
-              Verification did not pass
+              Verification unsuccessful
             </h2>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
-              {decisionReason ||
-                "Please try again. Make sure your documents are clear and match your personal details."}
-            </p>
+            {(() => {
+              const rejection = buildKycRejectionDisplay(decisionReason);
+              return (
+                <div className="space-y-3 text-left max-w-md mx-auto">
+                  <p className="text-sm text-slate-700">
+                    <span className="font-medium text-slate-900">Reason: </span>
+                    {rejection.reason}
+                  </p>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    {rejection.supportMessage}
+                  </p>
+                </div>
+              );
+            })()}
             <button
               type="button"
               onClick={retryKyc}

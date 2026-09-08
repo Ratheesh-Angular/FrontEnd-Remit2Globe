@@ -15,6 +15,7 @@ import {
   Star,
 } from "lucide-react";
 import { sessionApi as api } from "@/lib/api";
+import { buildKycRejectionDisplay } from "@/lib/kyc-messaging";
 import type { RemittanceTransferRow } from "@/lib/transfer-receipt-from-transfer";
 import { RemittanceTransfersTable } from "@/components/transactions/RemittanceTransfersTable";
 import { ViewTransactionModal } from "@/components/transactions/ViewTransactionModal";
@@ -484,13 +485,42 @@ function DashboardLiveExchangeRates() {
 
 export default function DashboardClient({ user }: { user: User }) {
   const router = useRouter();
+  const [kycRejectReason, setKycRejectReason] = useState<string | null>(null);
 
   const displayName = user?.name?.trim() || null;
 
   const isKycPending = user?.kycStatus === "PENDING";
   const isKycSubmitted = user?.kycStatus === "SUBMITTED";
+  const isKycInProgress = user?.kycStatus === "IN_PROGRESS";
   const isKycApproved = user?.kycStatus === "APPROVED";
   const isKycRejected = user?.kycStatus === "REJECTED";
+
+  useEffect(() => {
+    if (!isKycRejected) {
+      setKycRejectReason(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.get("/kyc/signzy/status");
+        const reason = res.data?.data?.journey?.kycDecisionReason as
+          | string
+          | null
+          | undefined;
+        if (!cancelled) setKycRejectReason(reason ?? null);
+      } catch {
+        if (!cancelled) setKycRejectReason(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isKycRejected]);
+
+  const rejectionDisplay = isKycRejected
+    ? buildKycRejectionDisplay(kycRejectReason)
+    : null;
 
   return (
     <div className="max-w-8xl mx-auto space-y-6">
@@ -523,6 +553,27 @@ export default function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
+      {/* KYC Banner — IN_PROGRESS */}
+      {isKycInProgress && (
+        <div className="bg-sky-50 border border-sky-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1">
+            <h2 className="text-sm font-semibold text-sky-900">
+              Verification in progress
+            </h2>
+            <p className="text-sm text-sky-800 mt-1">
+              We are still confirming your identity. You can continue or refresh
+              your status from your profile.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/onboarding/profile")}
+            className="cursor-pointer shrink-0 inline-flex items-center justify-center h-10 px-5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            View status <Clock className="w-4 h-4 ml-2 font-bold" />
+          </button>
+        </div>
+      )}
+
       {/* KYC Banner — SUBMITTED / under review */}
       {isKycSubmitted && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -542,15 +593,18 @@ export default function DashboardClient({ user }: { user: User }) {
       )}
 
       {/* KYC Banner — REJECTED */}
-      {isKycRejected && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex-1">
+      {isKycRejected && rejectionDisplay && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="flex-1 space-y-2">
             <h2 className="text-sm font-semibold text-red-800">
               Verification unsuccessful
             </h2>
-            <p className="text-sm text-red-700 mt-1">
-              Your documents were not accepted. Please resubmit with valid
-              documents.
+            <p className="text-sm text-red-800">
+              <span className="font-medium">Reason: </span>
+              {rejectionDisplay.reason}
+            </p>
+            <p className="text-sm text-red-700 leading-relaxed">
+              {rejectionDisplay.supportMessage}
             </p>
           </div>
           <button
