@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { StateSearchSelect } from "@/components/address/StateSearchSelect";
+import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
+import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import Flag from "react-world-flags";
 import type { Country } from "@/lib/phone-countries";
@@ -175,6 +177,12 @@ export function IndividualKycWizard() {
     countries: flexCountryList,
     loading: flexCountriesLoading,
   } = useFlexCountries(true);
+
+  const {
+    countries: catalogCountries,
+    loading: catalogCountriesLoading,
+    error: catalogCountriesError,
+  } = useCatalogCountries(true);
 
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
@@ -947,7 +955,7 @@ export function IndividualKycWizard() {
                         required
                         error={errors.passportIssuingCountry}
                       >
-                        <FlexCountrySelect
+                        <CatalogCountrySelect
                           value={form.passportIssuingCountry}
                           onChange={(couName) => {
                             setField("passportIssuingCountry", couName);
@@ -955,8 +963,9 @@ export function IndividualKycWizard() {
                           error={Boolean(errors.passportIssuingCountry)}
                           disabled={isSaving}
                           placeholder="Select the country that issued your passport"
-                          countries={flexCountryList}
-                          countriesLoading={flexCountriesLoading}
+                          countries={catalogCountries}
+                          countriesLoading={catalogCountriesLoading}
+                          countriesError={catalogCountriesError}
                         />
                       </Field>
                     )}
