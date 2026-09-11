@@ -668,7 +668,7 @@ export default function ProfilePageClient() {
                       />
                       <DetailRow
                         label="Nationality"
-                        value={individual?.passportIssuingCountry as string}
+                        value={individual?.nationality as string}
                       />
                       <DetailRow
                         label="National / foreign"
@@ -703,12 +703,6 @@ export default function ProfilePageClient() {
                                 : "—"
                         }
                       />
-                      {individual?.citizenPrimaryDocumentType === "PASSPORT" ? (
-                        <DetailRow
-                          label="Passport issuing country"
-                          value={individual?.passportIssuingCountry as string}
-                        />
-                      ) : null}
                       <DetailRow
                         label="Passport number"
                         value={individual?.passportNumber as string}

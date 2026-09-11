@@ -4,10 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { sessionApi as api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { StateSearchSelect } from "@/components/address/StateSearchSelect";
-import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { FlexCountrySelect } from "@/components/country/FlexCountrySelect";
-import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { useFlexCountries } from "@/hooks/useFlexCountries";
 import Flag from "react-world-flags";
 import type { Country } from "@/lib/phone-countries";
@@ -37,8 +35,6 @@ interface IndividualForm {
   dateOfBirth: string;
   isNational: boolean;
   citizenPrimaryDocumentType: KycDocumentType;
-  /** Kenya Resident + Passport only; otherwise saved as null. */
-  passportIssuingCountry: string;
   residenceAddress: ResidenceAddressForm;
   country: string;
   contactEmail: string;
@@ -50,6 +46,29 @@ interface IndividualForm {
 function isKenyaCountry(country: string): boolean {
   const n = country.trim().toLowerCase();
   return n === "kenya" || n === "ken" || n === "ke";
+}
+
+function isUgandaCountry(country: string): boolean {
+  const n = country.trim().toLowerCase();
+  return n === "uganda" || n === "uga" || n === "ug";
+}
+
+function isSouthSudanCountry(country: string): boolean {
+  const n = country.trim().toLowerCase();
+  return (
+    n === "south sudan" ||
+    n === "southsudan" ||
+    n === "ssd" ||
+    n === "ss"
+  );
+}
+
+function requiresKycDocumentType(country: string): boolean {
+  return (
+    isKenyaCountry(country) ||
+    isUgandaCountry(country) ||
+    isSouthSudanCountry(country)
+  );
 }
 
 function parseDocumentType(raw: unknown): KycDocumentType {
@@ -74,7 +93,6 @@ const empty: IndividualForm = {
   dateOfBirth: "",
   isNational: false,
   citizenPrimaryDocumentType: "",
-  passportIssuingCountry: "",
   residenceAddress: { ...emptyResidenceAddress },
   country: "",
   contactEmail: "",
@@ -113,11 +131,7 @@ function parseResidenceFromProfile(
 }
 
 function buildPayload(form: IndividualForm) {
-  const kenya = isKenyaCountry(form.country);
-  const sendPassportCountry =
-    kenya &&
-    form.isNational === false &&
-    form.citizenPrimaryDocumentType === "PASSPORT";
+  const documentFlow = requiresKycDocumentType(form.country);
 
   return {
     firstName: form.firstName.trim(),
@@ -126,12 +140,11 @@ function buildPayload(form: IndividualForm) {
     dateOfBirth: form.dateOfBirth,
     isNational: form.isNational,
     country: form.country.trim(),
-    citizenPrimaryDocumentType: kenya
+    citizenPrimaryDocumentType: documentFlow
       ? form.citizenPrimaryDocumentType || null
       : null,
-    passportIssuingCountry: sendPassportCountry
-      ? form.passportIssuingCountry.trim() || null
-      : null,
+    /** Cleared — passport issuing country is no longer collected in KYC. */
+    passportIssuingCountry: null,
     residenceAddress: {
       line1: form.residenceAddress.line1.trim(),
       line2: form.residenceAddress.line2.trim(),
@@ -177,12 +190,6 @@ export function IndividualKycWizard() {
     countries: flexCountryList,
     loading: flexCountriesLoading,
   } = useFlexCountries(true);
-
-  const {
-    countries: catalogCountries,
-    loading: catalogCountriesLoading,
-    error: catalogCountriesError,
-  } = useCatalogCountries(true);
 
   const residenceFlexCountry = useMemo(
     () => flexCountryList.find((c) => c.couName === form.country),
@@ -264,7 +271,6 @@ export function IndividualKycWizard() {
             citizenPrimaryDocumentType: parseDocumentType(
               p.citizenPrimaryDocumentType,
             ),
-            passportIssuingCountry: String(p.passportIssuingCountry ?? "").trim(),
             residenceAddress: {
               ...raParsed,
               country: raParsed.country || countryLine,
@@ -359,8 +365,9 @@ export function IndividualKycWizard() {
     if (form.isNational === undefined || form.isNational === null) {
       newErrors.isNational = "Please select Resident or Citizen";
     }
-    if (isKenyaCountry(form.country)) {
+    if (requiresKycDocumentType(form.country)) {
       const doc = form.citizenPrimaryDocumentType;
+      const kenya = isKenyaCountry(form.country);
       if (!doc) {
         newErrors.citizenPrimaryDocumentType =
           "Please select the document you will upload";
@@ -368,12 +375,12 @@ export function IndividualKycWizard() {
         newErrors.citizenPrimaryDocumentType =
           "Citizens must choose National ID or Passport";
       } else if (!form.isNational && doc === "NATIONAL_ID") {
+        newErrors.citizenPrimaryDocumentType = kenya
+          ? "Residents must choose Alien card or Passport"
+          : "Residents must choose Passport";
+      } else if (!form.isNational && doc === "ALIEN_CARD" && !kenya) {
         newErrors.citizenPrimaryDocumentType =
-          "Residents must choose Alien card or Passport";
-      } else if (!form.isNational && doc === "PASSPORT") {
-        if (!form.passportIssuingCountry.trim()) {
-          newErrors.passportIssuingCountry = "Passport country is required";
-        }
+          "Residents must choose Passport";
       }
     }
     const ra = form.residenceAddress;
@@ -632,16 +639,23 @@ export function IndividualKycWizard() {
                           (c) => c.couName === couName,
                         );
                         setForm((prev) => {
+                          const stillDocumentFlow =
+                            requiresKycDocumentType(couName);
                           const stillKenya = isKenyaCountry(couName);
+                          let nextDoc = stillDocumentFlow
+                            ? prev.citizenPrimaryDocumentType
+                            : "";
+                          // Drop Kenya-only Alien card when leaving Kenya
+                          if (
+                            nextDoc === "ALIEN_CARD" &&
+                            !stillKenya
+                          ) {
+                            nextDoc = "";
+                          }
                           return {
                             ...prev,
                             country: couName,
-                            citizenPrimaryDocumentType: stillKenya
-                              ? prev.citizenPrimaryDocumentType
-                              : "",
-                            passportIssuingCountry: stillKenya
-                              ? prev.passportIssuingCountry
-                              : "",
+                            citizenPrimaryDocumentType: nextDoc,
                           };
                         });
                         setRegistrationPhoneCountry(
@@ -653,7 +667,6 @@ export function IndividualKycWizard() {
                           country: undefined,
                           registrationPhone: undefined,
                           citizenPrimaryDocumentType: undefined,
-                          passportIssuingCountry: undefined,
                         }));
                       }}
                       error={Boolean(errors.country)}
@@ -776,21 +789,16 @@ export function IndividualKycWizard() {
                             prev.citizenPrimaryDocumentType === "NATIONAL_ID"
                               ? ""
                               : prev.citizenPrimaryDocumentType,
-                          passportIssuingCountry:
-                            prev.citizenPrimaryDocumentType === "PASSPORT"
-                              ? prev.passportIssuingCountry
-                              : "",
                         }));
                         setErrors((prev) => ({
                           ...prev,
                           isNational: undefined,
                           citizenPrimaryDocumentType: undefined,
-                          passportIssuingCountry: undefined,
                         }));
                       }}
                       className="w-4 h-4 text-red-600 focus:ring-red-500"
                     />
-                    <span className="text-sm text-slate-700">Resident</span>
+                    <span className="text-sm text-slate-700">Resident (Foreigner)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -805,13 +813,11 @@ export function IndividualKycWizard() {
                             prev.citizenPrimaryDocumentType === "ALIEN_CARD"
                               ? ""
                               : prev.citizenPrimaryDocumentType,
-                          passportIssuingCountry: "",
                         }));
                         setErrors((prev) => ({
                           ...prev,
                           isNational: undefined,
                           citizenPrimaryDocumentType: undefined,
-                          passportIssuingCountry: undefined,
                         }));
                       }}
                       className="w-4 h-4 text-red-600 focus:ring-red-500"
@@ -826,7 +832,7 @@ export function IndividualKycWizard() {
                 )}
               </div>
 
-              {isKenyaCountry(form.country) && (
+              {requiresKycDocumentType(form.country) && (
                 <>
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-2 block">
@@ -847,12 +853,10 @@ export function IndividualKycWizard() {
                                 setForm((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: "NATIONAL_ID",
-                                  passportIssuingCountry: "",
                                 }));
                                 setErrors((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: undefined,
-                                  passportIssuingCountry: undefined,
                                 }));
                               }}
                               className="w-4 h-4 text-red-600 focus:ring-red-500"
@@ -872,12 +876,10 @@ export function IndividualKycWizard() {
                                 setForm((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: "PASSPORT",
-                                  passportIssuingCountry: "",
                                 }));
                                 setErrors((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: undefined,
-                                  passportIssuingCountry: undefined,
                                 }));
                               }}
                               className="w-4 h-4 text-red-600 focus:ring-red-500"
@@ -887,7 +889,7 @@ export function IndividualKycWizard() {
                             </span>
                           </label>
                         </>
-                      ) : (
+                      ) : isKenyaCountry(form.country) ? (
                         <>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
@@ -901,12 +903,10 @@ export function IndividualKycWizard() {
                                 setForm((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: "ALIEN_CARD",
-                                  passportIssuingCountry: "",
                                 }));
                                 setErrors((prev) => ({
                                   ...prev,
                                   citizenPrimaryDocumentType: undefined,
-                                  passportIssuingCountry: undefined,
                                 }));
                               }}
                               className="w-4 h-4 text-red-600 focus:ring-red-500"
@@ -939,6 +939,30 @@ export function IndividualKycWizard() {
                             </span>
                           </label>
                         </>
+                      ) : (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="kycDocumentType"
+                            checked={
+                              form.citizenPrimaryDocumentType === "PASSPORT"
+                            }
+                            onChange={() => {
+                              setForm((prev) => ({
+                                ...prev,
+                                citizenPrimaryDocumentType: "PASSPORT",
+                              }));
+                              setErrors((prev) => ({
+                                ...prev,
+                                citizenPrimaryDocumentType: undefined,
+                              }));
+                            }}
+                            className="w-4 h-4 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-slate-700">
+                            Passport
+                          </span>
+                        </label>
                       )}
                     </div>
                     {errors.citizenPrimaryDocumentType && (
@@ -947,28 +971,6 @@ export function IndividualKycWizard() {
                       </p>
                     )}
                   </div>
-
-                  {!form.isNational &&
-                    form.citizenPrimaryDocumentType === "PASSPORT" && (
-                      <Field
-                        label="Passport country"
-                        required
-                        error={errors.passportIssuingCountry}
-                      >
-                        <CatalogCountrySelect
-                          value={form.passportIssuingCountry}
-                          onChange={(couName) => {
-                            setField("passportIssuingCountry", couName);
-                          }}
-                          error={Boolean(errors.passportIssuingCountry)}
-                          disabled={isSaving}
-                          placeholder="Select the country that issued your passport"
-                          countries={catalogCountries}
-                          countriesLoading={catalogCountriesLoading}
-                          countriesError={catalogCountriesError}
-                        />
-                      </Field>
-                    )}
                 </>
               )}
 
