@@ -72,8 +72,10 @@ interface SenderContext {
   senderCountryName: string | null;
   defaultPayCurrency: string;
   payCurrencies: string[];
+  /** Admin-controlled: bank transfer pay-in for this sender country. */
+  canUseBankTransfer: boolean;
   canUseMobilePayIn: boolean;
-  /** True when sender is from South Sudan (Selcom card pay-in). */
+  /** Admin-controlled: card pay-in for this sender country. */
   canUseCardPayIn: boolean;
   /** Comma-separated country names where mobile pay-in (e.g. M-Pesa) is supported */
   mobilePayInMarketsLabel: string;
@@ -161,6 +163,9 @@ interface TransferRow {
   recipientCountryLabel?: string | null;
   payInMethod?: string | null;
   payerPhone?: string | null;
+  senderCountryIso2?: string | null;
+  yoTransactionStatus?: string | null;
+  failureReason?: string | null;
   beneficiary?: Beneficiary | null;
   paymentProofs?: PaymentProof[];
   supportingDocuments?: TransferSupportingDocumentRow[];
@@ -297,6 +302,32 @@ function lookupHasValue(opts: LookupOpt[], value: string): boolean {
 }
 
 type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD";
+
+function isPayInMethodAllowed(
+  method: PayInKind,
+  ctx: Pick<
+    SenderContext,
+    "canUseBankTransfer" | "canUseMobilePayIn" | "canUseCardPayIn"
+  >,
+): boolean {
+  if (method === "BANK_TRANSFER") return ctx.canUseBankTransfer;
+  if (method === "MOBILE_MONEY") return ctx.canUseMobilePayIn;
+  if (method === "CARD") return ctx.canUseCardPayIn;
+  return false;
+}
+
+/** Prefer bank, then mobile, then card among admin-enabled methods. */
+function defaultPayInMethod(
+  ctx: Pick<
+    SenderContext,
+    "canUseBankTransfer" | "canUseMobilePayIn" | "canUseCardPayIn"
+  >,
+): PayInKind {
+  if (ctx.canUseBankTransfer) return "BANK_TRANSFER";
+  if (ctx.canUseMobilePayIn) return "MOBILE_MONEY";
+  if (ctx.canUseCardPayIn) return "CARD";
+  return "";
+}
 
 /** Mirrors Step 3 Continue `disabled` rules and user-facing blocker copy. */
 function evaluateStep3ContinueGate(opts: {
@@ -452,6 +483,7 @@ function SendMoneyPageContent() {
 
   const [submitting, setSubmitting] = useState(false);
   const [postConfirmMessage, setPostConfirmMessage] = useState("");
+  const [yoPayInNote, setYoPayInNote] = useState("");
 
   const [payCurrencyOpen, setPayCurrencyOpen] = useState(false);
   const [payCurrencySearch, setPayCurrencySearch] = useState("");
@@ -769,15 +801,96 @@ function SendMoneyPageContent() {
   useEffect(() => {
     if (step !== 3 || !ctx) return;
     setPayInMethod((prev) => {
-      if (prev === "MOBILE_MONEY" && !ctx.canUseMobilePayIn) {
-        return "BANK_TRANSFER";
-      }
-      if (prev === "CARD" && !ctx.canUseCardPayIn) {
-        return "BANK_TRANSFER";
-      }
-      return prev || "BANK_TRANSFER";
+      if (prev && isPayInMethodAllowed(prev, ctx)) return prev;
+      return defaultPayInMethod(ctx);
     });
   }, [step, ctx]);
+
+  useEffect(() => {
+    const ugandaMobile =
+      step === 5 &&
+      (payInMethod === "MOBILE_MONEY" ||
+        transferRow?.payInMethod === "MOBILE_MONEY") &&
+      (ctx?.senderCountryIso2 ?? "").toUpperCase() === "UG" &&
+      !!transferId;
+    if (!ugandaMobile || !transferId) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    let timer = 0;
+    const maxAttempts = 20;
+
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const res = await api.get<{
+          data: {
+            transfer: TransferRow;
+            yoTransactionStatus?: string | null;
+          };
+        }>(`/remittance/transfers/${transferId}/yo-payment-status`);
+        if (cancelled) return;
+        const next = res.data.data.transfer;
+        setTransferRow((prev) => ({ ...(prev ?? next), ...next }));
+        const status = String(next.status ?? "").toUpperCase();
+        const yo = String(
+          next.yoTransactionStatus ?? res.data.data.yoTransactionStatus ?? "",
+        ).toUpperCase();
+        if (
+          yo === "SUCCEEDED" ||
+          status === "PROCESSING" ||
+          status === "COMPLETED" ||
+          status === "UNDER_REVIEW" ||
+          status === "PAYMENT_SUBMITTED"
+        ) {
+          setYoPayInNote("Payment received. We are processing your transfer.");
+          return;
+        }
+        if (yo === "FAILED" || status === "FAILED") {
+          setYoPayInNote(
+            next.failureReason ||
+              "Payment was not completed. You can retry from Transactions.",
+          );
+          return;
+        }
+        if (yo === "INDETERMINATE") {
+          setYoPayInNote(
+            "Payment is being confirmed with the mobile network. Do not send it again yet.",
+          );
+          return;
+        }
+      } catch {
+        /* Keep polling while Yo or the network is briefly unavailable. */
+      }
+      if (attempts >= maxAttempts) {
+        if (!cancelled) {
+          setYoPayInNote(
+            "Still waiting for mobile money confirmation. Check Transactions in a minute.",
+          );
+        }
+        return;
+      }
+      timer = window.setTimeout(() => {
+        void tick();
+      }, 4000);
+    };
+
+    timer = window.setTimeout(() => {
+      void tick();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    step,
+    payInMethod,
+    transferRow?.payInMethod,
+    ctx?.senderCountryIso2,
+    transferId,
+  ]);
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
@@ -798,6 +911,8 @@ function SendMoneyPageContent() {
       const c = ctxRes.data.data;
       setCtx({
         ...c,
+        canUseBankTransfer: c.canUseBankTransfer !== false,
+        canUseMobilePayIn: c.canUseMobilePayIn === true,
         canUseCardPayIn: c.canUseCardPayIn === true,
       });
       setPayerPhone((prev) =>
@@ -1523,6 +1638,12 @@ useEffect(() => {
       );
       return;
     }
+    if (payInMethod === "BANK_TRANSFER" && !ctx.canUseBankTransfer) {
+      notifyError(
+        "Bank transfer pay-in is not available for your profile country.",
+      );
+      return;
+    }
     if (payInMethod === "MOBILE_MONEY") {
       if (!ctx.canUseMobilePayIn) {
         notifyError(
@@ -1601,6 +1722,7 @@ useEffect(() => {
     if (!payReviewTermsAccepted) return;
     setSubmitting(true);
     setPostConfirmMessage("");
+    setYoPayInNote("");
     try {
       const res = await api.post<{
         data: { transfer: TransferRow; paymentGatewayUrl?: string };
@@ -2530,17 +2652,19 @@ useEffect(() => {
                 separate from how your beneficiary receives the payout.
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPayInMethod("BANK_TRANSFER")}
-                  className={`h-10 px-4 rounded-lg text-sm border cursor-pointer ${
-                    payInMethod === "BANK_TRANSFER"
-                      ? "bg-red-600 text-white border-red-600 cursor-pointer"
-                      : "border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
-                  }`}
-                >
-                  Bank transfer
-                </button>
+                {ctx.canUseBankTransfer ? (
+                  <button
+                    type="button"
+                    onClick={() => setPayInMethod("BANK_TRANSFER")}
+                    className={`h-10 px-4 rounded-lg text-sm border cursor-pointer ${
+                      payInMethod === "BANK_TRANSFER"
+                        ? "bg-red-600 text-white border-red-600 cursor-pointer"
+                        : "border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
+                    }`}
+                  >
+                    Bank transfer
+                  </button>
+                ) : null}
                 {ctx.canUseMobilePayIn ? (
                   <button
                     type="button"
@@ -2553,26 +2677,8 @@ useEffect(() => {
                   >
                     Mobile money
                   </button>
-                ) : (
-                  <div className="flex-1 min-w-[12rem] rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
-                    <span className="font-medium text-slate-700">
-                      Mobile money pay-in
-                    </span>{" "}
-                    is only available when your profile country is in a
-                    supported market (e.g.{" "}
-                    {ctx.mobilePayInMarketsLabel || "Kenya, Tanzania, Uganda"}
-                    ). Your profile:{" "}
-                    <span className="font-medium text-slate-800">
-                      {ctx.senderCountryName ?? "—"}
-                      {ctx.senderCountryIso2
-                        ? ` (${ctx.senderCountryIso2})`
-                        : ""}
-                    </span>
-                    . Everyone can use <strong>Bank transfer</strong>.
-                  </div>
-                )}
-                {ctx.canUseCardPayIn === true &&
-                ctx.senderCountryIso2 === "SS" ? (
+                ) : null}
+                {ctx.canUseCardPayIn === true ? (
                   <button
                     type="button"
                     onClick={() => setPayInMethod("CARD")}
@@ -2902,7 +3008,10 @@ useEffect(() => {
                 <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                   Status:{" "}
                   <span className="font-medium text-slate-700">
-                    PENDING_PAYMENT
+                    {(transferRow?.status ?? "PENDING_PAYMENT").replaceAll(
+                      "_",
+                      " ",
+                    )}
                   </span>
                 </p>
               </div>
@@ -3197,6 +3306,11 @@ useEffect(() => {
               </span>
               . We move to processing once funds are confirmed, then pay out to
               your beneficiary.
+            </p>
+          ) : null}
+          {yoPayInNote ? (
+            <p className="text-xs text-slate-700 leading-relaxed rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2 max-w-2xl mx-auto text-center">
+              {yoPayInNote}
             </p>
           ) : null}
 

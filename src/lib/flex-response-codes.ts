@@ -74,6 +74,7 @@ export type FlexTransferFields = {
   failureReason?: string | null;
   flexStkStatus?: string | null;
   flexPayoutStatus?: string | null;
+  yoTransactionStatus?: string | null;
 };
 
 export function extractFlexErrorCode(input: FlexTransferFields): string | null {
@@ -163,6 +164,14 @@ export function resolveTransferFailureDetail(
 
 export function canRetryMobileMoneyPayment(transfer: FlexTransferFields): boolean {
   if (transfer.payInMethod !== "MOBILE_MONEY") return false;
+
+  const yoStatus = transfer.yoTransactionStatus?.trim().toUpperCase();
+  if (yoStatus) {
+    return (
+      yoStatus === "FAILED" &&
+      (transfer.status === "PENDING_PAYMENT" || transfer.status === "FAILED")
+    );
+  }
 
   const code = extractFlexErrorCode(transfer);
   if (!code || !RETRYABLE_STK_FAILURE_CODES.has(code)) return false;
