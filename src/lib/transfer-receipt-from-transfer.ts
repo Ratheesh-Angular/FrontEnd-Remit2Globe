@@ -8,6 +8,7 @@ export type RemittanceTransferRow = {
   failureReason?: string | null;
   flexStkStatus?: string | null;
   flexPayoutStatus?: string | null;
+  yoTransactionStatus?: string | null;
   createdAt?: string;
   paymentProofs?: {
     id: string;
