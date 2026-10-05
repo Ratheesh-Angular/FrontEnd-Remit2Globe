@@ -60,7 +60,7 @@ import { NativeSelectShell } from "@/components/ui/NativeSelectShell";
 import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
-import { resolveFlexExchangeRate } from "@/lib/flex-forex-rate";
+import { fetchCustomerExchangeRate } from "@/lib/customer-exchange-rate";
 
 interface FlexCountry {
   couCode: string;
@@ -1310,7 +1310,7 @@ useEffect(() => {
     };
   }, [refreshQuote]);
 
-  /** Live Flex rate preview before quote is available. */
+  /** Live customer rate preview before quote is available. */
   const refreshFlexForexRate = useCallback(async () => {
     if (!payCurrency.trim() || !receiveCurrency.trim()) {
       setFlexForexRate(null);
@@ -1320,7 +1320,7 @@ useEffect(() => {
     setFlexForexLoading(true);
     setFlexForexError(null);
     try {
-      const rate = await resolveFlexExchangeRate(payCurrency, receiveCurrency);
+      const rate = await fetchCustomerExchangeRate(payCurrency, receiveCurrency);
       setFlexForexRate(rate);
     } catch {
       setFlexForexRate(null);
@@ -1392,7 +1392,7 @@ useEffect(() => {
 
   const canonicalFxRate = quote?.rate ?? flexForexRate;
 
-  /** Keep the non-edited side in sync from live Flex rate (quote overwrites on debounce). */
+  /** Keep the non-edited side in sync from live customer rate (quote overwrites on debounce). */
   useEffect(() => {
     if (quoteLoading || flexForexLoading || quote) return;
     const rate = canonicalFxRate;
