@@ -31,7 +31,7 @@ import {
   getDeliveryChannelLabel,
   type BeneficiaryDeliveryChannel,
 } from "@/lib/beneficiary-delivery-channels";
-import { resolveFlexExchangeRate } from "@/lib/flex-forex-rate";
+import { fetchCustomerExchangeRate } from "@/lib/customer-exchange-rate";
 import {
   CURRENCY_TO_FLAG_ALPHA2,
   fmtFxRate,
@@ -369,7 +369,7 @@ function DashboardLiveExchangeRates() {
         const dests = DASHBOARD_RATE_DESTINATIONS.filter((d) => d !== base);
         const settled = await Promise.allSettled(
           dests.map(async (to) => {
-            const rate = await resolveFlexExchangeRate(base, to);
+            const rate = await fetchCustomerExchangeRate(base, to);
             return {
               from: base,
               to,
