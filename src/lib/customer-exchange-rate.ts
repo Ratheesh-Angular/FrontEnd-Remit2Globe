@@ -1,9 +1,9 @@
 import { sessionApi } from "@/lib/api";
 
 /**
- * Customer rate for the logged-in sender: Flex offered rate minus the admin
- * margin for the sender's country (or the plain offered rate when none is active).
- * Rate is units of `to` per 1 unit of `from`.
+ * Customer rate for the logged-in sender: Flex offered rate plus the admin
+ * signed margin for the sender's country (or the plain offered rate when none
+ * is active). Rate is units of `to` per 1 unit of `from`.
  */
 export async function fetchCustomerExchangeRate(
   fromCurrency: string,

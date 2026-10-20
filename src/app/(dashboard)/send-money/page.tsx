@@ -2828,7 +2828,7 @@ useEffect(() => {
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Rate</dt>
                 <dd className="text-right tabular-nums">
-                  1 {quote.fromCurrency} = {fmtMoney(quote.rate)}{" "}
+                  1 {quote.fromCurrency} = {fmtFxRate(quote.rate)}{" "}
                   {quote.toCurrency}
                 </dd>
               </div>
@@ -2877,27 +2877,29 @@ useEffect(() => {
               </div>
               <div className="flex justify-between gap-4 items-start">
                 <dt className="text-slate-500 shrink-0">Payout account</dt>
-                <dd className="text-right max-w-[65%] text-slate-800">
+                <dd className="min-w-0 flex-1 text-right break-all text-slate-800">
                   {selectedBen.deliveryChannel === "BANK_TRANSFER" ? (
                     <>
                       {selectedBen.bankName}
                       {selectedBen.branchName ? (
-                        <span className="block text-xs text-slate-500 mt-0.5">
+                        <span className="block text-xs text-slate-500 mt-0.5 break-words">
                           {selectedBen.branchName}
                         </span>
                       ) : null}
-                      <span className="block text-xs text-slate-500 mt-0.5 font-mono">
+                      <span className="block text-xs text-slate-500 mt-0.5 font-mono break-all">
                         {selectedBen.accountNumber
                           ? selectedBen.accountNumber
                           : "—"}
                       </span>
                     </>
                   ) : selectedBen.deliveryChannel === "UPI" ? (
-                    <span className="font-mono">{selectedBen.upiId ?? "—"}</span>
+                    <span className="font-mono break-all">
+                      {selectedBen.upiId ?? "—"}
+                    </span>
                   ) : (
                     <>
                       {selectedBen.mobileMoneyProvider ?? "—"}
-                      <span className="block text-xs text-slate-500 mt-0.5 font-mono">
+                      <span className="block text-xs text-slate-500 mt-0.5 font-mono break-all">
                         {selectedBen.mobileNumber ?? "—"}
                       </span>
                     </>
@@ -3056,7 +3058,7 @@ useEffect(() => {
                   confirmationAmounts.rate != null ? (
                     <p className="pt-1 text-[11px] text-slate-500 tabular-nums text-center">
                       1 {confirmationAmounts.fromCurrency} ={" "}
-                      {fmtMoney(confirmationAmounts.rate)}{" "}
+                      {fmtFxRate(confirmationAmounts.rate)}{" "}
                       {confirmationAmounts.toCurrency}
                     </p>
                   ) : null}
