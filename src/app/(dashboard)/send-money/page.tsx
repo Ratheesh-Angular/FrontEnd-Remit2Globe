@@ -39,7 +39,10 @@ import {
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
-import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
+import {
+  matchFlexCountryByLabel,
+  toCountryAlpha3,
+} from "@/lib/catalog-countries";
 import {
   ChevronRight,
   Check,
@@ -61,6 +64,7 @@ import { AppLoadingOverlay } from "@/components/ui/AppLoadingOverlay";
 import { Loader } from "@/components/ui/Loader";
 import { notifyApiError, notifyError } from "@/lib/notify";
 import { fetchCustomerExchangeRate } from "@/lib/customer-exchange-rate";
+import { fetchReceiveCurrenciesForCountry } from "@/lib/receive-currencies";
 
 interface FlexCountry {
   couCode: string;
@@ -77,6 +81,8 @@ interface SenderContext {
   canUseMobilePayIn: boolean;
   /** Admin-controlled: card pay-in for this sender country. */
   canUseCardPayIn: boolean;
+  /** Card pay-in surcharge % of send amount (default 2). */
+  cardFeePercent?: number;
   /** Comma-separated country names where mobile pay-in (e.g. M-Pesa) is supported */
   mobilePayInMarketsLabel: string;
   /** E.164 saved at registration — used to prefill payer mobile */
@@ -158,6 +164,8 @@ interface TransferRow {
   payCurrency?: string | null;
   payAmount?: unknown;
   feeAmount?: unknown;
+  cardFeePercent?: unknown;
+  cardFeeAmount?: unknown;
   receiveCurrency?: string | null;
   receiveAmount?: unknown;
   recipientCountryLabel?: string | null;
@@ -303,6 +311,19 @@ function lookupHasValue(opts: LookupOpt[], value: string): boolean {
 
 type PayInKind = "" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD";
 
+const DEFAULT_CARD_FEE_PERCENT = 2;
+
+function roundMoneyClient(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Card fee = percent of send amount only. */
+function calcCardFeeAmount(payAmount: number, feePercent: number): number {
+  if (!Number.isFinite(payAmount) || payAmount <= 0) return 0;
+  if (!Number.isFinite(feePercent) || feePercent <= 0) return 0;
+  return roundMoneyClient(payAmount * (feePercent / 100));
+}
+
 function isPayInMethodAllowed(
   method: PayInKind,
   ctx: Pick<
@@ -438,11 +459,12 @@ function SendMoneyPageContent() {
     relationship: LookupOpt[];
   } | null>(null);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const senderCatalogCountry = toCountryAlpha3(ctx?.senderCountryIso2);
   const {
     countries: catalogCountries,
     loading: catalogCountriesLoading,
     error: catalogCountriesError,
-  } = useCatalogCountries(step === 1);
+  } = useCatalogCountries(step === 1, senderCatalogCountry);
 
   const [payCurrency, setPayCurrency] = useState("");
   const [payAmount, setPayAmount] = useState("");
@@ -638,18 +660,34 @@ function SendMoneyPageContent() {
     return matchFlexCountryByLabel(dedupedCatalogCountries, raw);
   }, [dedupedCatalogCountries, recipientCouName]);
 
-  /** Available payout currencies for the selected recipient country. */
-  const availableCurrenciesForCountry = useMemo(() => {
-    if (!selectedRecipientCountry?.couCode) return [];
-    const countryDefaultCurrency = legalCurrencyForCouCode(
-      selectedRecipientCountry.couCode,
-    );
-    const fallbackCurrencies = ["USD", "EUR", "GBP"];
-    const allCurrencies = countryDefaultCurrency
-      ? [countryDefaultCurrency, ...fallbackCurrencies]
-      : fallbackCurrencies;
-    // Deduplicate
-    return Array.from(new Set(allCurrencies));
+  /** Admin-resolved payout currencies for the selected recipient country. */
+  const [availableCurrenciesForCountry, setAvailableCurrenciesForCountry] =
+    useState<string[]>([]);
+
+  useEffect(() => {
+    const code = selectedRecipientCountry?.couCode?.trim().toUpperCase() ?? "";
+    if (!code) {
+      setAvailableCurrenciesForCountry([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const resolved = await fetchReceiveCurrenciesForCountry(code);
+      if (cancelled) return;
+      setAvailableCurrenciesForCountry(resolved.receiveCurrencies);
+      const current = receiveCurrency.trim().toUpperCase();
+      if (
+        current &&
+        !resolved.receiveCurrencies.includes(current)
+      ) {
+        setReceiveCurrency(resolved.defaultReceiveCurrency);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit receiveCurrency — only re-fetch / clamp on country change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- country-scoped load
   }, [selectedRecipientCountry?.couCode]);
 
   const filteredPayCurrencyOptions = useMemo(() => {
@@ -711,18 +749,56 @@ function SendMoneyPageContent() {
     dedupedCatalogCountries,
   ]);
 
+  const effectivePayInMethod: PayInKind =
+    payInMethod ||
+    (transferRow?.payInMethod === "CARD" ||
+    transferRow?.payInMethod === "BANK_TRANSFER" ||
+    transferRow?.payInMethod === "MOBILE_MONEY"
+      ? transferRow.payInMethod
+      : "");
+
+  const cardFeePercentResolved = useMemo(() => {
+    const fromTransfer =
+      transferRow?.cardFeePercent != null && transferRow.cardFeePercent !== ""
+        ? Number(transferRow.cardFeePercent)
+        : NaN;
+    if (Number.isFinite(fromTransfer)) return fromTransfer;
+    const fromCtx = ctx?.cardFeePercent;
+    if (typeof fromCtx === "number" && Number.isFinite(fromCtx)) return fromCtx;
+    return DEFAULT_CARD_FEE_PERCENT;
+  }, [transferRow?.cardFeePercent, ctx?.cardFeePercent]);
+
+  /** Live card fee when CARD is selected; otherwise 0. */
+  const activeCardFeeAmount = useMemo(() => {
+    if (effectivePayInMethod !== "CARD") return 0;
+    const youSend = quote
+      ? Number(quote.payAmount)
+      : transferRow?.payAmount != null
+        ? Number(transferRow.payAmount)
+        : parseFloat(payAmount);
+    return calcCardFeeAmount(youSend, cardFeePercentResolved);
+  }, [
+    effectivePayInMethod,
+    transferRow?.payAmount,
+    quote,
+    payAmount,
+    cardFeePercentResolved,
+  ]);
+
   /** Amounts for the confirmation step (quote still in memory, or transfer from API). */
   const confirmationAmounts = useMemo(() => {
     if (quote) {
       const youSend = Number(quote.payAmount);
       const fee = Number(quote.feeAmount);
+      const cardFee = activeCardFeeAmount;
       return {
         fromCurrency: quote.fromCurrency,
         toCurrency: quote.toCurrency,
         youSend,
         fee,
+        cardFee,
         receive: Number(quote.receiveAmount),
-        totalToPay: youSend + fee,
+        totalToPay: roundMoneyClient(youSend + fee + cardFee),
         hasRate: true as const,
         rate: quote.rate,
       };
@@ -732,22 +808,24 @@ function SendMoneyPageContent() {
       const youSend = Number(tr.payAmount);
       const fee =
         tr.feeAmount != null && tr.feeAmount !== "" ? Number(tr.feeAmount) : 0;
+      const cardFee = activeCardFeeAmount;
       return {
         fromCurrency: tr.payCurrency,
         toCurrency: (tr.receiveCurrency ?? "—") as string,
         youSend,
         fee,
+        cardFee,
         receive:
           tr.receiveAmount != null && tr.receiveAmount !== ""
             ? Number(tr.receiveAmount)
             : null,
-        totalToPay: youSend + fee,
+        totalToPay: roundMoneyClient(youSend + fee + cardFee),
         hasRate: false as const,
         rate: null as number | null,
       };
     }
     return null;
-  }, [quote, transferRow]);
+  }, [quote, transferRow, activeCardFeeAmount]);
 
   const complianceLabels = useMemo(() => {
     if (!lookups) return null;
@@ -914,6 +992,11 @@ function SendMoneyPageContent() {
         canUseBankTransfer: c.canUseBankTransfer !== false,
         canUseMobilePayIn: c.canUseMobilePayIn === true,
         canUseCardPayIn: c.canUseCardPayIn === true,
+        cardFeePercent:
+          typeof c.cardFeePercent === "number" &&
+          Number.isFinite(c.cardFeePercent)
+            ? c.cardFeePercent
+            : DEFAULT_CARD_FEE_PERCENT,
       });
       setPayerPhone((prev) =>
         prev.trim() ? prev : (c.registeredPhone?.trim() ?? ""),
@@ -1221,17 +1304,24 @@ useEffect(() => {
     setQuoteLoading(true);
     setQuoteError(null);
     try {
+      const recipientCountryCode = recipientCouCode.trim().toUpperCase();
       const { data } = await api.get<{ data: Quote }>("/remittance/quote", {
         params: usePaySide
           ? {
               fromCurrency: payCurrency,
               toCurrency: receiveCurrency,
               payAmount: amt,
+              ...(recipientCountryCode
+                ? { recipientCountryCode }
+                : {}),
             }
           : {
               fromCurrency: payCurrency,
               toCurrency: receiveCurrency,
               receiveAmount: amt,
+              ...(recipientCountryCode
+                ? { recipientCountryCode }
+                : {}),
             },
       });
       if (requestGen !== quoteRequestGenRef.current) return;
@@ -1296,6 +1386,7 @@ useEffect(() => {
     drivingAmount,
     payCurrency,
     receiveCurrency,
+    recipientCouCode,
     tariffBounds,
   ]);
 
@@ -1481,6 +1572,9 @@ useEffect(() => {
 
     const beneficiary = selectedBen ?? transferRow?.beneficiary ?? null;
 
+    const cardFee =
+      activeCardFeeAmount > 0 ? activeCardFeeAmount : null;
+
     if (quote) {
       return {
         recipientCountryDisplay,
@@ -1492,6 +1586,8 @@ useEffect(() => {
         rateToCurrency: quote.toCurrency,
         fee: Number(quote.feeAmount),
         feeCurrency: quote.fromCurrency,
+        cardFee,
+        cardFeeCurrency: quote.fromCurrency,
         receive: Number(quote.receiveAmount),
         receiveCurrency: quote.toCurrency,
       };
@@ -1521,6 +1617,8 @@ useEffect(() => {
         rateToCurrency: recvCurrency,
         fee,
         feeCurrency: payCur,
+        cardFee,
+        cardFeeCurrency: payCur,
         receive: recv,
         receiveCurrency: recvCurrency,
       };
@@ -1541,6 +1639,8 @@ useEffect(() => {
       rateToCurrency: displayedToCurrency || "—",
       fee: hasPay || hasRecv ? 0 : null,
       feeCurrency: payCurrency || "—",
+      cardFee: hasPay ? cardFee : null,
+      cardFeeCurrency: payCurrency || "—",
       receive: hasRecv ? recv : null,
       receiveCurrency: receiveCurrency || "—",
     };
@@ -1557,6 +1657,7 @@ useEffect(() => {
     displayedFxRate,
     displayedFromCurrency,
     displayedToCurrency,
+    activeCardFeeAmount,
   ]);
 
   useEffect(() => {
@@ -1670,9 +1771,9 @@ useEffect(() => {
         return;
       }
       const cur = (payCurrency || quote?.fromCurrency || "").toUpperCase();
-      if (cur && cur !== "TZS" && cur !== "USD") {
+      if (cur && cur !== "USD") {
         notifyError(
-          "Card payment is currently available for TZS and USD only. Choose another pay-in method or currency.",
+          "Card payment is currently available for USD only. Choose another pay-in method or currency.",
         );
         return;
       }
@@ -1960,12 +2061,13 @@ useEffect(() => {
       referenceCode: ref,
       status: (transferRow?.status ?? "PENDING_PAYMENT").toString(),
       generatedAt: new Date(),
-      amounts: amt
+            amounts: amt
         ? {
             fromCurrency: amt.fromCurrency,
             toCurrency: amt.toCurrency,
             youSend: amt.youSend,
             fee: amt.fee,
+            cardFee: amt.cardFee > 0 ? amt.cardFee : undefined,
             totalToPay: amt.totalToPay,
             receive: amt.receive,
             hasRate: amt.hasRate,
@@ -2751,8 +2853,7 @@ useEffect(() => {
                 After you confirm, you will be redirected to Selcom&apos;s
                 secure card payment page (Visa, Mastercard, Amex). Your billing
                 details come from your KYC profile address — keep it complete.
-                Card pay-in supports <strong>TZS</strong> and{" "}
-                <strong>USD</strong> only.
+                Card pay-in supports <strong>USD</strong> only.
               </p>
             )}
           </div>
@@ -2825,6 +2926,14 @@ useEffect(() => {
                   {fmtMoney(Number(quote.feeAmount))} {quote.fromCurrency}
                 </dd>
               </div>
+              {activeCardFeeAmount > 0 ? (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-500 shrink-0">Card Fees</dt>
+                  <dd className="text-right">
+                    {fmtMoney(activeCardFeeAmount)} {quote.fromCurrency}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500 shrink-0">Rate</dt>
                 <dd className="text-right tabular-nums">
@@ -2837,7 +2946,11 @@ useEffect(() => {
                   Total amount
                 </dt>
                 <dd className="font-semibold text-right tabular-nums text-slate-900 py-2">
-                  {fmtMoney(Number(quote.payAmount) + Number(quote.feeAmount))}{" "}
+                  {fmtMoney(
+                    Number(quote.payAmount) +
+                      Number(quote.feeAmount) +
+                      activeCardFeeAmount,
+                  )}{" "}
                   {quote.fromCurrency}
                 </dd>
               </div>
@@ -3045,6 +3158,15 @@ useEffect(() => {
                       {confirmationAmounts.fromCurrency}
                     </span>
                   </div>
+                  {confirmationAmounts.cardFee > 0 ? (
+                    <div className="flex justify-between gap-4">
+                      <span>Card Fees</span>
+                      <span className="tabular-nums text-slate-800">
+                        {fmtMoney(confirmationAmounts.cardFee)}{" "}
+                        {confirmationAmounts.fromCurrency}
+                      </span>
+                    </div>
+                  ) : null}
                   {confirmationAmounts.receive != null ? (
                     <div className="flex justify-between gap-4 pt-1 border-t border-red-100/80">
                       <span className="text-slate-500">Recipient gets</span>

@@ -1,6 +1,7 @@
 /** Allowlisted flex subpaths fetchable from the browser without auth (GET only). */
 export function isPublicFlexBrowserPath(path: string): boolean {
-  const p = path.startsWith("/") ? path : `/${path}`;
+  const raw = path.startsWith("/") ? path : `/${path}`;
+  const p = raw.split("?")[0] ?? raw;
   if (p === "/countries") return true;
   if (p === "/catalog-countries") return true;
   return /^\/banks\/[A-Za-z0-9_-]{2,12}$/.test(p);

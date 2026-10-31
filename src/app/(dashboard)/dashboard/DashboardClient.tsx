@@ -27,6 +27,7 @@ import {
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { useSenderCountryAlpha3 } from "@/hooks/useSenderCountryAlpha3";
 import {
   getDeliveryChannelLabel,
   type BeneficiaryDeliveryChannel,
@@ -212,7 +213,11 @@ type LiveRateRow = {
 };
 
 function DashboardFavouriteBeneficiaries() {
-  const { countries: catalogCountries } = useCatalogCountries(true);
+  const { countryCode: senderOpCountry } = useSenderCountryAlpha3(true);
+  const { countries: catalogCountries } = useCatalogCountries(
+    true,
+    senderOpCountry,
+  );
   const [rows, setRows] = useState<FavouriteBeneficiary[]>([]);
   const [loading, setLoading] = useState(true);
 

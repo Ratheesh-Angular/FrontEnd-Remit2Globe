@@ -24,6 +24,7 @@ import { fieldNativeSelectClasses } from "@/lib/field-styles";
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { CatalogCountrySelect } from "@/components/country/CatalogCountrySelect";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { useSenderCountryAlpha3 } from "@/hooks/useSenderCountryAlpha3";
 import { phoneCountryFromCouCode } from "@/lib/flex-country-phone";
 import {
   nationalPhonePlaceholder,
@@ -53,6 +54,7 @@ import {
   legalCurrencyForCouCode,
   CURRENCY_TO_FLAG_ALPHA2,
 } from "@/lib/send-money-currencies";
+import { fetchReceiveCurrenciesForCountry } from "@/lib/receive-currencies";
 import {
   beneficiaryNameLabelSuffix,
   getDeliveryChannelLabel,
@@ -137,9 +139,10 @@ function VerifyNameHint({ state }: { state: VerifyHintState }) {
     );
   }
   return (
-    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      {state.message}
-    </div>
+    <></>
+    // <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    //   {state.message}
+    // </div>
   );
 }
 
@@ -368,11 +371,12 @@ export function AddBeneficiaryModal({
   const accountVerifyGen = useRef(0);
   const userRole = useAuthStore((s) => s.user?.role ?? "INDIVIDUAL");
   const { countries: flexCountries } = useFlexCountries(open);
+  const { countryCode: senderOpCountry } = useSenderCountryAlpha3(open);
   const {
     countries: catalogCountryList,
     loading: catalogCountriesLoading,
     error: catalogCountriesError,
-  } = useCatalogCountries(open);
+  } = useCatalogCountries(open, senderOpCountry);
   const [flexBankCatalog, setFlexBankCatalog] = useState<FlexBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
@@ -491,13 +495,37 @@ export function AddBeneficiaryModal({
     );
   }, [destinationCouCode, useFlexBankListUi, banksLoading, flexBankCatalog]);
 
-  const payoutCurrencyOptions = useMemo(() => {
-    const defaultOptions = ["USD", "EUR", "GBP"];
-    const code = selectedDestinationCountry?.couCode;
-    const local = code ? legalCurrencyForCouCode(code) : "";
-    const all = local ? [local, ...defaultOptions] : defaultOptions;
-    return Array.from(new Set(all));
-  }, [selectedDestinationCountry?.couCode]);
+  const [payoutCurrencyOptions, setPayoutCurrencyOptions] = useState<string[]>(
+    [],
+  );
+
+  useEffect(() => {
+    const code = selectedDestinationCountry?.couCode?.trim().toUpperCase() ?? "";
+    if (!code) {
+      setPayoutCurrencyOptions(["USD", "EUR", "GBP"]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const resolved = await fetchReceiveCurrenciesForCountry(code);
+      if (cancelled) return;
+      setPayoutCurrencyOptions(resolved.receiveCurrencies);
+      if (lockPayoutCurrency?.trim()) return;
+      setFormData((prev) => {
+        const current = prev.payoutCurrency.trim().toUpperCase();
+        if (current && resolved.receiveCurrencies.includes(current)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          payoutCurrency: resolved.defaultReceiveCurrency,
+        };
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDestinationCountry?.couCode, lockPayoutCurrency]);
 
   const showActualBankNameInput = useMemo(
     () =>

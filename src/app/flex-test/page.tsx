@@ -83,7 +83,7 @@ export default function FlexTestPage() {
     countries: catalogCountryList,
     loading: catalogCountriesLoading,
     error: catalogCountriesError,
-  } = useCatalogCountries(activeTab === "banks");
+  } = useCatalogCountries(activeTab === "banks", "KEN");
 
   const resolvedCurrPair = useMemo(() => {
     if (currPairOverride.trim()) return currPairOverride.trim();

@@ -1,390 +1,52 @@
-[
-  {
-    "couCode": "ALB",
-    "couName": "Albania"
-  },
-  {
-    "couCode": "DZA",
-    "couName": "Algeria"
-  },
-  {
-    "couCode": "AND",
-    "couName": "Andorra"
-  },
-  {
-    "couCode": "ARM",
-    "couName": "Armenia"
-  },
-  {
-    "couCode": "AUS",
-    "couName": "Australia"
-  },
-  {
-    "couCode": "AUT",
-    "couName": "Austria"
-  },
-  {
-    "couCode": "AZE",
-    "couName": "Azerbaijan"
-  },
-  {
-    "couCode": "BHR",
-    "couName": "Bahrain"
-  },
-  {
-    "couCode": "BGD",
-    "couName": "Bangladesh"
-  },
-  {
-    "couCode": "BLR",
-    "couName": "Belarus"
-  },
-  {
-    "couCode": "BEL",
-    "couName": "Belgium"
-  },
-  {
-    "couCode": "BEN",
-    "couName": "Benin"
-  },
-  {
-    "couCode": "BMU",
-    "couName": "Bermuda"
-  },
-  {
-    "couCode": "BIH",
-    "couName": "Bosnia and Herzegovina"
-  },
-  {
-    "couCode": "BGR",
-    "couName": "Bulgaria"
-  },
-  {
-    "couCode": "BFA",
-    "couName": "Burkina Faso"
-  },
-  {
-    "couCode": "BDI",
-    "couName": "Burundi"
-  },
-  {
-    "couCode": "CMR",
-    "couName": "Cameroon"
-  },
-  {
-    "couCode": "CAN",
-    "couName": "Canada"
-  },
-  {
-    "couCode": "CHN",
-    "couName": "China"
-  },
-  {
-    "couCode": "COG",
-    "couName": "Congo"
-  },
-  {
-    "couCode": "COD",
-    "couName": "Congo, DRC"
-  },
-  {
-    "couCode": "HRV",
-    "couName": "Croatia"
-  },
-  {
-    "couCode": "CYP",
-    "couName": "Cyprus"
-  },
-  {
-    "couCode": "CZE",
-    "couName": "Czech Republic"
-  },
-  {
-    "couCode": "DNK",
-    "couName": "Denmark"
-  },
-  {
-    "couCode": "EGY",
-    "couName": "Egypt"
-  },
-  {
-    "couCode": "EST",
-    "couName": "Estonia"
-  },
-  {
-    "couCode": "ETH",
-    "couName": "Ethiopia"
-  },
-  {
-    "couCode": "FIN",
-    "couName": "Finland"
-  },
-  {
-    "couCode": "FRA",
-    "couName": "France"
-  },
-  {
-    "couCode": "DEU",
-    "couName": "Germany"
-  },
-  {
-    "couCode": "GHA",
-    "couName": "Ghana"
-  },
-  {
-    "couCode": "GRC",
-    "couName": "Greece"
-  },
-  {
-    "couCode": "HKG",
-    "couName": "Hong Kong"
-  },
-  {
-    "couCode": "HUN",
-    "couName": "Hungary"
-  },
-  {
-    "couCode": "ISL",
-    "couName": "Iceland"
-  },
-  {
-    "couCode": "IND",
-    "couName": "India"
-  },
-  {
-    "couCode": "IDN",
-    "couName": "Indonesia"
-  },
-  {
-    "couCode": "IRL",
-    "couName": "Ireland"
-  },
-  {
-    "couCode": "ITA",
-    "couName": "Italy"
-  },
-  {
-    "couCode": "CIV",
-    "couName": "Ivory Coast"
-  },
-  {
-    "couCode": "JPN",
-    "couName": "Japan"
-  },
-  {
-    "couCode": "KAZ",
-    "couName": "Kazakhstan"
-  },
-  {
-    "couCode": "KEN",
-    "couName": "Kenya"
-  },
-  {
-    "couCode": "LVA",
-    "couName": "Latvia"
-  },
-  {
-    "couCode": "LIE",
-    "couName": "Liechtenstein"
-  },
-  {
-    "couCode": "LTU",
-    "couName": "Lithuania"
-  },
-  {
-    "couCode": "LUX",
-    "couName": "Luxembourg"
-  },
-  {
-    "couCode": "MDG",
-    "couName": "Madagascar"
-  },
-  {
-    "couCode": "MWI",
-    "couName": "Malawi"
-  },
-  {
-    "couCode": "MYS",
-    "couName": "Malaysia"
-  },
-  {
-    "couCode": "MLT",
-    "couName": "Malta"
-  },
-  {
-    "couCode": "MTQ",
-    "couName": "Martinique"
-  },
-  {
-    "couCode": "MDA",
-    "couName": "Moldova"
-  },
-  {
-    "couCode": "MCO",
-    "couName": "Monaco"
-  },
-  {
-    "couCode": "MNE",
-    "couName": "Montenegro"
-  },
-  {
-    "couCode": "MAR",
-    "couName": "Morocco"
-  },
-  {
-    "couCode": "NPL",
-    "couName": "Nepal"
-  },
-  {
-    "couCode": "NLD",
-    "couName": "Netherlands"
-  },
-  {
-    "couCode": "NZL",
-    "couName": "New Zealand"
-  },
-  {
-    "couCode": "NER",
-    "couName": "Niger"
-  },
-  {
-    "couCode": "NGA",
-    "couName": "Nigeria"
-  },
-  {
-    "couCode": "MKD",
-    "couName": "North Macedonia"
-  },
-  {
-    "couCode": "NOR",
-    "couName": "Norway"
-  },
-  {
-    "couCode": "PAK",
-    "couName": "Pakistan"
-  },
-  {
-    "couCode": "PHL",
-    "couName": "Philippines"
-  },
-  {
-    "couCode": "POL",
-    "couName": "Poland"
-  },
-  {
-    "couCode": "PRT",
-    "couName": "Portugal"
-  },
-  {
-    "couCode": "QAT",
-    "couName": "Qatar"
-  },
-  {
-    "couCode": "ROU",
-    "couName": "Romania"
-  },
-  {
-    "couCode": "RWA",
-    "couName": "Rwanda"
-  },
-  {
-    "couCode": "SMR",
-    "couName": "San Marino"
-  },
-  {
-    "couCode": "SEN",
-    "couName": "Senegal"
-  },
-  {
-    "couCode": "SRB",
-    "couName": "Serbia"
-  },
-  {
-    "couCode": "SLE",
-    "couName": "Sierra Leone"
-  },
-  {
-    "couCode": "SGP",
-    "couName": "Singapore"
-  },
-  {
-    "couCode": "SVK",
-    "couName": "Slovakia"
-  },
-  {
-    "couCode": "SVN",
-    "couName": "Slovenia"
-  },
-  {
-    "couCode": "SOM",
-    "couName": "Somalia"
-  },
-  {
-    "couCode": "ZAF",
-    "couName": "South Africa"
-  },
-  {
-    "couCode": "SSD",
-    "couName": "South Sudan"
-  },
-  {
-    "couCode": "ESP",
-    "couName": "Spain"
-  },
-  {
-    "couCode": "LKA",
-    "couName": "Sri Lanka"
-  },
-  {
-    "couCode": "SWE",
-    "couName": "Sweden"
-  },
-  {
-    "couCode": "CHE",
-    "couName": "Switzerland"
-  },
-  {
-    "couCode": "TZA",
-    "couName": "Tanzania"
-  },
-  {
-    "couCode": "THA",
-    "couName": "Thailand"
-  },
-  {
-    "couCode": "UGA",
-    "couName": "Uganda"
-  },
-  {
-    "couCode": "ARE",
-    "couName": "United Arab Emirates"
-  },
-  {
-    "couCode": "GBR",
-    "couName": "United Kingdom"
-  },
-  {
-    "couCode": "USA",
-    "couName": "United States"
-  },
-  {
-    "couCode": "UZB",
-    "couName": "Uzbekistan"
-  },
-  {
-    "couCode": "VAT",
-    "couName": "Vatican City"
-  },
-  {
-    "couCode": "VNM",
-    "couName": "Vietnam"
-  },
-  {
-    "couCode": "ZMB",
-    "couName": "Zambia"
-  },
-  {
-    "couCode": "ZWE",
-    "couName": "Zimbabwe"
+{
+  "byOperationCountry": {
+    "UGA": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ],
+    "KEN": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ],
+    "TZA": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ],
+    "SSD": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ],
+    "GBR": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ],
+    "CAN": [
+      "CAN",
+      "KEN",
+      "SSD",
+      "TZA",
+      "UGA",
+      "GBR"
+    ]
   }
-]
+}

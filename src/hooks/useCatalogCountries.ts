@@ -2,27 +2,36 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { FlexCountry } from "@/types/flex-country";
-import { fetchCatalogCountries } from "@/lib/catalog-countries";
+import { fetchCatalogCountries, toCountryAlpha3 } from "@/lib/catalog-countries";
 
 /**
- * Platform country catalog (admin-managed). Fetches from API at runtime.
- * Same ergonomic shape as {@link useFlexCountries} for easy reuse.
+ * Platform country catalog (admin-managed per operation country).
+ * Pass `countryCode` as ISO2 or ISO3 of the sender / operation country.
  */
-export function useCatalogCountries(enabled = true): {
+export function useCatalogCountries(
+  enabled = true,
+  countryCode?: string | null,
+): {
   countries: FlexCountry[];
   loading: boolean;
   error: string;
   reload: () => Promise<void>;
 } {
+  const op = toCountryAlpha3(countryCode);
   const [countries, setCountries] = useState<FlexCountry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const reload = useCallback(async () => {
+    if (!op) {
+      setCountries([]);
+      setError("");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const list = await fetchCatalogCountries();
+      const list = await fetchCatalogCountries(op);
       setCountries(list);
     } catch {
       setCountries([]);
@@ -30,14 +39,20 @@ export function useCatalogCountries(enabled = true): {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [op]);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    if (!op) {
+      setCountries([]);
+      setLoading(false);
+      setError("");
+      return;
+    }
     setLoading(true);
     setError("");
-    fetchCatalogCountries()
+    fetchCatalogCountries(op)
       .then((list) => {
         if (!cancelled) setCountries(list);
       })
@@ -53,7 +68,7 @@ export function useCatalogCountries(enabled = true): {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, op]);
 
   return { countries, loading, error, reload };
 }

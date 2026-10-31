@@ -35,6 +35,7 @@ import {
 import { FlexCountryFlag } from "@/components/country/FlexCountryFlag";
 import { matchFlexCountryByLabel } from "@/lib/catalog-countries";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { useSenderCountryAlpha3 } from "@/hooks/useSenderCountryAlpha3";
 
 import type { BeneficiaryDeliveryChannel } from "@/lib/beneficiary-delivery-channels";
 import { getDeliveryChannelLabel } from "@/lib/beneficiary-delivery-channels";
@@ -112,7 +113,11 @@ export default function BeneficiariesPage() {
     return filteredBeneficiaries.slice(start, start + PAGE_SIZE);
   }, [filteredBeneficiaries, page]);
 
-  const { countries: catalogCountries } = useCatalogCountries(true);
+  const { countryCode: senderOpCountry } = useSenderCountryAlpha3(true);
+  const { countries: catalogCountries } = useCatalogCountries(
+    true,
+    senderOpCountry,
+  );
 
   useEffect(() => {
     setPage(1);

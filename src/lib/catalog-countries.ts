@@ -6,7 +6,8 @@ import { fetchCatalogCountries as fetchCatalogCountriesFromApi } from "@/lib/fle
 
 countriesIso.registerLocale(enCountries);
 
-let cachedFallback: FlexCountry[] | null = null;
+let cachedFallbackUnion: FlexCountry[] | null = null;
+const cachedFallbackByOp = new Map<string, FlexCountry[]>();
 
 function normalizeRow(r: unknown): FlexCountry | null {
   if (!r || typeof r !== "object") return null;
@@ -17,26 +18,109 @@ function normalizeRow(r: unknown): FlexCountry | null {
   return { couCode, couName };
 }
 
+function nameForAlpha3(code: string): string {
+  try {
+    const a2 = countriesIso.alpha3ToAlpha2(code);
+    if (a2) {
+      const name = countriesIso.getName(a2, "en");
+      if (name) return name;
+    }
+  } catch {
+    /* ignore */
+  }
+  return code;
+}
+
+function rowsFromCodes(codes: string[]): FlexCountry[] {
+  const seen = new Set<string>();
+  const rows: FlexCountry[] = [];
+  for (const raw of codes) {
+    const couCode = String(raw ?? "").trim().toUpperCase();
+    if (!couCode || seen.has(couCode)) continue;
+    seen.add(couCode);
+    rows.push({ couCode, couName: nameForAlpha3(couCode) });
+  }
+  return rows.sort((a, b) => a.couName.localeCompare(b.couName));
+}
+
+function parseBundledCatalog(): {
+  union: FlexCountry[];
+  byOp: Record<string, FlexCountry[]>;
+} {
+  const byOp: Record<string, FlexCountry[]> = {};
+  if (Array.isArray(catalogRaw)) {
+    const union = catalogRaw
+      .map(normalizeRow)
+      .filter((x): x is FlexCountry => x !== null)
+      .sort((a, b) => a.couName.localeCompare(b.couName));
+    return { union, byOp };
+  }
+  const map =
+    catalogRaw &&
+    typeof catalogRaw === "object" &&
+    "byOperationCountry" in catalogRaw
+      ? (catalogRaw as { byOperationCountry?: Record<string, unknown> })
+          .byOperationCountry
+      : null;
+  if (!map || typeof map !== "object") {
+    return { union: [], byOp };
+  }
+  const allCodes = new Set<string>();
+  for (const [op, list] of Object.entries(map)) {
+    const opCode = op.trim().toUpperCase();
+    const codes = Array.isArray(list)
+      ? list.map((c) => String(c).trim().toUpperCase()).filter(Boolean)
+      : [];
+    byOp[opCode] = rowsFromCodes(codes);
+    for (const c of codes) allCodes.add(c);
+  }
+  return { union: rowsFromCodes([...allCodes]), byOp };
+}
+
+/** ISO2 (or ISO3) → ISO3 alpha. */
+export function toCountryAlpha3(code: string | null | undefined): string {
+  const t = String(code ?? "").trim().toUpperCase();
+  if (!t) return "";
+  if (/^[A-Z]{3}$/.test(t)) return t;
+  if (/^[A-Z]{2}$/.test(t)) {
+    try {
+      const a3 = countriesIso.alpha2ToAlpha3(t);
+      if (typeof a3 === "string" && a3.length === 3) return a3.toUpperCase();
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
 /**
  * Bundled fallback (`catalog-country-list.json`). Use for offline/build sync only.
  * Runtime reads should use {@link fetchCatalogCountries}.
  */
-export function getCatalogCountries(): FlexCountry[] {
-  if (cachedFallback) return cachedFallback;
-  const arr = Array.isArray(catalogRaw) ? catalogRaw : [];
-  const rows = arr
-    .map(normalizeRow)
-    .filter((x): x is FlexCountry => x !== null);
-  cachedFallback = [...rows].sort((a, b) => a.couName.localeCompare(b.couName));
-  return cachedFallback;
+export function getCatalogCountries(countryCode?: string): FlexCountry[] {
+  if (!cachedFallbackUnion) {
+    const parsed = parseBundledCatalog();
+    cachedFallbackUnion = parsed.union;
+    for (const [k, v] of Object.entries(parsed.byOp)) {
+      cachedFallbackByOp.set(k, v);
+    }
+  }
+  const op = toCountryAlpha3(countryCode);
+  if (op) {
+    return cachedFallbackByOp.get(op) ?? [];
+  }
+  return cachedFallbackUnion;
 }
 
-/** Load platform catalog from API (admin-managed). Returns empty list when none enabled. */
-export async function fetchCatalogCountries(): Promise<FlexCountry[]> {
+/** Load platform catalog from API for an operation country. */
+export async function fetchCatalogCountries(
+  countryCode?: string,
+): Promise<FlexCountry[]> {
+  const op = toCountryAlpha3(countryCode);
   try {
-    return await fetchCatalogCountriesFromApi();
+    return await fetchCatalogCountriesFromApi(op || undefined);
   } catch {
-    return getCatalogCountries();
+    return getCatalogCountries(op || undefined);
   }
 }
 
