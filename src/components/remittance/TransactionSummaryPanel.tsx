@@ -20,6 +20,9 @@ export type TransactionSummaryPanelProps = {
   rateToCurrency: string;
   fee: number | null;
   feeCurrency: string;
+  /** Card pay-in surcharge; shown only when set (CARD selected). */
+  cardFee?: number | null;
+  cardFeeCurrency?: string;
   receive: number | null;
   receiveCurrency: string;
   loading?: boolean;
@@ -74,6 +77,8 @@ export function TransactionSummaryPanel({
   rateToCurrency,
   fee,
   feeCurrency,
+  cardFee = null,
+  cardFeeCurrency,
   receive,
   receiveCurrency,
   loading = false,
@@ -133,6 +138,16 @@ export function TransactionSummaryPanel({
             label="Fees"
             value={formatCurrencyAmount(fee, feeCurrency, loading)}
           />
+          {cardFee != null && Number.isFinite(cardFee) && cardFee > 0 ? (
+            <SummaryRow
+              label="Card Fees"
+              value={formatCurrencyAmount(
+                cardFee,
+                cardFeeCurrency || feeCurrency,
+                loading,
+              )}
+            />
+          ) : null}
         </dl>
 
         <div className="mt-4 rounded-xl border border-white/5 bg-black/40 p-4">

@@ -108,10 +108,19 @@ function parseCatalogCountriesResponse(json: unknown): FlexCountry[] {
     .sort((a, b) => a.couName.localeCompare(b.couName));
 }
 
-export async function fetchCatalogCountries(): Promise<FlexCountry[]> {
-  const res = await fetch(flexApiUrl("/catalog-countries"), {
-    credentials: "include",
-  });
+export async function fetchCatalogCountries(
+  countryCode?: string,
+): Promise<FlexCountry[]> {
+  const qs = new URLSearchParams();
+  const code = String(countryCode ?? "").trim().toUpperCase();
+  if (code) qs.set("countryCode", code);
+  const query = qs.toString();
+  const res = await fetch(
+    flexApiUrl(`/catalog-countries${query ? `?${query}` : ""}`),
+    {
+      credentials: "include",
+    },
+  );
   if (!res.ok) {
     throw new Error(`Failed to load catalog countries: ${res.status}`);
   }

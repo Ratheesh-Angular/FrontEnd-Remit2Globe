@@ -26,6 +26,8 @@ export type CatalogCountrySelectProps = {
   countries?: FlexCountry[];
   countriesLoading?: boolean;
   countriesError?: string;
+  /** Operation / sender country (ISO2 or ISO3) when loading catalog internally. */
+  operationCountryCode?: string | null;
 };
 
 /**
@@ -43,6 +45,7 @@ export function CatalogCountrySelect({
   countries: countriesProp,
   countriesLoading: loadingProp,
   countriesError: errorProp,
+  operationCountryCode,
 }: CatalogCountrySelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -60,7 +63,7 @@ export function CatalogCountrySelect({
     let cancelled = false;
     setInternalLoading(true);
     setInternalError("");
-    fetchCatalogCountries()
+    fetchCatalogCountries(operationCountryCode ?? undefined)
       .then((list) => {
         if (!cancelled) setInternal(list);
       })
@@ -76,7 +79,7 @@ export function CatalogCountrySelect({
     return () => {
       cancelled = true;
     };
-  }, [useExternal]);
+  }, [useExternal, operationCountryCode]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();

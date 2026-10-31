@@ -7,6 +7,7 @@ import { ArrowRight } from "lucide-react";
 import { RecipientCurrencySelect } from "@/components/remittance/RecipientCurrencySelect";
 import { Loader } from "@/components/ui/Loader";
 import { useCatalogCountries } from "@/hooks/useCatalogCountries";
+import { toCountryAlpha3 } from "@/lib/catalog-countries";
 import { resolveFlexExchangeRate } from "@/lib/flex-forex-rate";
 import {
   buildRecipientCurrencyOptions,
@@ -38,9 +39,11 @@ export function RateCalculator({
 }: {
   variant?: "default" | "compact";
 }) {
-  const { payCurrency, setPayCurrency, payCurrencyOptions } = useLandingCountry();
+  const { payCurrency, setPayCurrency, payCurrencyOptions, selectedCountry } =
+    useLandingCountry();
+  const landingOpCountry = toCountryAlpha3(selectedCountry.iso2);
   const { countries: catalogCountries, loading: catalogLoading } =
-    useCatalogCountries(true);
+    useCatalogCountries(true, landingOpCountry);
 
   const recipientCurrencyOptions = useMemo(
     () => buildRecipientCurrencyOptions(catalogCountries),

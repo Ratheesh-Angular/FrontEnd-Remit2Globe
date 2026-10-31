@@ -21,6 +21,7 @@ export type TransferReceiptPdfData = {
     toCurrency: string;
     youSend: number;
     fee: number;
+    cardFee?: number;
     totalToPay: number;
     receive: number | null;
     hasRate: boolean;
@@ -314,6 +315,14 @@ export function downloadTransferReceiptPdf(data: TransferReceiptPdfData): void {
         value: `${fmtNum(a.youSend)} ${a.fromCurrency}`,
       },
       { label: "Fee", value: `${fmtNum(a.fee)} ${a.fromCurrency}` },
+      ...(a.cardFee != null && a.cardFee > 0
+        ? [
+            {
+              label: "Card fee",
+              value: `${fmtNum(a.cardFee)} ${a.fromCurrency}`,
+            } satisfies ReceiptRow,
+          ]
+        : []),
       {
         label: "Total to pay",
         value: `${fmtNum(a.totalToPay)} ${a.fromCurrency}`,
