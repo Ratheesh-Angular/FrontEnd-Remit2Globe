@@ -122,10 +122,11 @@ function VerifyNameHint({ state }: { state: VerifyHintState }) {
   if (state.status === "idle") return null;
   if (state.status === "loading") {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-        Looking up registered name…
-      </div>
+      <></>
+      // <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+      //   <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+      //   Looking up registered name…
+      // </div>
     );
   }
   if (state.status === "success") {

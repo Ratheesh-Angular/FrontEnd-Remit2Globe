@@ -45,8 +45,12 @@ type ShareholderFormRow =
       registeredAddress: string;
     };
 
+type KeyPersonnelDocumentType = "PASSPORT" | "NATIONAL_ID" | "";
+
 interface KeyPersonnelRow {
   fullName: string;
+  documentType: KeyPersonnelDocumentType;
+  documentNumber: string;
   documentFileUrl: string;
   documentFileName: string;
 }
@@ -110,8 +114,21 @@ function businessPremisesComplete(p: BusinessPremisesAddressForm): boolean {
   );
 }
 
+function parseKeyPersonnelDocumentType(
+  raw: unknown,
+): KeyPersonnelDocumentType {
+  const v = String(raw ?? "").trim().toUpperCase();
+  if (v === "PASSPORT" || v === "NATIONAL_ID") return v;
+  return "";
+}
+
 function isKeyPersonnelComplete(personnel: KeyPersonnelRow): boolean {
-  return Boolean(personnel.fullName.trim() && personnel.documentFileUrl.trim());
+  return Boolean(
+    personnel.fullName.trim() &&
+      personnel.documentType &&
+      personnel.documentNumber.trim() &&
+      personnel.documentFileUrl.trim(),
+  );
 }
 
 function isShareholderRowComplete(row: ShareholderFormRow): boolean {
@@ -279,6 +296,8 @@ const emptyShareholder = (): ShareholderFormRow => ({
 
 const emptyKeyPerson = (): KeyPersonnelRow => ({
   fullName: "",
+  documentType: "",
+  documentNumber: "",
   documentFileUrl: "",
   documentFileName: "",
 });
@@ -349,6 +368,8 @@ function parseKeyPersonnel(raw: unknown): KeyPersonnelRow[] {
         String(o.passportOrNationalIdDocumentUrl ?? "").trim();
       return {
         fullName: String(o.fullName ?? "").trim(),
+        documentType: parseKeyPersonnelDocumentType(o.documentType),
+        documentNumber: String(o.documentNumber ?? "").trim(),
         documentFileUrl: docUrl,
         documentFileName: String(o.documentFileName ?? "").trim(),
       };
@@ -396,6 +417,8 @@ function buildCorporatePayload(form: CorporateForm): Record<string, unknown> {
     .filter((r) => isKeyPersonnelComplete(r))
     .map((r) => ({
       fullName: r.fullName.trim(),
+      documentType: r.documentType,
+      documentNumber: r.documentNumber.trim(),
       documentFileUrl: r.documentFileUrl.trim(),
       documentFileName: r.documentFileName.trim(),
     }));
@@ -957,7 +980,7 @@ export function CorporateKycWizard() {
       const kpOk = form.keyPersonnel.some((r) => isKeyPersonnelComplete(r));
       if (!kpOk)
         newErrors.keyPersonnel =
-          "Add at least one authorised person with full name and passport or national ID document uploaded";
+          "Add at least one authorised person with full name, document type, ID/passport number, and uploaded document";
 
       const badSh = form.shareholders.find(
         (row) => !isShareholderRowComplete(row),
@@ -1550,6 +1573,48 @@ export function CorporateKycWizard() {
                             }
                           />
                         </Field>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Field label="Document type" required>
+                            <select
+                              className={ownershipInputClass("keyPersonnel")}
+                              value={row.documentType}
+                              onChange={(e) =>
+                                setForm((p) => {
+                                  const kp = [...p.keyPersonnel];
+                                  kp[i] = {
+                                    ...kp[i],
+                                    documentType:
+                                      parseKeyPersonnelDocumentType(
+                                        e.target.value,
+                                      ),
+                                  };
+                                  return { ...p, keyPersonnel: kp };
+                                })
+                              }
+                            >
+                              <option value="">Select type</option>
+                              <option value="PASSPORT">Passport</option>
+                              <option value="NATIONAL_ID">National ID</option>
+                            </select>
+                          </Field>
+                          <Field label="ID / Passport number" required>
+                            <input
+                              className={ownershipInputClass("keyPersonnel")}
+                              placeholder="Document number"
+                              value={row.documentNumber}
+                              onChange={(e) =>
+                                setForm((p) => {
+                                  const kp = [...p.keyPersonnel];
+                                  kp[i] = {
+                                    ...kp[i],
+                                    documentNumber: e.target.value,
+                                  };
+                                  return { ...p, keyPersonnel: kp };
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
                         <div className="mt-3">
                           <Field label="Passport or National ID" required>
                             <CorporateOwnershipDocUpload
